@@ -25,7 +25,6 @@ import numpy as np
 import pdb
 import logging
 import pyscf.lib
-import pyscf.pbc.gto as pbcgto
 import routines as routines
 import input_parameters as parmt
 
@@ -41,17 +40,7 @@ a2bohr = 1.8897259886 #convert Å to Bohr radius
 hbarc = 0.1973269804*10**(-6) #hbarc in eV*m
 
 def main():
-     cell = pbcgto.M(
-          a = np.asarray(parmt.lattice_vectors),
-          atom = parmt.atomloc,
-          basis = parmt.mybasis,
-          cart = True,
-          verbose = parmt.pyscf_outlev,
-          output = parmt.pyscf_outfile,
-          ecp = parmt.effective_core_potential,
-          rcut = parmt.rcut,
-          precision = parmt.precision
-     )
+     cell = routines.build_cell_from_input()
      return
 
 if __name__ == '__main__':

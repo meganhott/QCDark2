@@ -66,36 +66,6 @@ def get_E_ijt(a: float, b: float, i_max: int, j_max: int, Qx: float) -> list[lis
                     E_ijt[i][j][t] = E(a, b, i, j, t, Qx, p, q)
      
      return E_ijt
-"""
-Maybe instead of having these objects, it would be a good idea to construct a np.ndarray object of shape (N, 7),
-with each row consisting of the following data:
-arr:      (N, 7) array with each row corresponding to a primitive gaussian in 1 dimension
-     arr[index]:    [atom_index, exponent, maximum_l, i = {0, 1, ..., l}, A_x, A_y, A_z]
-     arr.dtype =    float
-          atom_index:    I.D. of atom, can be obtained via cell._atom (should be int, but stored as float)
-          exponent:      Basis set element
-          maximum_l:     shell type, (s => 0, p => 1, d => 2, ...) (should be int, but stored as float)
-          i:             angular momentum in given dir
-                         exponent from 0 to l, inclusive (should be int, stored as float)
-          A_x, A_y, A_z: location of the atom from atom_index
-"""
-class primitive_gaussian_1D(object):
-     """
-     Define primitive gaussian in 1D. To generate 1D primitive gaussian, we will use the following statement
-     prim1d = primitive_gaussian_1D(exp = exp, i = i, l = l, loc = [location])
-     Attributes:
-          exp:      float64, exponent in the gaussian
-          i:        int, angular momentum in given direction
-          l:        int, total angular momentum 
-                    maximum i for this exponent, defines type of orbital -> (s => 0, p => 1, d => 2, ...)
-          loc:      list[float64]: location of the center of the atom from where the basis element comes, 3D
-     """
-     def __init__(self, exp: float, i: int, l: int, loc: list[float] = [0., 0., 0.]) -> None:
-          self.origin = loc
-          self.exp = exp
-          self.i = i
-          self.l = l
-
 
 """
 Test object for now -- this is definitely too complicated. 

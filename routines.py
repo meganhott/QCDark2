@@ -9,13 +9,13 @@ Authors: Megan Hott, Aman Singal
 
 import os, time, itertools, logging, pdb, struct, sys, h5py, functools
 import numpy as np
+import pyscf.pbc.gto as pbcgto
 import pyscf.pbc.dft as pbcdft
 import cartesian_moments as cartmoments
 from multiprocessing import Pool
 from functools import partial
 import shutil
-import dielectric_functions
-
+import input_parameters as parmt
 ##==== Constants in the whole calculation ============
 c = 299792458 #c in m/s
 me = 0.51099895000*10**6 #eV/c^2
@@ -29,7 +29,7 @@ a2bohr = 1.8897259886 #convert Å to Bohr radius
 hbarc = 0.1973269804*10**(-6) #hbarc in eV*m
 amu2eV = 9.315e8 # eV/u
 
-logging.basicConfig(filename=parmt.logname, level=logging.INFO, format='%(message)s') 
+logging.basicConfig(filename=parmt.qcdark_outfile, level=logging.INFO, format='%(message)s') 
 
 def patch():
     """Apply PR-10305 / bpo-17560 connection send/receive max size update
@@ -87,3 +87,50 @@ def patch():
     Connection._recv_bytes = recv_bytes
 
     logging.info(patchname + " applied")
+
+def build_cell_from_input() -> pbcgto.cell.Cell:
+    cell = pbcgto.M(
+        a = np.asarray(parmt.lattice_vectors),
+        atom = parmt.atomloc,
+        basis = parmt.mybasis,
+        cart = True,
+        verbose = parmt.pyscf_outlev,
+        output = parmt.pyscf_outfile,
+        ecp = parmt.effective_core_potential,
+        rcut = parmt.rcut,
+        precision = parmt.precision
+        )
+    return cell
+
+def gen_all_1D_prim_gauss(cell: pbcgto.cell.Cell) -> np.ndarray:
+    """
+    Generates all primitive gaussians and their 1D components, and places them into an output np.ndarray.
+    Eases calculations of overlaps in terms of primitive 1D gaussians.
+    Input:
+        cell:       pyscf.pbc.gto.cell.Cell object, initialized in build_cell_from_input routine.
+    Output:
+        primgauss:  np.ndarray of shape (N, 7)
+                    Contains all primitive gaussians including each possible angular momentum configuration
+                    in any given direction. It does not discriminate between x, y, z directions and is general
+
+                    primgauss[index]:   [atom_index, maximum_l, i, exponent, A_x, A_y, A_z]
+                    primgauss.dtype =   float
+                        atom_index:     I.D. of atom, can be obtained via cell._atom (should be int, but stored as float)
+                        maximum_l:      shell type, (s => 0, p => 1, d => 2, ...) (should be int, but stored as float)
+                        i:              angular momentum in given dir
+                                        exponent from 0 to l, inclusive (should be int, stored as float)
+                        exponent:       Basis set element
+                        A_x, A_y, A_z:  location of the atom from atom_index
+    """
+    primgauss = np.zeros((0, 7))
+    for atom_id, atom in enumerate(cell._atom):
+        species, loc = atom[0], atom[1]
+        atom_basis = cell._basis[species]
+        for basis_element in atom_basis:
+            l = basis_element[0]
+            elements = basis_element[1:]
+            for element in elements:
+                for i in range(l+1):
+                    primgauss = np.append(primgauss, [[atom_id, l, i, element[0], loc[0], loc[1], loc[2]]], axis = 0)
+    return primgauss
+
