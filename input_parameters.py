@@ -27,7 +27,7 @@ effective_core_potential = None                        # All electron basis sets
 """computational parameters;
      these determine precision, and whether optional parameters are applied"""
 precision = 1e-9                                       # precision parameter, fed to pyscf only
-rcut = 45                                              # R_cut, applied to both pyscf and dielectric function calculations
+rcut = 45.                                             # R_cut, applied to both pyscf and dielectric function calculations
 xcfunc = 'pbe'                                         # Exchange-Correlation Functional
 k_grid = [2, 2, 2]                                     # k-grid: resolution of grid points in reciprocal space
 scissor_bandgap = None                                 # If None, scissor correction is not applied, generally float
