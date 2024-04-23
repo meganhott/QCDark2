@@ -29,7 +29,7 @@ a2bohr = 1.8897259886 #convert Å to Bohr radius
 hbarc = 0.1973269804*10**(-6) #hbarc in eV*m
 amu2eV = 9.315e8 # eV/u
 
-logging.basicConfig(filename=parmt.qcdark_outfile, level=logging.INFO, format='%(message)s') 
+logging.basicConfig(filename=parmt.qcdark_outfile, filemode = 'w', level=logging.INFO, format='%(message)s') 
 
 def patch():
     """Apply PR-10305 / bpo-17560 connection send/receive max size update
@@ -39,7 +39,6 @@ def patch():
 
     This only supports Python versions 3.3 - 3.7, this function
     does nothing for Python versions outside of that range.
-
     """
     patchname = "Multiprocessing connection patch for bpo-17560"
     if not (3, 3) < sys.version_info < (3, 8):
@@ -100,6 +99,7 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
         rcut = parmt.rcut,
         precision = parmt.precision
         )
+    logging.info("\nBuilt cell object, see {} for details of cell.".format(parmt.pyscf_outfile))
     return cell
 
 def gen_all_1D_prim_gauss(cell: pbcgto.cell.Cell) -> np.ndarray:
@@ -132,5 +132,6 @@ def gen_all_1D_prim_gauss(cell: pbcgto.cell.Cell) -> np.ndarray:
             for element in elements:
                 for i in range(l+1):
                     primgauss = np.append(primgauss, [[atom_id, l, i, element[0], loc[0], loc[1], loc[2]]], axis = 0)
+    logging.info("\nAll 1D primitive gaussians found for the cell.\n\tNumber of unique primitive gaussians = {}.\n\tThis includes all possible angular momentum in one direction.".format(primgauss.shape[0]))
     return primgauss
 

@@ -28,19 +28,10 @@ import pyscf.lib
 import routines as routines
 import input_parameters as parmt
 
-c = 299792458 #c in m/s
-me = 0.51099895000*10**6 #eV/c^2
-alpha = 1/137
-
-##==== Conversion factors ==============================
-har2ev = 27.211386245988 #convert energy from hartree to eV
-p2ev = 1.99285191410*10**(-24)/(5.344286*10**(-28)) #convert momentum from a.u. to eV/c
-bohr2m = 5.29177210903*10**(-11) #convert Bohr radius to meter
-a2bohr = 1.8897259886 #convert Å to Bohr radius
-hbarc = 0.1973269804*10**(-6) #hbarc in eV*m
-
 def main():
-     cell = routines.build_cell_from_input()
+     routines.patch()                                                           # Patch required for some versions, see function for details
+     cell = routines.build_cell_from_input()                                    # Build cell object
+     primgauss = routines.gen_all_1D_prim_gauss(cell)                           # Get all primitive gaussian objects
      return
 
 if __name__ == '__main__':
