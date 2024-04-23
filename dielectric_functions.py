@@ -29,10 +29,11 @@ import routines as routines
 import input_parameters as parmt
 
 def main():
-     routines.patch()                                                           # Patch required for some versions, see function for details
      cell = routines.build_cell_from_input()                                    # Build cell object
      primgauss = routines.gen_all_1D_prim_gauss(cell)                           # Get all primitive gaussian objects
      return
 
 if __name__ == '__main__':
+     routines.patch()                                                           # Patch required for some versions, 
+                                                                                # see function for details
      main()
