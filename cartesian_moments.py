@@ -68,8 +68,76 @@ def get_E_ijt(a: float, b: float, i_max: int, j_max: int, Qx: float) -> list[lis
      return E_ijt
 
 class primitive_gaussian_1D(object):
-     def __init__(self, exp: float, l: int, loc: list[float] = [0., 0., 0.]) -> None:
+     """
+     Define primitive gaussian in 1D. To generate 1D primitive gaussian, we will use the following statement
+     prim1d = primitive_gaussian_1D(exp = exp, i = i, l = l, loc = [location])
+     Attributes:
+          exp:      float64, exponent in the gaussian
+          i:        int, angular momentum in given direction
+          l:        int, total angular momentum 
+                    maximum i for this exponent, defines type of orbital -> (s => 0, p => 1, d => 2, ...)
+          loc:      list[float64]: location of the center of the atom from where the basis element comes, 3D
+     """
+     def __init__(self, exp: float, i: int, l: int, loc: list[float] = [0., 0., 0.]) -> None:
           self.origin = loc
           self.exp = exp
+          self.i = i
           self.l = l
 
+
+"""
+Test object for now -- this is definitely too complicated. 
+Q -> How do we simplify this?
+
+Once calculated for all exponents and locations, final goal is to modify the output dictionaries 
+to the dict explained below and dump into a read only hdf5 file. This file will be accessed by all processes 
+later on. This process will take place inside of a function defined in routines and not in cartesian_moments.
+
+ovlp[a] = dict
+     ovlp[a][b] = dict
+          ovlp[a][b][d] = dict
+               ovlp[a][b][d][k] = dict
+                    ovlp[a][b][d][k][R] = float
+
+a,b: index of primitive_gaussian_1d object containing information on exponents, i, j, and locations
+d:   directional index, d = 0 (x), d = 1 (y), d = 2 (z)
+k:   unique k in direction d
+R:   unique R in direction d
+
+If this is indeed most optimal, 
+     Q: how fast can we forward this dict to multiprocessing?
+          A: ?
+     Q: Should we implement a multiprocessing.Manager.dict object?
+          A: ?
+     Q: Is it faster to dump data to hdf5 file and read from all processes separately? 
+          A:   likely slower. hdf5 file stores keys as str objects, and we can do everything in dict with float.
+               However, dict object can be heavy to pass to the functions, because these will be a dict containing
+               O(100)*O(100)*3*O(100)*O(25) ~ O(100 million) floats ~ 700 MB
+"""
+def get_prim_1D_overlap(exp1: float, exp2: float, max_i: int, max_j: int, A_vec: list[float], B_vec: list[float], R_vecs: np.ndarray, kx: np.ndarray) -> None:
+     """
+     Function to get 1D overlap matrix, \int dx G_i (x - A - R, a) * e^{i kx x} * G_j (x - B, b).
+     
+     
+     Inputs:
+          exp1:     float, exponent of first gaussian
+          exp2:     float, exponent of second gaussian
+          max_i:    int, maximum angular momentum of first gaussian
+          max_j:    int, maximum angular momentum of second gaussian
+          A_vec:    list[float] of len == 3, origin of gaussian number 1
+          B_vec:    list[float] of len == 3, origin of gaussian number 2
+          Rvecs:    np.ndarray object of shape (N_R, 3)
+                    contains all R vectors being considered.
+          k:        np.ndarray object of shape (N_G, N_k, N_k, 3)
+                    contains all vectors {q} that can be constructed from k2[None,None,:,:] - k1[None,:,None,:] + G[:,None,None,:]
+     Returns:
+          ovlp:     dict object containing the following:
+                    ovlp[i] = dict object containing values for 0 <= i <= max_i (number of keys = i_max + 1)
+                         ovlp[i][j] =   dict object containing values for 0 <= j <= max_j (number of keys = i_max + 1)
+                              ovlp[i][j][d] =     dict object containing values in 
+                                                  direction x (d = 0), y (d = 1) or z (d = 2)
+                                   ovlp[i][j][kx][d] =    dict object containing values for given unique kx in direction d
+                                        ovlp[i][j][kx][d][Rx] =  float, 
+                                                                 \int dx G_i (x - A_d - R_d, a) * e^{i kx x} * G_j (x - B_d, b)
+     """
+     return None

@@ -35,7 +35,7 @@ expt_BG = 1.11 #in eV
 # If yes, do you have quite a bunch of storage (in multiples of TBs) available to speed up the next calculation?
 save_Smat = False	# Switch to False to lower storage use, however will have to redo the slowest part of calculation if repeating with other XC functional.
 save_temp_f2 = True # High storage usage, however lower RAM usage.
-numerical = True	# Numerical calculation of scattering matrix in AO basis
+numerical = False	# Numerical calculation of scattering matrix in AO basis
 
 ##==== Create q and Ee bins ==========
 qmin_ame = 0.0 #minimum value of q, in alpha*me
