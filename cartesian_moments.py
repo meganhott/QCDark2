@@ -3,8 +3,17 @@ import math
 
 e = math.e
 
-def get_E_ijt(a: float, b: float, i_max: int, j_max: int, Qx: float) -> list[list[float]]:
-
+def get_E_ijt(a: float, b: float, i_max: int, j_max: int, Qx: float) -> list[list[list[float]]]:
+     """
+     Recursively calculate Hermite Gaussian Coefficients for 1d primitive gaussians.
+     Inputs:
+          a, b           = exponents of 1d primitive Gaussian 'a' and 'b' respectively
+          i_max, j_max   = maximum angular momentum number on 1d primitive Gaussian 'a' and 'b' respectively
+          Qx             = distance between origins of 1d primitive Gaussian 'a' and 'b', Qx = Ax - Bx
+     Returns:
+          list[list[list[float]]]: E_{ij}^t for a, b, Qx
+     """
+     
      p = a + b
      q = a*b/p
 
@@ -57,3 +66,10 @@ def get_E_ijt(a: float, b: float, i_max: int, j_max: int, Qx: float) -> list[lis
                     E_ijt[i][j][t] = E(a, b, i, j, t, Qx, p, q)
      
      return E_ijt
+
+class primitive_gaussian_1D(object):
+     def __init__(self, exp: float, l: int, loc: list[float] = [0., 0., 0.]) -> None:
+          self.origin = loc
+          self.exp = exp
+          self.l = l
+
