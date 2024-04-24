@@ -193,7 +193,7 @@ class ao(object):
                N *= prefactor
                N = np.power(N,-0.5)
                for ia in range(num_exps):
-                    self.coefs[ia] *= N
+                    self.coef[ia] *= N
           else:
                self.norm = np.sqrt(np.power(2, L + 2.5)*
                                    np.power(self.exps, L + 1.5)/
@@ -211,4 +211,5 @@ class ao(object):
                     cond2 = cond1*primgauss[:,3] == exp
                     a.append(np.where(cond2)[0][0])
                self.prim_indices.append(a)
+          self.prim_indices = np.array(self.prim_indices)
           return None
