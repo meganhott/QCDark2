@@ -1,5 +1,7 @@
 import numpy as np
 import math
+from scipy.special import factorial2 as fact2
+from scipy.special import gamma
 
 e = math.e
 
@@ -123,3 +125,90 @@ def get_prim_1D_overlap(exp1: float, exp2: float, max_i: int, max_j: int, A_vec:
                                                                  \int dx G_i (x - A_d - R_d, a) * e^{i kx x} * G_j (x - B_d, b)
      """
      return None
+
+class ao(object):
+     """
+     Object that defines an atomic orbital. 
+     Attributes:
+          atom:          int, index of atom
+          loc:           np.ndarray of shape (3,), contains origin of atom
+          shell:         tuple of len = 3, angular momentum components for all 3 directions
+          exp:           np.ndarray of shape (N_prim, )
+                         contains all exponents in the contracted gaussian
+          coef:          np.ndarray of shape (N_prim, )
+                         contains all coefficients in the contracted gaussian
+          norm:          np.ndarray of shape (N_prim, )
+                         contains all normalizations in the contracted gaussian
+          prim_indices:  np.ndarray of shape (3, N_prim)
+                         contains indices of primitive gaussian in 1D corresponding to 
+                         angular momentum component in each direction and each exponent
+                         as contained in primgauss np.ndarray.
+     Requires following input parameters to initialize:
+          atom_index:    int, index of atom being considered
+          ijk:           tuple of len = 3, angular momentum components for all 3 directions
+          exps:          np.ndarray of shape (N_prim, )
+                         contains all exponents in the contracted gaussian
+          coeffs:        np.ndarray of shape (N_prim, )
+                         contains all coefficients in the contracted gaussian
+          primgauss:     np.ndarray of shape (tot_prim, 7)
+                         contains details of all primgauss elements.
+     """
+     def __init__(self, atom_index: int, ijk: tuple, exps: np.ndarray, coeffs: np.ndarray, primgauss: np.ndarray) -> None:
+          self.atom = atom_index
+          self.loc = None
+          self.shell = tuple(ijk)
+          self.exp = exps
+          self.coef = coeffs
+          self.norm = None
+          self.normalize()
+          self.prim_indices = None
+          self.find_location_and_indices(primgauss)
+          return None
+
+     def normalize(self) -> None:
+          ''' Routine to normalize the basis functions, in case they
+               do not integrate to unity.
+          '''
+          l,m,n = self.shell
+          L = l+m+n
+          if L < 2:
+          # self.norm is a list of length equal to number primitives
+          # normalize primitives first (PGBFs)
+               self.norm = np.sqrt(np.power(2,2*(l+m+n)+1.5)*
+                         np.power(self.exp,l+m+n+1.5)/
+                         fact2(2*l-1)/fact2(2*m-1)/
+                         fact2(2*n-1)/np.power(np.pi,1.5))
+                    # now normalize the contracted basis functions (CGBFs)
+               # Eq. 1.44 of Valeev integral whitepaper
+               prefactor = np.power(np.pi,1.5)*\
+                    fact2(2*l - 1)*fact2(2*m - 1)*fact2(2*n - 1)/np.power(2.0,L)
+
+               N = 0.0
+               num_exps = len(self.exp)
+               for ia in range(num_exps):
+                    for ib in range(num_exps):
+                         N += self.norm[ia]*self.norm[ib]*self.coef[ia]*self.coef[ib]/\
+                              np.power(self.exp[ia] + self.exp[ib],L+1.5)
+
+               N *= prefactor
+               N = np.power(N,-0.5)
+               for ia in range(num_exps):
+                    self.coefs[ia] *= N
+          else:
+               self.norm = np.sqrt(np.power(2, L + 2.5)*
+                                   np.power(self.exps, L + 1.5)/
+                                   gamma(1.5 + L))
+          return None
+
+     def find_location_and_indices(self, primgauss: np.ndarray) -> None:
+          self.prim_indices = []
+          cond0 = primgauss[:,0].astype(int) == self.atom
+          self.loc = primgauss[np.where(cond0)[0][0]][4:]
+          for i in self.shell:
+               a = []
+               cond1 = cond0*(primgauss[:,2]==i)
+               for exp in self.exp:
+                    cond2 = cond1*primgauss[:,3] == exp
+                    a.append(np.where(cond2)[0][0])
+               self.prim_indices.append(a)
+          return None

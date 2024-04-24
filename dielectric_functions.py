@@ -20,11 +20,7 @@ Implementation details:
                .2 Test direct input times versus interpolation time-scales. 
 """
 
-import time, pdb, logging
 import numpy as np
-import pdb
-import logging
-import pyscf.lib
 import routines as routines
 import input_parameters as parmt
 
