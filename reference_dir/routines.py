@@ -103,7 +103,7 @@ def makedir(dirname, log = True):
                 logging.info('Directory '+dirname+' already exists.')
         else:
             logging.info('File exists with name same as directory, ' + dirname + '. Cannot make directory, raising exception.')
-            raise Exception('Cannot proceed with making directory ' + dirname + '.')
+            raise FileExistsError('Cannot proceed with making directory ' + dirname + ', file exists with same name.')
     return
 
 def create_bins(min, delta, n):
