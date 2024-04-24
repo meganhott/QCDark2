@@ -4,6 +4,7 @@ from scipy.special import factorial2 as fact2
 from scipy.special import gamma
 
 e = math.e
+etol = 10.**8
 
 def get_E_ijt(a: float, b: float, i_max: int, j_max: int, Qx: float) -> list[list[list[float]]]:
      """
@@ -21,7 +22,6 @@ def get_E_ijt(a: float, b: float, i_max: int, j_max: int, Qx: float) -> list[lis
 
      if i_max < 0 or j_max < 0:
           raise ValueError('i and j must be greater than 0. Given i = {}, j = {}'.format(i_max, j_max))
-
 
      E_ijt = []
      for i in range(i_max + 1):
@@ -126,7 +126,7 @@ def get_prim_1D_overlap(exp1: float, exp2: float, max_i: int, max_j: int, A_vec:
      """
      return None
 
-class ao(object):
+class AO(object):
      """
      Object that defines an atomic orbital. 
      Attributes:
@@ -152,6 +152,14 @@ class ao(object):
                          contains all coefficients in the contracted gaussian
           primgauss:     np.ndarray of shape (tot_prim, 7)
                          contains details of all primgauss elements.
+     
+     Q: can it be sped up? Can we eliminate the need to read in primgauss object?
+     Notes:    
+          1.   It is easy to pass the location array.
+          2.   For any exp in self.exp and i in self.shell, we can use exp and i as keys in dictionary.
+          3.   This would have to change the goal, and we will have to list atom_id = self.atom as a key
+               to be passed to the overlap dictionary. This is because of the following:
+               self.prim_indices contains information on the location already. 
      """
      def __init__(self, atom_index: int, ijk: tuple, exps: np.ndarray, coeffs: np.ndarray, primgauss: np.ndarray) -> None:
           self.atom = atom_index
@@ -166,8 +174,11 @@ class ao(object):
           return None
 
      def normalize(self) -> None:
-          ''' Routine to normalize the basis functions, in case they
-               do not integrate to unity.
+          '''
+          Routine to normalize the basis functions. Note that s and p orbitals have different normalizations
+          for cartesian and spherical shells, while higher orbitals carry same normalization scheme no matter what.
+          Function modifies attribute:
+               self.norm
           '''
           l,m,n = self.shell
           L = l+m+n
@@ -189,18 +200,23 @@ class ao(object):
                     for ib in range(num_exps):
                          N += self.norm[ia]*self.norm[ib]*self.coef[ia]*self.coef[ib]/\
                               np.power(self.exp[ia] + self.exp[ib],L+1.5)
-
                N *= prefactor
-               N = np.power(N,-0.5)
+               N = N**-.5
                for ia in range(num_exps):
                     self.coef[ia] *= N
           else:
                self.norm = np.sqrt(np.power(2, L + 2.5)*
-                                   np.power(self.exps, L + 1.5)/
+                                   np.power(self.exp, L + 1.5)/
                                    gamma(1.5 + L))
           return None
 
      def find_location_and_indices(self, primgauss: np.ndarray) -> None:
+          """
+          Routine to find location and index in primgauss for each direction.
+          Modifies attributes:
+               self.loc
+               self.prim_indices
+          """
           self.prim_indices = []
           cond0 = primgauss[:,0].astype(int) == self.atom
           self.loc = primgauss[np.where(cond0)[0][0]][4:]
@@ -208,7 +224,7 @@ class ao(object):
                a = []
                cond1 = cond0*(primgauss[:,2]==i)
                for exp in self.exp:
-                    cond2 = cond1*primgauss[:,3] == exp
+                    cond2 = cond1*((primgauss[:,3]*etol).astype(int)/etol == int(exp*etol)/etol)
                     a.append(np.where(cond2)[0][0])
                self.prim_indices.append(a)
           self.prim_indices = np.array(self.prim_indices)

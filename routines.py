@@ -88,6 +88,12 @@ def patch():
     logging.info(patchname + " applied")
 
 def build_cell_from_input() -> pbcgto.cell.Cell:
+    """
+    Function that builds cell from inputs.
+    Note that the function requires no inputs but uses attributes defined in input_parameters.py.
+    Returns:
+        cell:   pyscf.pbc.gto.cell.Cell object
+    """
     cell = pbcgto.M(
         a = np.asarray(parmt.lattice_vectors),
         atom = parmt.atomloc,
@@ -134,3 +140,30 @@ def gen_all_1D_prim_gauss(cell: pbcgto.cell.Cell) -> np.ndarray:
                     primgauss = np.append(primgauss, [[atom_id, l, i, element[0], loc[0], loc[1], loc[2]]], axis = 0)
     logging.info("\nAll 1D primitive gaussians found for the cell.\n\tNumber of unique primitive gaussians = {}.\n\tThis includes all possible angular momentum in one direction.".format(primgauss.shape[0]))
     return primgauss
+
+"""
+Primordial function to generate the list of 3D atomic orbitals. Might be changed later on.
+Needs to be changed in conjunction with cartesian_moments.py/AO
+"""
+def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> list[cartmoments.AO]:
+    """
+    Given a cell, generate all atomic orbitals in the cell. Note that we, as usual assume Cartestian Gaussians.
+    Inputs:
+        cell:       pyscf.pbc.gto.cell.Cell object, initialized in build_cell_from_input routine.
+        primgauss:  np.ndarray of shape (N,7), returned from function gen_all_1D_prim_gauss.
+    Returns:
+        all_ao:     list of all atomic orbitals
+    """
+    i_cart, all_ao = 0, []
+    cart_labs = cell.cart_labels()
+    for i in range(cell.nbas):
+        atm_indx=cell._bas[i][0]
+        exps = cell.bas_exp(i)
+        coeffs = cell.bas_ctr_coeff(i)
+        ncgto = coeffs.shape[1]
+        for j in range(ncgto):
+            for _ in range(cell.bas_len_cart(i)):
+                ijk = (cart_labs[i_cart].count('x'), cart_labs[i_cart].count('y'), cart_labs[i_cart].count('z'))
+                all_ao.append(cartmoments.AO(atom_index = atm_indx, exps = exps, coeffs = coeffs, ijk = ijk, primgauss = primgauss))
+                i_cart += 1
+    return all_ao

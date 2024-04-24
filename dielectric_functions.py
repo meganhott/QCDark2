@@ -24,9 +24,18 @@ import numpy as np
 import routines as routines
 import input_parameters as parmt
 
-def main():
+def initialize_cell():
      cell = routines.build_cell_from_input()                                    # Build cell object
      primgauss = routines.gen_all_1D_prim_gauss(cell)                           # Get all primitive gaussian objects
+     all_ao = routines.gen_all_atomic_orbitals(cell, primgauss)                 # Get all atomic orbitals
+     dark_objects = {
+          'primitive_gaussians': primgauss,
+          'all_ao': all_ao
+     }
+     return cell, dark_objects
+
+def main():
+     cell, dark_objects = initialize_cell()
      return
 
 if __name__ == '__main__':
