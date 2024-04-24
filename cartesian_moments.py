@@ -67,62 +67,48 @@ def get_E_ijt(a: float, b: float, i_max: int, j_max: int, Qx: float) -> list[lis
      
      return E_ijt
 
-"""
-Test object for now -- this is definitely too complicated. 
-Q -> How do we simplify this?
-
-Once calculated for all exponents and locations, final goal is to modify the output dictionaries 
-to the dict explained below and dump into a read only hdf5 file. This file will be accessed by all processes 
-later on. This process will take place inside of a function defined in routines and not in cartesian_moments.
-
-ovlp[a] = dict
-     ovlp[a][b] = dict
-          ovlp[a][b][d] = dict
-               ovlp[a][b][d][k] = dict
-                    ovlp[a][b][d][k][R] = float
-
-a,b: index of primgauss object returned fromroutines.py/gen_all_1D_prim_gauss object, 
-     each containing information on exponents, i, and locations
-d:   directional index, d = 0 (x), d = 1 (y), d = 2 (z)
-k:   unique k in direction d
-R:   unique R in direction d
-
-If this is indeed most optimal, 
-     Q: how fast can we forward this dict to multiprocessing?
-          A: ?
-     Q: Should we implement a multiprocessing.Manager.dict object?
-          A: ?
-     Q: Is it faster to dump data to hdf5 file and read from all processes separately? 
-          A:   likely slower. hdf5 file stores keys as str objects, and we can do everything in dict with float.
-               However, dict object can be heavy to pass to the functions, because these will be a dict containing
-               O(100)*O(100)*3*O(100)*O(25) ~ O(100 million) floats ~ 700 MB
-"""
-def get_prim_1D_overlap(exp1: float, exp2: float, max_i: int, max_j: int, A_vec: list[float], B_vec: list[float], R_vecs: np.ndarray, kx: np.ndarray) -> None:
+def get_prim_1D_overlap(i: int, j: int, prim_array: np.ndarray, locations: np.ndarray, unique_R: np.ndarray, unique_k: np.ndarray, target: dict) -> None:
      """
+     NOTE: UNTESTED!
      Function to get 1D overlap matrix, \int dx G_i (x - A - R, a) * e^{i kx x} * G_j (x - B, b).
-     
-     
      Inputs:
-          exp1:     float, exponent of first gaussian
-          exp2:     float, exponent of second gaussian
-          max_i:    int, maximum angular momentum of first gaussian
-          max_j:    int, maximum angular momentum of second gaussian
-          A_vec:    list[float] of len == 3, origin of gaussian number 1
-          B_vec:    list[float] of len == 3, origin of gaussian number 2
-          Rvecs:    np.ndarray object of shape (N_R, 3)
-                    contains all R vectors being considered.
-          k:        np.ndarray object of shape (N_G, N_k, N_k, 3)
-                    contains all vectors {q} that can be constructed from k2[None,None,:,:] - k1[None,:,None,:] + G[:,None,None,:]
+          i:             int, index of 1D primitive gaussian #1 in prim_array
+          j:             int, index of 1D primitive gaussian #2 in prim_array
+          prim_array:    np.ndarray of shape (N,4) from routines.py/gen_prim_gauss_indices
+                         each row contains the following information: 
+                              [atom_id, <total angular momentum on l>, exponent on primitive gaussian, <index of first point in primgauss>]
+          locations:     np.ndarray of shape (n_atom, 3), location of atom with atom_id
+          unique_R:      np.ndarray of shape (nR, ) containing all unique R from the set of R_vectors
+          unique_k:      np.ndarray of shape (nk, ) containing all unique k from the set of k_vectors
+          target:        multiprocessing.Manager().dict() pointer
+                         results get added to this dictionary like object.
+                         target[int(prim_array[i, 3])][int(prim_array[i, 4])][direction][R][k] = complex128
      Returns:
-          ovlp:     dict object containing the following:
-                    ovlp[i] = dict object containing values for 0 <= i <= max_i (number of keys = i_max + 1)
-                         ovlp[i][j] =   dict object containing values for 0 <= j <= max_j (number of keys = i_max + 1)
-                              ovlp[i][j][d] =     dict object containing values in 
-                                                  direction x (d = 0), y (d = 1) or z (d = 2)
-                                   ovlp[i][j][kx][d] =    dict object containing values for given unique kx in direction d
-                                        ovlp[i][j][kx][d][Rx] =  float, 
-                                                                 \int dx G_i (x - A_d - R_d, a) * e^{i kx x} * G_j (x - B_d, b)
+          None
      """
+     prim1, prim2 = prim_array[i], prim_array[j]
+     atom1, atom2 = locations[int(prim1[0]), int(prim2[0])]
+     i_max, j_max = int(prim1[1], prim2[1])
+     a, b = prim1[2], prim2[1]
+     init1, init2 = int(prim1[3]), int(prim2[3])
+     p = a + b
+
+     for dir in range(3):
+          Bx = atom2[dir]
+          for R in unique_R:
+               Ax = atom1[dir] + R
+               Px = (a*Ax + b*Bx)/p
+               E_ijt = get_E_ijt(a, b, i_max, j_max, Ax - Bx)
+               re1 = {}
+               for i in range(i_max + 1):
+                    for j in range(j_max + 1):
+                         target[init1+i][init2+j][dir] = {}
+                         target[init1+i][init2+j][dir][R] = {}
+                         for k in unique_k:
+                              target[init1+i][init2+j][dir][R][k] = 0
+                              for t in range(i+j+1):
+                                   target[init1+i][init2+j][dir][R][k] += E_ijt[i][j][k] * (1.j * k)**t
+                              target[init1+i][init2+j][dir][R][k] *= ((np.pi)**0.5)*(np.e**(1.j*k*Px - (k**2)/(4.*p)))
      return None
 
 class AO(object):

@@ -172,8 +172,11 @@ def gen_prim_gauss_indices(primgauss: np.ndarray) -> tuple[np.ndarray, np.ndarra
     Input:
         primgauss:  np.ndarray object of shape (N, 7)
     Output:
-        indx_arr:  np.ndarray object of shape (M, 4)
-        location:  np.ndarray object of shape (num_atoms, 3)
+        indx_arr:   np.ndarray object of shape (M, 4)
+                    each row contains the following information: 
+                        [atom_id, <total angular momentum on l>, exponent on primitive gaussian, <index of first point in primgauss>]
+        location:   np.ndarray object of shape (num_atoms, 3), locations of atoms corresponding to atom_id
+                    location[atom_id] = location of atom with atom_id
     """
     
     where = np.where(primgauss[:,2] == 0)[0]
