@@ -81,7 +81,8 @@ ovlp[a] = dict
                ovlp[a][b][d][k] = dict
                     ovlp[a][b][d][k][R] = float
 
-a,b: index of primitive_gaussian_1d object containing information on exponents, i, j, and locations
+a,b: index of primgauss object returned fromroutines.py/gen_all_1D_prim_gauss object, 
+     each containing information on exponents, i, and locations
 d:   directional index, d = 0 (x), d = 1 (y), d = 2 (z)
 k:   unique k in direction d
 R:   unique R in direction d

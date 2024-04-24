@@ -132,7 +132,8 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
 def gen_all_1D_prim_gauss(cell: pbcgto.cell.Cell) -> np.ndarray:
     """
     Generates all primitive gaussians and their 1D components, and places them into an output np.ndarray.
-    Eases calculations of overlaps in terms of primitive 1D gaussians.
+    Skeleton of the dielectric function procedure, links overlaps calculated in <undefined function> with
+    atomic orbital calculated 
     Input:
         cell:       pyscf.pbc.gto.cell.Cell object, initialized in build_cell_from_input routine.
     Output:
@@ -161,6 +162,30 @@ def gen_all_1D_prim_gauss(cell: pbcgto.cell.Cell) -> np.ndarray:
                     primgauss = np.append(primgauss, [[atom_id, l, i, element[0], loc[0], loc[1], loc[2]]], axis = 0)
     logging.info("\nAll 1D primitive gaussians found for the cell.\n\tNumber of unique primitive gaussians = {}.\n\tThis includes all possible angular momentum in one direction.".format(primgauss.shape[0]))
     return primgauss
+
+def gen_prim_gauss_indices(primgauss: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Function returns index in array containing atom_id, l, exponent, and initial index 
+    (corresponding to i = 0) in primgauss object constructed from function gen_all_1D_primgauss.
+    This function generates the objects to be passed into the <undefined function> for 
+    generating overlaps. It is also called from within the controlling function.
+    Input:
+        primgauss:  np.ndarray object of shape (N, 7)
+    Output:
+        indx_arr:  np.ndarray object of shape (M, 4)
+        location:  np.ndarray object of shape (num_atoms, 3)
+    """
+    
+    where = np.where(primgauss[:,2] == 0)[0]
+    where = where.reshape(len(where), 1)
+    indx_arr = np.append(primgauss[where[:,0]][:, [0, 1, 3]], where, axis = 1)
+
+    unique_atoms = np.unique(primgauss[:,0].astype(int))
+    locs = []
+    for atm_id in unique_atoms:
+        locs.append(primgauss[np.where(primgauss[:,0].astype(int) == atm_id)][0, 4:])
+
+    return indx_arr, np.array(locs)
 
 """
 Primordial function to generate the list of 3D atomic orbitals. Might be changed later on.
