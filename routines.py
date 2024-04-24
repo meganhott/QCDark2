@@ -87,6 +87,28 @@ def patch():
 
     logging.info(patchname + " applied")
 
+def makedir(dirname, log = False):
+    """
+    Function that tries to make a directory if it does not exist.
+    Inputs:
+        dirname:    str, name of directory to be constructed
+        log:        bool, default = False
+                    switch to control logging. Construction of new directory to be logged or not?
+    """
+    try:
+        os.mkdir(dirname)
+        if log:
+            logging.info('\nMade directory ' + dirname + '.')
+    except FileExistsError:
+        if os.path.isdir(dirname):
+            if log:
+                logging.info('\nDirectory '+dirname+' already exists.')
+        else:
+            logging.info('\nFile exists with name same as directory, ' + dirname + '. Cannot make directory, raising exception.')
+            raise FileExistsError('Cannot proceed with making directory ' + dirname + ', file exists with same name.')
+    return
+
+
 def build_cell_from_input() -> pbcgto.cell.Cell:
     """
     Function that builds cell from inputs.
