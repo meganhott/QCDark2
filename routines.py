@@ -87,9 +87,9 @@ def patch():
 
     logging.info(patchname + " applied")
 
-def makedir(dirname, log = False):
+def makedir(dirname: str, log = False) -> None:
     """
-    Function that tries to make a directory if it does not exist.
+    Function that makes a directory if it does not exist.
     Inputs:
         dirname:    str, name of directory to be constructed
         log:        bool, default = False
@@ -106,8 +106,7 @@ def makedir(dirname, log = False):
         else:
             logging.info('\nFile exists with name same as directory, ' + dirname + '. Cannot make directory, raising exception.')
             raise FileExistsError('Cannot proceed with making directory ' + dirname + ', file exists with same name.')
-    return
-
+    return None
 
 def build_cell_from_input() -> pbcgto.cell.Cell:
     """
@@ -189,3 +188,7 @@ def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> li
                 all_ao.append(cartmoments.AO(atom_index = atm_indx, exps = exps, coeffs = coeffs, ijk = ijk, primgauss = primgauss))
                 i_cart += 1
     return all_ao
+
+"""Generate all 1D primitive gaussian integrals and shape them accordingly"""
+def calc_ovlp_1D_prim_gauss(primgauss: np.ndarray) -> dict:
+    return None

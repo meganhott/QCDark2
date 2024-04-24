@@ -61,9 +61,7 @@ def get_E_ijt(a: float, b: float, i_max: int, j_max: int, Qx: float) -> list[lis
      
 
      for i in range(i_max + 1):
-          tem1 = []
           for j in range(j_max+1):
-               tem2 = []
                for t in range(i + j + 1):
                     E_ijt[i][j][t] = E(a, b, i, j, t, Qx, p, q)
      
@@ -224,7 +222,7 @@ class AO(object):
                a = []
                cond1 = cond0*(primgauss[:,2]==i)
                for exp in self.exp:
-                    cond2 = cond1*((primgauss[:,3]*etol).astype(int)/etol == int(exp*etol)/etol)
+                    cond2 = cond1*np.isclose(primgauss[:,3], exp)
                     a.append(np.where(cond2)[0][0])
                self.prim_indices.append(a)
           self.prim_indices = np.array(self.prim_indices)
