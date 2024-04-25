@@ -43,7 +43,7 @@ def patch():
     patchname = "Multiprocessing connection patch for bpo-17560"
     if not (3, 3) < sys.version_info < (3, 8):
         logging.info(
-            patchname + " not applied, not an applicable Python version: %s",
+            patchname + " not applied, not an applicable Python version: %s.\n",
             sys.version
         )
         return
@@ -56,7 +56,7 @@ def patch():
         orig_send_bytes.__code__.co_filename == __file__
         and orig_recv_bytes.__code__.co_filename == __file__
     ):
-        logging.info(patchname + " already applied, skipping")
+        logging.info(patchname + " already applied, skipping.\n")
         return
 
     @functools.wraps(orig_send_bytes)
@@ -98,13 +98,13 @@ def makedir(dirname: str, log = False) -> None:
     try:
         os.mkdir(dirname)
         if log:
-            logging.info('\nMade directory ' + dirname + '.')
+            logging.info('Made directory ' + dirname + '.\n')
     except FileExistsError:
         if os.path.isdir(dirname):
             if log:
-                logging.info('\nDirectory '+dirname+' already exists.')
+                logging.info('Directory '+dirname+' already exists.\n')
         else:
-            logging.info('\nFile exists with name same as directory, ' + dirname + '. Cannot make directory, raising exception.')
+            logging.info('File exists with name same as directory, ' + dirname + '. Cannot make directory, raising exception.\n')
             raise FileExistsError('Cannot proceed with making directory ' + dirname + ', file exists with same name.')
     return None
 
@@ -123,10 +123,37 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
         verbose = parmt.pyscf_outlev,
         output = parmt.pyscf_outfile,
         ecp = parmt.effective_core_potential,
-        rcut = parmt.rcut,
         precision = parmt.precision
         )
-    logging.info("\nBuilt cell object, see {} for details of cell.".format(parmt.pyscf_outfile))
+    
+    rcut = pbcgto.cell.estimate_rcut(cell, precision=cell.precision)
+    cell.rcut = rcut
+    cell.build()
+
+    logging.info("Built cell object. Note that we only use cartesian gaussians.")
+    logging.info("Parameters fed, in atomic units:")
+
+    logging.info("\tLattice vectors:")
+    for a in cell.lattice_vectors():
+        logging.info("\t\t{:.5f}\t{:.5f}\t{:.5f}".format(a[0], a[1], a[2]))
+
+    logging.info("\tAtom locations:")
+    for a in cell._atom:
+        logging.info("\t\t{}:\t{:.5f}\t{:.5f}\t{:.5f}".format(a[0], a[1][0], a[1][1], a[1][2]))
+    
+    logging.info("\tBasis set: ")
+    for a in cell.basis:
+        logging.info("\t\t{}: {}".format(a, cell.basis[a]))
+    
+    logging.info("\tEffective core potential:")
+    if len(cell.ecp):
+        for a in cell.ecp:
+            logging.info("\t\t{}: {}".format(a, cell.ecp[a]))
+    else:
+        logging.info("\t\tNone, all-electron calculation.")
+    
+    logging.info("\tSelected precision: {}".format(cell.precision))
+    logging.info("Further information is in {}.\n".format(cell.output))
     return cell
 
 def gen_all_1D_prim_gauss(cell: pbcgto.cell.Cell) -> np.ndarray:
@@ -160,7 +187,7 @@ def gen_all_1D_prim_gauss(cell: pbcgto.cell.Cell) -> np.ndarray:
             for element in elements:
                 for i in range(l+1):
                     primgauss = np.append(primgauss, [[atom_id, l, i, element[0], loc[0], loc[1], loc[2]]], axis = 0)
-    logging.info("\nAll 1D primitive gaussians found for the cell.\n\tNumber of unique primitive gaussians = {}.\n\tThis includes all possible angular momentum in one direction.".format(primgauss.shape[0]))
+    logging.info("All 1D primitive gaussians found for the cell.\n\tNumber of unique primitive gaussians = {}.\n\tThis includes all possible angular momentum in one direction.\n".format(primgauss.shape[0]))
     return primgauss
 
 def gen_prim_gauss_indices(primgauss: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -183,12 +210,28 @@ def gen_prim_gauss_indices(primgauss: np.ndarray) -> tuple[np.ndarray, np.ndarra
     where = where.reshape(len(where), 1)
     indx_arr = np.append(primgauss[where[:,0]][:, [0, 1, 3]], where, axis = 1)
 
-    unique_atoms = np.unique(primgauss[:,0].astype(int))
+    unique_atoms = sorted(set(primgauss[:,0].astype(int)))
     locs = []
     for atm_id in unique_atoms:
         locs.append(primgauss[np.where(primgauss[:,0].astype(int) == atm_id)][0, 4:])
 
+    logging.info("Constructed unique exponent for each atom. Total number of exponents at different locations: {}\n".format(indx_arr.shape[0]))
     return indx_arr, np.array(locs)
+
+def get_all_unique_nums_in_array(array: np.ndarray, round_to: int = None, log_name: str = None) -> np.ndarray:
+    """
+    Given any array, np.ndarray, condense it into 1D and find all unique unique elements.
+    function to simplify np.unique(np.round(array, round_to)).
+    Inputs:
+        array:      np.ndarray
+        tol:        round to digits
+    """
+    if not round_to is None:
+        array = np.round(array, round_to)
+    unq = np.unique(array)
+    if not log_name is None:
+        logging.info("Number of unique elements found for {} = {}.\n".format(log_name, unq.size))
+    return 
 
 """
 Primordial function to generate the list of 3D atomic orbitals. Might be changed later on.
@@ -215,6 +258,7 @@ def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> li
                 ijk = (cart_labs[i_cart].count('x'), cart_labs[i_cart].count('y'), cart_labs[i_cart].count('z'))
                 all_ao.append(cartmoments.AO(atom_index = atm_indx, exps = exps, coeffs = coeffs, ijk = ijk, primgauss = primgauss))
                 i_cart += 1
+    logging.info("Generated all cartesian contracted gaussians, number of shells = {}.\n".format(len(all_ao)))
     return all_ao
 
 """Generate all 1D primitive gaussian integrals and shape them accordingly"""
