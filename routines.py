@@ -17,17 +17,17 @@ from functools import partial
 import shutil
 import input_parameters as parmt
 ##==== Constants in the whole calculation ============
-c = 299792458 #c in m/s
-me = 0.51099895000*10**6 #eV/c^2
+c = 299792458.                                                                  # c in m/s
+me = 0.51099895000e6                                                            # eV/c^2
 alpha = 1/137
 
 ##==== Conversion factors ============================
-har2ev = 27.211386245988 #convert energy from hartree to eV
-p2ev = 1.99285191410*10**(-24)/(5.344286*10**(-28)) #convert momentum from a.u. to eV/c
-bohr2m = 5.29177210903*10**(-11) #convert Bohr radius to meter
-a2bohr = 1.8897259886 #convert Å to Bohr radius
-hbarc = 0.1973269804*10**(-6) #hbarc in eV*m
-amu2eV = 9.315e8 # eV/u
+har2ev = 27.211386245988                                                        # convert energy from hartree to eV
+p2ev = 1.99285191410*10**(-24)/(5.344286*10**(-28))                             # convert momentum from a.u. to eV/c
+bohr2m = 5.29177210903*10**(-11)                                                # convert Bohr radius to meter
+a2bohr = 1.8897259886                                                           # convert Å to Bohr radius
+hbarc = 0.1973269804*10**(-6)                                                   # hbarc in eV*m
+amu2eV = 9.315e8                                                                # eV/u
 
 logging.basicConfig(filename=parmt.qcdark_outfile, filemode = 'w', level=logging.INFO, format='%(message)s') 
 
@@ -98,14 +98,14 @@ def makedir(dirname: str, log = False) -> None:
     try:
         os.mkdir(dirname)
         if log:
-            logging.info('Made directory ' + dirname + '.\n')
+            logging.info('Made directory \'' + dirname + '\'.\n')
     except FileExistsError:
         if os.path.isdir(dirname):
             if log:
-                logging.info('Directory '+dirname+' already exists.\n')
+                logging.info('Directory \''+dirname+'\' already exists.\n')
         else:
-            logging.info('File exists with name same as directory, ' + dirname + '. Cannot make directory, raising exception.\n')
-            raise FileExistsError('Cannot proceed with making directory ' + dirname + ', file exists with same name.')
+            logging.info('File exists with name same as directory, \'' + dirname + '\'. Cannot make directory, raising exception.\n')
+            raise FileExistsError('Cannot proceed with making directory \'' + dirname + '\', file exists with same name.')
     return None
 
 def build_cell_from_input() -> pbcgto.cell.Cell:
@@ -154,6 +154,9 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
     
     logging.info("\tSelected precision: {}".format(cell.precision))
     logging.info("Further information is in {}.\n".format(cell.output))
+
+    makedir(parmt.store, log = True)
+
     return cell
 
 def gen_all_1D_prim_gauss(cell: pbcgto.cell.Cell) -> np.ndarray:
@@ -231,12 +234,39 @@ def get_all_unique_nums_in_array(array: np.ndarray, round_to: int = None, log_na
     unq = np.unique(array)
     if not log_name is None:
         logging.info("Number of unique elements found for {} = {}.\n".format(log_name, unq.size))
-    return 
+    return unq
 
-"""
-Primordial function to generate the list of 3D atomic orbitals. Might be changed later on.
-Needs to be changed in conjunction with cartesian_moments.py/AO
-"""
+def construct_R_vectors(cell: pbcgto.cell.Cell) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Function to construct all R vectors {R_i} relevant to the cell. We use pyscf build in methods and sort the
+    R vectors from there.
+    Inputs:
+        cell:   pyscf.pbc.gto.cell.Cell object, initialized in build_cell_from_input routine.
+    Returns:
+        Rvecs:  np.ndarray of shape (N, 3), R vectors relevant to the calculation for convergence to
+                cell.precision parameter.
+        unR:    np.ndarray of shape (M, ), M << N, unique scalars in Rvecs. 
+    """
+    Rvecs = cell.get_lattice_Ls()
+    np.save(parmt.store + '/R_vectors.npy', Rvecs)
+    logging.info('{} R vectors generated for the cell given precision = {}, and saved to {}.'.format(Rvecs.shape[0], cell.precision, parmt.store + '/R_vectors.npy'))
+    unR = get_all_unique_nums_in_array(Rvecs, round_to = 9, log_name = None)
+    logging.info("\tNumber of unique scalars in R vectors, i.e., unique R_i for R = (R_1, R_2, R_3) = {}.\n".format(unR.size))
+    return Rvecs, unR
+
+def get_kpts(cell: pbcgto.cell.Cell) -> np.ndarray:
+    """
+    Function to get the grid in reciprocal unit cell given k_grid density in input_parameters.py.
+    Inputs:
+        cell:   pyscf.pbc.gto.cell.Cell object, initialized in build_cell_from_input routine.
+    Returns:
+        k_grid: np.ndarray of shape (N, 3), k vectors generated from the cell.
+    """
+    kpts = cell.make_kpts(parmt.k_grid)
+    np.save(parmt.store + '/k-pts.npy', kpts)
+    logging.info("{} k vectors generated and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.\n".format(kpts.shape[0], parmt.store + '/k_grid.npy', parmt.k_grid[0], parmt.k_grid[1], parmt.k_grid[2]))
+    return kpts
+
 def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> list[cartmoments.AO]:
     """
     Given a cell, generate all atomic orbitals in the cell. Note that we, as usual assume Cartestian Gaussians.
@@ -260,6 +290,48 @@ def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> li
                 i_cart += 1
     logging.info("Generated all cartesian contracted gaussians, number of shells = {}.\n".format(len(all_ao)))
     return all_ao
+
+def do_density_functional_theory(cell: pbcgto.cell.Cell, kpts: np.ndarray = None) -> None:
+    """
+    NOTE: UNTESTED
+    NOTE: LOGGING NOT IMPLEMENTED.
+    Function to do density functional theory. Solves the RKS if only one kpoint in kgrid, otherwise 
+    solves RKS at each k-point and constructs density matrix from integrating over 1BZ. 
+    Inputs:
+        cell:   pyscf.pbc.gto.cell.Cell object, initialized in build_cell_from_input routine.
+        kpts:   np.ndarray consisting of k-points. 
+                If None, kgrid is generated using parameters input in parmt.k_grid
+    Returns:
+        None
+    Saves:
+        molecular energies, molecular coefficients and molecular occupation numbers.
+    """
+    dft_path = parmt.store + '/DFT'
+    makedir(dft_path)
+    if kpts is None:
+        kpts = get_kpts(cell)
+    if kpts.shape[0] == 1:
+        mf = pbcdft.RKS(cell).mix_density_fit()
+        mf.xc = parmt.xcfunc
+        mf.kernel()
+        if mf.converged:
+            np.save(dft_path + '/mo_en.npy', mf.mo_energy[np.newaxis,:])
+            np.save(dft_path + '/mo_coeff.npy', mf.mo_coeff[np.newaxis,:,:])
+            np.save(dft_path + '/mo_occ.npy', mf.mo_occ[np.newaxis,:])
+        else:
+            raise ValueError('DFT not converged. Might need to orthogonalize basis before continuing (Not Implemented).')
+    else:
+        kmf = pbcdft.KRKS(cell, kpts).mix_density_fit()
+        kmf.xc = parmt.xcfunc
+        kmf.kernel()
+        if kmf.converged:
+            np.save(dft_path + '/mo_en.npy', kmf.mo_energy[:,:])
+            np.save(dft_path + '/mo_coeff.npy', kmf.mo_coeff[:,:,:])
+            np.save(dft_path + '/mo_occ.npy', kmf.mo_occ[:,:])
+        else:
+            raise ValueError('DFT not converged. Might need to orthogonalize basis before continuing (Not Implemented).')
+    return
+
 
 """Generate all 1D primitive gaussian integrals and shape them accordingly"""
 def calc_ovlp_1D_prim_gauss(primgauss: np.ndarray) -> dict:

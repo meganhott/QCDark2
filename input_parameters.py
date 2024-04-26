@@ -26,7 +26,7 @@ effective_core_potential = None                        # All electron basis sets
 
 """computational parameters;
      these determine precision, and whether optional parameters are applied"""
-precision = 1e-9                                       # precision parameter, fed to pyscf only
+precision = 1e-12                                       # precision parameter, fed to pyscf only
 xcfunc = 'pbe'                                         # Exchange-Correlation Functional
 k_grid = [2, 2, 2]                                     # k-grid: resolution of grid points in reciprocal space
 scissor_bandgap = None                                 # If None, scissor correction is not applied, generally float
