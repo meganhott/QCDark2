@@ -19,7 +19,7 @@ lattice_vectors = [[2.715,    2.715,    0. ],
                    [2.715,    0.,       2.715]]
 atomloc =  ''' Si	0.	     0.	     0.    
 		     Si	1.3575	1.3575	1.3575'''
-mybasis = {'Si': 'cc-pvdz'}                            # Recommended to keep all basis sets same, however can be made different
+mybasis = {'Si': 'cc-pvqz'}                            # Recommended to keep all basis sets same, however can be made different
                                                        # We follow pyscf notations, see pyscf documentation
 effective_core_potential = None                        # All electron basis sets mandate the use of no ECPs,
                                                        # basis sets and ECPS must be chosen consistently
@@ -31,6 +31,8 @@ rcut = 45.                                             # R_cut, applied to both 
 xcfunc = 'pbe'                                         # Exchange-Correlation Functional
 k_grid = [2, 2, 2]                                     # k-grid: resolution of grid points in reciprocal space
 scissor_bandgap = None                                 # If None, scissor correction is not applied, generally float
+do_G0W0 = None                                         #Green's function (G) and Electron Loss Function (W) methods to correct DFT energies non-self consistently
+
 
 """parameters for dielectric function calculations,
      including q_max, bin widths, number of bands, etc"""
