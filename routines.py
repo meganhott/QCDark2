@@ -217,3 +217,29 @@ def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> li
 """Generate all 1D primitive gaussian integrals and shape them accordingly"""
 def calc_ovlp_1D_prim_gauss(primgauss: np.ndarray) -> dict:
     return None
+
+def calc_dft(cell: pbcgto.cell.Cell, do_G0W0: parmt.do_G0W0) -> dict:
+    """
+    Calculates molecular orbital energies, occupations, and coefficients for the k-grid speficied in input parameters. The results are stored as a hdf5 file.
+
+    To be added: G0W0 correction
+    """
+    
+    kmf = pbcdft.KRKS(cell, cell.make_kpts(parmt.k_grid)).mix_density_fit()
+    kmf.xc = parmt.xcfunc
+    kmf.kernel()
+
+    dft_dict = {'kpts':kmf.kpts, 'mo_energy':kmf.mo_energy, 'mo_occ':kmf.mo_occ, 'mo_coeff':kmf.mo_coeff}
+
+    """
+    Comments:
+    Change data in dict to numpy array instead of list of numpy arrays? - better for storing as hdf5?
+
+    Should dict be organized by kpt instead? Check how calculations are performed - what is most convenient way to organize energies?
+
+    Do we also want this function to return the dict, or should the dict just be stored as hdf5 file?
+
+    To do: implement storing to hdf5 file as specified in dielectric_functions
+    """
+
+    return None
