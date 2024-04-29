@@ -31,7 +31,7 @@ xcfunc = 'pbe'                                         # Exchange-Correlation Fu
 k_grid = [2, 2, 2]                                     # k-grid: resolution of grid points in reciprocal space
 scissor_bandgap = None                                 # If None, scissor correction is not applied, generally float
 do_G0W0 = None                                         # Green's function (G) and Electron Loss Function (W) methods
-                                                       # to correct DFT energies non-self consistently
+                                                       # to correct DFT energies non-self consistently (case-insensitive)
                                                        # do_GOWO = 'CD' for contour deformation method,
                                                        # do_G0W0 = 'AC' for analytic continuation method, 
                                                        # do_G0W0 = None for no correction

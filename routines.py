@@ -7,10 +7,11 @@ Reimagined routines with emphasis on 1-D calculation of primitive gaussian overl
 Authors: Megan Hott, Aman Singal
 """
 
-import os, time, itertools, logging, pdb, struct, sys, h5py, functools
+import os, time, itertools, logging, pdb, struct, sys, h5py, functools, psutil
 import numpy as np
 import pyscf.pbc.gto as pbcgto
 import pyscf.pbc.dft as pbcdft
+import pyscf.pbc.gw as pbcgw
 import cartesian_moments as cartmoments
 from multiprocessing import Pool
 from functools import partial
@@ -126,11 +127,13 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
         precision = parmt.precision
         )
     
+    max_memory = psutil.virtual_memory().available/(2**20)
     rcut = pbcgto.cell.estimate_rcut(cell, precision=cell.precision)
     cell.rcut = rcut
+    cell.max_memory = max_memory
     cell.build()
 
-    logging.info("Built cell object. Note that we only use cartesian gaussians.")
+    logging.info("Built cell object. Note that we only use cartesian gaussians.\nWe have set maximum memory available to pyscf = available memory of system = {:.2f} MB".format(max_memory))
     logging.info("Parameters fed, in atomic units:")
 
     logging.info("\tLattice vectors:")
@@ -291,6 +294,20 @@ def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> li
     logging.info("Generated all cartesian contracted gaussians, number of shells = {}.\n".format(len(all_ao)))
     return all_ao
 
+def do_kG0W0(kmf: pbcdft.krks.KRKS) -> None:
+    """
+    """
+    kgw = pbcgw.KRGW(kmf, freq_int = parmt.do_G0W0)
+    kgw.kernel()
+    dft_path = parmt.store + '/DFT'
+    if kgw.converged:
+        np.save(dft_path + '/mo_en.npy', kgw.mo_energy)
+        np.save(dft_path + '/mo_coeff.npy', kgw.mo_coeff)
+        np.save(dft_path + '/mo_occ.npy', kgw.mo_occ)
+    else:
+        raise ValueError('G0W0 not converged. Might need to orthogonalize basis before continuing (Not Implemented).')
+    return None
+
 def do_density_functional_theory(cell: pbcgto.cell.Cell, kpts: np.ndarray = None) -> None:
     """
     NOTE: UNTESTED
@@ -310,26 +327,18 @@ def do_density_functional_theory(cell: pbcgto.cell.Cell, kpts: np.ndarray = None
     makedir(dft_path)
     if kpts is None:
         kpts = get_kpts(cell)
-    if kpts.shape[0] == 1:
-        mf = pbcdft.RKS(cell).mix_density_fit()
-        mf.xc = parmt.xcfunc
-        mf.kernel()
-        if mf.converged:
-            np.save(dft_path + '/mo_en.npy', mf.mo_energy[np.newaxis,:])
-            np.save(dft_path + '/mo_coeff.npy', mf.mo_coeff[np.newaxis,:,:])
-            np.save(dft_path + '/mo_occ.npy', mf.mo_occ[np.newaxis,:])
+    kmf = pbcdft.KRKS(cell, kpts).mix_density_fit()
+    kmf.xc = parmt.xcfunc
+    kmf.kernel()
+    if kmf.converged:
+        if parmt.do_G0W0 is not None:
+            do_kG0W0(kmf)
         else:
-            raise ValueError('DFT not converged. Might need to orthogonalize basis before continuing (Not Implemented).')
+            np.save(dft_path + '/mo_en.npy', kmf.mo_energy)
+            np.save(dft_path + '/mo_coeff.npy', kmf.mo_coeff)
+            np.save(dft_path + '/mo_occ.npy', kmf.mo_occ)
     else:
-        kmf = pbcdft.KRKS(cell, kpts).mix_density_fit()
-        kmf.xc = parmt.xcfunc
-        kmf.kernel()
-        if kmf.converged:
-            np.save(dft_path + '/mo_en.npy', kmf.mo_energy[:,:])
-            np.save(dft_path + '/mo_coeff.npy', kmf.mo_coeff[:,:,:])
-            np.save(dft_path + '/mo_occ.npy', kmf.mo_occ[:,:])
-        else:
-            raise ValueError('DFT not converged. Might need to orthogonalize basis before continuing (Not Implemented).')
+        raise ValueError('DFT not converged. Might need to orthogonalize basis before continuing (Not Implemented).')
     return
 
 

@@ -1,4 +1,6 @@
 /__pycache__
 /test_eps.log
 /test_pyscf.log
-/reference_dir
+/test_resources
+/reference_dir/__pycache__
+/reference_dir/Si*
