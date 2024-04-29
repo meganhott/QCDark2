@@ -26,11 +26,15 @@ effective_core_potential = None                        # All electron basis sets
 
 """computational parameters;
      these determine precision, and whether optional parameters are applied"""
-precision = 1e-12                                       # precision parameter, fed to pyscf only
+precision = 1e-12                                      # precision parameter, fed to pyscf only
 xcfunc = 'pbe'                                         # Exchange-Correlation Functional
 k_grid = [2, 2, 2]                                     # k-grid: resolution of grid points in reciprocal space
 scissor_bandgap = None                                 # If None, scissor correction is not applied, generally float
-do_G0W0 = None                                         #Green's function (G) and Electron Loss Function (W) methods to correct DFT energies non-self consistently
+do_G0W0 = None                                         # Green's function (G) and Electron Loss Function (W) methods
+                                                       # to correct DFT energies non-self consistently
+                                                       # do_GOWO = 'CD' for contour deformation method,
+                                                       # do_G0W0 = 'AC' for analytic continuation method, 
+                                                       # do_G0W0 = None for no correction
 
 
 """parameters for dielectric function calculations,
