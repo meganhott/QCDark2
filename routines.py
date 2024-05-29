@@ -345,3 +345,22 @@ def do_density_functional_theory(cell: pbcgto.cell.Cell, kpts: np.ndarray = None
 """Generate all 1D primitive gaussian integrals and shape them accordingly"""
 def calc_ovlp_1D_prim_gauss(primgauss: np.ndarray) -> dict:
     return None
+
+def get_eq_1BZ_kpoint(cell: pbcgto.cell.Cell, q:np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Function to determine equivalent 1BZ k-point for a general wavevector q.
+    Inputs:
+        cell:   pyscf.pbc.gto.cell.Cell object, initialized in build_cell_from_input routine. 
+                This is needed to generate reciprocal lattice vectors.
+        q:      General q-point in reciprocal space
+    Returns:
+        k:      k-point equivalent to q located in 1BZ
+        m_G:    np.ndarray of shape (1, 3), (m_G1,m_G2,m_G3) is number of reciprocal primitive lattice vectors that q is offset from k 
+    """
+    G = cell.reciprocal_vectors()
+    D = np.linalg.inv(G.T)
+    q_D = np.round(D@q,5)
+    m_G = q_D // 1 
+    k_D = q_D % 1
+    k = G.T @ k_D
+    return k, m_G
