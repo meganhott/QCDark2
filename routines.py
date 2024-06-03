@@ -348,7 +348,7 @@ def calc_ovlp_1D_prim_gauss(primgauss: np.ndarray) -> dict:
 
 def get_eq_1BZ_kpoint(cell: pbcgto.cell.Cell, q:np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """
-    Function to determine equivalent 1BZ k-point for a general wavevector q.
+    Function to determine equivalent 1BZ k-point for a general wavevector q. The k-grid generated for this cell should include gamma and be centered at gamma: cell.make_kpts(with_gamma_point=True, wrap_around=True)
     Inputs:
         cell:   pyscf.pbc.gto.cell.Cell object, initialized in build_cell_from_input routine. 
                 This is needed to generate reciprocal lattice vectors.
@@ -359,8 +359,8 @@ def get_eq_1BZ_kpoint(cell: pbcgto.cell.Cell, q:np.ndarray) -> tuple[np.ndarray,
     """
     G = cell.reciprocal_vectors()
     D = np.linalg.inv(G.T)
-    q_D = np.round(D@q,5)
+    q_D = np.round(D@q + 0.5, 5) #need to add 1/2 since 1BZ is defined for -1/2G < k < 1/2G
     m_G = q_D // 1 
-    k_D = q_D % 1
+    k_D = (q_D % 1) - 0.5 #shift back by 1/2
     k = G.T @ k_D
-    return k, m_G
+    return k, m_G #can return -0. instead of 0. - may be an issue
