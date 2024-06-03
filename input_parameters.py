@@ -41,6 +41,8 @@ do_G0W0 = None                                         # Green's function (G) an
      including q_max, bin widths, number of bands, etc"""
 dq = 0.02                                              # In units of alpha*(mass of electron) 
 q_max = 10                                             # In units of alpha*(mass of electron) 
+d_theta_q = 0.125                                      # In units of radians/pi
+d_phi_q = 0.125                                        # In units of radians/pi
 dE = 0.1                                               # In eV
 E_max = 50                                             # In eV
 numval = 'all'                                         # number of valence bands to include in the calculation, 
