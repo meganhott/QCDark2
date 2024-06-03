@@ -127,13 +127,14 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
         precision = parmt.precision
         )
     
-    max_memory = psutil.virtual_memory().available/(2**20)
+    max_memory = psutil.virtual_memory().available/(2**20)*.9
     rcut = pbcgto.cell.estimate_rcut(cell, precision=cell.precision)
-    cell.rcut = rcut
+    cell.rcut = rcut*1.5
     cell.max_memory = max_memory
+    cell.space_group_symmetry = True
     cell.build()
 
-    logging.info("Built cell object. Note that we only use cartesian gaussians.\nWe have set maximum memory available to pyscf = available memory of system = {:.2f} MB".format(max_memory))
+    logging.info("Built cell object. Note that we only use cartesian gaussians.\nWe have set maximum memory available to pyscf = 90\% of available memory of system = {:.2f} MB".format(max_memory))
     logging.info("Parameters fed, in atomic units:")
 
     logging.info("\tLattice vectors:")
@@ -265,8 +266,8 @@ def get_kpts(cell: pbcgto.cell.Cell) -> np.ndarray:
     Returns:
         k_grid: np.ndarray of shape (N, 3), k vectors generated from the cell.
     """
-    kpts = cell.make_kpts(parmt.k_grid)
-    np.save(parmt.store + '/k-pts.npy', kpts)
+    kpts = cell.make_kpts(parmt.k_grid, wrap_around=True, with_gamma_point=True, space_group_symmetry=True)
+    np.save(parmt.store + '/k-pts.npy', kpts.kpts)
     logging.info("{} k vectors generated and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.\n".format(kpts.shape[0], parmt.store + '/k_grid.npy', parmt.k_grid[0], parmt.k_grid[1], parmt.k_grid[2]))
     return kpts
 
