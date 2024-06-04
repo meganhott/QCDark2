@@ -31,7 +31,7 @@ import numpy as np
 import routines as routines
 import input_parameters as parmt
 
-def initialize_cell():
+def initialize_cell() -> tuple[routines.pbcgto.cell.Cell, dict]:
      cell = routines.build_cell_from_input()                                    # Build cell object
      primgauss = routines.gen_all_1D_prim_gauss(cell)                           # Get all primitive gaussian objects
      all_ao = routines.gen_all_atomic_orbitals(cell, primgauss)                 # Get all atomic orbitals
@@ -40,6 +40,11 @@ def initialize_cell():
           'all_ao': all_ao
      }
      return cell, dark_objects
+
+def electronic_structure(cell: routines.pbcgto.cell.Cell):
+     kpts = routines.make_kpts(cell)
+     kmf = routines.KS_density_functional_theory(cell, kpts)
+     return None
 
 def main():
      cell, dark_objects = initialize_cell()

@@ -12,6 +12,7 @@ import numpy as np
 import pyscf.pbc.gto as pbcgto
 import pyscf.pbc.dft as pbcdft
 import pyscf.pbc.gw as pbcgw
+import pyscf.pbc
 import cartesian_moments as cartmoments
 from multiprocessing import Pool
 from functools import partial
@@ -129,7 +130,7 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
     
     max_memory = psutil.virtual_memory().available/(2**20)*.9
     rcut = pbcgto.cell.estimate_rcut(cell, precision=cell.precision)
-    cell.rcut = rcut*1.5
+    cell.rcut = rcut
     cell.max_memory = max_memory
     cell.space_group_symmetry = True
     cell.build()
@@ -258,7 +259,7 @@ def construct_R_vectors(cell: pbcgto.cell.Cell) -> tuple[np.ndarray, np.ndarray]
     logging.info("\tNumber of unique scalars in R vectors, i.e., unique R_i for R = (R_1, R_2, R_3) = {}.\n".format(unR.size))
     return Rvecs, unR
 
-def get_kpts(cell: pbcgto.cell.Cell) -> np.ndarray:
+def make_kpts(cell: pbcgto.cell.Cell) -> pyscf.pbc.lib.kpts.KPoints:
     """
     Function to get the grid in reciprocal unit cell given k_grid density in input_parameters.py.
     Inputs:
@@ -268,7 +269,7 @@ def get_kpts(cell: pbcgto.cell.Cell) -> np.ndarray:
     """
     kpts = cell.make_kpts(parmt.k_grid, wrap_around=True, with_gamma_point=True, space_group_symmetry=True)
     np.save(parmt.store + '/k-pts.npy', kpts.kpts)
-    logging.info("{} k vectors generated and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.\n".format(kpts.shape[0], parmt.store + '/k_grid.npy', parmt.k_grid[0], parmt.k_grid[1], parmt.k_grid[2]))
+    logging.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.\n".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k_grid.npy', parmt.k_grid[0], parmt.k_grid[1], parmt.k_grid[2]))
     return kpts
 
 def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> list[cartmoments.AO]:
@@ -295,24 +296,8 @@ def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> li
     logging.info("Generated all cartesian contracted gaussians, number of shells = {}.\n".format(len(all_ao)))
     return all_ao
 
-def do_kG0W0(kmf: pbcdft.krks.KRKS) -> None:
+def KS_density_functional_theory(cell: pbcgto.cell.Cell, kpts: pyscf.pbc.lib.kpts.KPoints = None) -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
     """
-    """
-    kgw = pbcgw.KRGW(kmf, freq_int = parmt.do_G0W0)
-    kgw.kernel()
-    dft_path = parmt.store + '/DFT'
-    if kgw.converged:
-        np.save(dft_path + '/mo_en.npy', kgw.mo_energy)
-        np.save(dft_path + '/mo_coeff.npy', kgw.mo_coeff)
-        np.save(dft_path + '/mo_occ.npy', kgw.mo_occ)
-    else:
-        raise ValueError('G0W0 not converged. Might need to orthogonalize basis before continuing (Not Implemented).')
-    return None
-
-def do_density_functional_theory(cell: pbcgto.cell.Cell, kpts: np.ndarray = None) -> None:
-    """
-    NOTE: UNTESTED
-    NOTE: LOGGING NOT IMPLEMENTED.
     Function to do density functional theory. Solves the RKS if only one kpoint in kgrid, otherwise 
     solves RKS at each k-point and constructs density matrix from integrating over 1BZ. 
     Inputs:
@@ -328,20 +313,28 @@ def do_density_functional_theory(cell: pbcgto.cell.Cell, kpts: np.ndarray = None
     makedir(dft_path)
     if kpts is None:
         kpts = get_kpts(cell)
-    kmf = pbcdft.KRKS(cell, kpts).mix_density_fit()
+    kmf = pbcdft.KRKS(cell, kpts).density_fit()
     kmf.xc = parmt.xcfunc
     kmf.kernel()
     if kmf.converged:
-        if parmt.do_G0W0 is not None:
-            do_kG0W0(kmf)
-        else:
-            np.save(dft_path + '/mo_en.npy', kmf.mo_energy)
-            np.save(dft_path + '/mo_coeff.npy', kmf.mo_coeff)
-            np.save(dft_path + '/mo_occ.npy', kmf.mo_occ)
+        np.save(dft_path + '/mo_en.npy', kpts.transform_mo_energy(kmf.mo_energy))
+        np.save(dft_path + '/mo_coeff.npy', kpts.transform_mo_coeff(kmf.mo_coeff))
+        np.save(dft_path + '/mo_occ.npy', kpts.transform_mo_occ(kmf.mo_occ))
     else:
         raise ValueError('DFT not converged. Might need to orthogonalize basis before continuing (Not Implemented).')
-    return
+    logging.info('Electronic structure converged, KS energy is {:.2f} Hartrees.\n\tDFT data is stored to {}/'.format(kmf.e_tot, dft_path))
+    return kmf
 
+def KS_NSCF(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS, k_nscf: np.ndarray) -> None:
+    """
+    Perform an NSCF Calculation on all points (k+q)%G and store N_SCF results to get |j \vec{k}+\vec{q}> and E_{j, \vec{k}+\vec{q}}.
+    """
+    dft_path = parmt.store + '/DFT/'
+    e_k, c_k = kmf.get_bands(k_nscf)
+    np.save(dft_path + 'nscf_ek', e_k)
+    np.save(dft_path + 'nscf_ck', c_k)
+    logging.info("NSCF Calculation for {} (k+q) points completed. Data stored to {}.".format(k_nscf.size//3, dft_path))
+    return
 
 """Generate all 1D primitive gaussian integrals and shape them accordingly"""
 def calc_ovlp_1D_prim_gauss(primgauss: np.ndarray) -> dict:
