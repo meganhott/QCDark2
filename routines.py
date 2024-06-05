@@ -312,7 +312,7 @@ def KS_density_functional_theory(cell: pbcgto.cell.Cell, kpts: pyscf.pbc.lib.kpt
     dft_path = parmt.store + '/DFT'
     makedir(dft_path)
     if kpts is None:
-        kpts = get_kpts(cell)
+        kpts = make_kpts(cell)
     kmf = pbcdft.KRKS(cell, kpts).density_fit()
     kmf.xc = parmt.xcfunc
     kmf.kernel()
