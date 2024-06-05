@@ -241,6 +241,15 @@ def get_all_unique_nums_in_array(array: np.ndarray, round_to: int = None, log_na
         logging.info("Number of unique elements found for {} = {}.\n".format(log_name, unq.size))
     return unq
 
+def get_all_unique_vectors_in_array(array: np.ndarray, round_to: int = None) -> np.ndarray:
+    """
+    Finds all unique vectors in an (n, 3) array of vectors 
+    """
+    if not round_to is None:
+        array = np.round(array, round_to)
+    unq = np.unique(array, axis=0)
+    return unq
+
 def construct_R_vectors(cell: pbcgto.cell.Cell) -> tuple[np.ndarray, np.ndarray]:
     """
     Function to construct all R vectors {R_i} relevant to the cell. We use pyscf build in methods and sort the

@@ -28,13 +28,13 @@ effective_core_potential = None                        # All electron basis sets
      these determine precision, and whether optional parameters are applied"""
 precision = 1e-12                                      # precision parameter, fed to pyscf only
 xcfunc = 'pbe'                                         # Exchange-Correlation Functional
-k_grid = [4, 4, 4]                                     # k-grid: resolution of grid points in reciprocal space
+k_grid = [4,4,4]                                     # k-grid: resolution of grid points in reciprocal space
 scissor_bandgap = None                                 # If None, scissor correction is not applied, generally float
 
 """parameters for dielectric function calculations,
      including q_max, bin widths, number of bands, etc"""
-dq = 0.02                                              # In units of alpha*(mass of electron) 
-q_max = 10                                             # In units of alpha*(mass of electron) 
+dq = 0.5                                              # In units of alpha*(mass of electron) 
+q_max = 5                                             # In units of alpha*(mass of electron) 
 d_theta_q = 0.25                                      # In units of radians/pi
 d_phi_q = 0.25                                        # In units of radians/pi
 dE = 0.1                                               # In eV
