@@ -55,5 +55,35 @@ def gen_q_vectors() -> tuple[np.ndarray, np.ndarray]:
     q_grid = spherical_to_cartesian(q_grid)
     return q_grid, cartesian_to_spherical(q_grid)
 
+def get_1BZ_q_vectors(q:np.ndarray):
+    """
+    Parallel version of get_eq_1BZ_kpoint for array of cartesion q vectors. 
+    To do:
+    - Still need to verify that this math works correctly
+    - Output array of unique q_1BZ vectors
+    - Output indices i_q, i_G to map q to q_1BZ[i_q] + G[i_G] where G are all unique G vectors
+    - Also output all unique G vectors?
+    """
+    #add cell input and rounding precision later
+    G = cell.reciprocal_vectors()
+    D = np.linalg.inv(G.T)
+
+    #np.tensordot
+    q_D = np.tensordot(D, q, axes=(1,1)).T + 0.5
+    m_G = q_D // 1 #need to add 1/2 since 1BZ is defined for -1/2G < k < 1/2G
+    k_D = (q_D % 1) - 0.5 #shift back by 1/2 
+    k = np.round(np.tensordot(G.T, k_D, axes=(1,1)).T, 5)
+
+    """
+    Old code for reference
+    q_D = np.round(D@q + 0.5, 5) #need to add 1/2 since 1BZ is defined for -1/2G < k < 1/2G
+    m_G = q_D // 1 #can return -0. instead of 0. - may be an issue
+    k_D = (q_D % 1) - 0.5 #shift back by 1/2
+    k = G.T @ k_D
+    """
+    return k, m_G
+
 cell = build_cell_from_input()
 #kpts = get_kpts(cell)
+#q = gen_q_vectors()[0] #cartesian q vectors
+#get_1BZ_q_vectors(q)
