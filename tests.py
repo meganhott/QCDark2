@@ -3,7 +3,8 @@ import matplotlib.pyplot as plt
 
 def spherical_to_cartesian(sph: np.ndarray) -> np.ndarray:
     """
-    Convert all vectors given in spherical polar coordinates to corresponding vectors in cartesian coordinates.
+    Convert all vectors given in spherical polar coordinates to corresponding vectors in cartesian coordinates,
+    and remove non-unique vectors. They can come up when theta = 0 or pi, because phi becomes degenerate. 
     Inputs:
         sph:    np.ndarray of shape (N, 3)
                 arr[i] = [r, theta, phi]

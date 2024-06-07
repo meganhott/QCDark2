@@ -135,7 +135,7 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
     cell.space_group_symmetry = True
     cell.build()
 
-    logging.info("Built cell object. Note that we only use cartesian gaussians.\nWe have set maximum memory available to pyscf = 90\% of available memory of system = {:.2f} MB".format(max_memory))
+    logging.info("Built cell object. Note that we only use cartesian gaussians.\nWe have set maximum memory available to pyscf = 90% of available memory of system = {:.2f} MB".format(max_memory))
     logging.info("Parameters fed, in atomic units:")
 
     logging.info("\tLattice vectors:")
