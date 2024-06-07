@@ -1,5 +1,6 @@
 from routines import *
 import matplotlib.pyplot as plt
+import spglib as spg
 
 def spherical_to_cartesian(sph: np.ndarray) -> np.ndarray:
     """
@@ -90,9 +91,40 @@ def get_q_plus_k_vectors(q:np.ndarray, k:np.ndarray):
     qk = get_all_unique_vectors_in_array(np.reshape(q[:,np.newaxis,:]+k[np.newaxis,:,:], (q.shape[0]*k.shape[0],3)), round_to=5)
     return qk            
 
-cell = build_cell_from_input()
+def get_IBZ_q_vectors(q:np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Inputs: (n,3) array of q-vectors in 1BZ
+    Outputs: array of q-vectors in IBZ, indices to map 1BZ q to IBZ q
 
-def testing_plots():
+    Test by inputting k grid
+        - pyscf has 8 (29) unique IBZ points for 4x4x4 (8x8x8) k-grid, while this results in 11 (50) unique IBZ q
+
+    To Do:
+        - Add option to use different point group? - could get from pyscf cell.kpts.groupname
+        - This method is probably slow because we loop over all q - can this loop be done using e.g. tensordot instead?
+        - Another method would be to select all q in the irreducible wedge defined by the high-symmetry points as q_IBZ and then just have to figure out i_q. Not sure if this will work because we don't have Wigner-Seitz cell and 3D shape of wedge is complicated
+    """
+    #Getting rotation operations for point group
+    rots = spg.get_symmetry_from_database(525)['rotations'] #525 has point group m-3m for fcc/bcc cell
+    
+    q_IBZ = np.array([[0.,0.,0.]]) #can have this to initialize q_IBZ since gamma will always be in q? #unique q in IBZ
+    i_q = np.empty(q.shape[0], dtype=int) #index to q_IBZ for each q
+    for j, qi in enumerate(q):
+        #apply all rotations to qi
+        qi_rot = np.round(np.tensordot(rots, qi, axes=1),5) #(48,3)
+        for i, q_IBZi in enumerate(q_IBZ):
+            if any(np.equal(q_IBZi, qi_rot).all(1)): #if any vector in q_IBZ equals transformed q, set i_q to be i
+                i_q[j] = i
+                break #go to next q
+        else: #otherwise, qi is a new IBZ point
+            q_IBZ = np.vstack([q_IBZ, np.round(qi,5)])   
+            i_q[j] = q_IBZ.shape[0]
+    return q_IBZ, i_q
+
+cell = build_cell_from_input()
+k = make_kpts(cell).kpts
+
+def get_1BZ_testing_plots():
     #Make sure dq is large and k-grid is small for these plots!! 
     q = gen_q_vectors()[0] #cartesian q vectors
     k = make_kpts(cell).kpts
@@ -117,4 +149,34 @@ def testing_plots():
     ax2 = fig.add_subplot(1,2,2,projection='3d')
     ax2.scatter(qk_1BZ.T[0],qk_1BZ.T[1],qk_1BZ.T[2], s=0.5)
     ax2.set_title('q+k in 1BZ')
+    plt.show()
+
+def get_IBZ_testing_plots():
+    k = make_kpts(cell).kpts
+    G = cell.reciprocal_vectors()
+    k_IBZ, i_k = get_IBZ_q_vectors(k)
+    fig = plt.figure()
+    ax1 = fig.add_subplot(1,2,1, projection='3d')
+    ax1.scatter(k.T[0],k.T[1],k.T[2], alpha=0.2)
+    ax1.scatter(k_IBZ.T[0],k_IBZ.T[1],k_IBZ.T[2], alpha=0.8)
+    ax2 = fig.add_subplot(1,2,2, projection='3d')
+    for i,k_IBZi in enumerate(k_IBZ):
+        mask = (i_k == i) 
+        ki = k[mask]
+        ax2.scatter(ki.T[0],ki.T[1],ki.T[2])
+
+        #individual plots for each set of equivalent 1BZ points
+        """
+        fig_i = plt.figure()
+        ax_i = fig_i.add_subplot(projection='3d')
+        ax_i.scatter(ki.T[0],ki.T[1],ki.T[2])
+        ax_i.set_title(f'i = {i}')
+        for j in range(G.shape[0]):
+            ax_i.plot([0,G[j][0]],[0,G[j][1]],[0,G[j][2]],linewidth=2,color='k')
+        """
+
+    for i in range(G.shape[0]):
+        ax1.plot([0,G[i][0]],[0,G[i][1]],[0,G[i][2]],linewidth=2,color='k')
+        ax2.plot([0,G[i][0]],[0,G[i][1]],[0,G[i][2]],linewidth=2,color='k')
+
     plt.show()
