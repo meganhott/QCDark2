@@ -2,61 +2,58 @@ from routines import *
 import matplotlib.pyplot as plt
 import spglib as spg
 
-def spherical_to_cartesian(sph: np.ndarray) -> np.ndarray:
+def construct_theta_bins(N_theta: int = 7, N_phi: int = 8) -> np.ndarray:
     """
-    Convert all vectors given in spherical polar coordinates to corresponding vectors in cartesian coordinates,
-    and remove non-unique vectors. They can come up when theta = 0 or pi, because phi becomes degenerate. 
+    Construct bin edges in theta, such that the z and -z axis are endpoints, and each bin edge
+    follows the following requirements:
+        bin_edge[0], bin_edge[-1] = 0, pi
+        {integral _bin_edge[i] ^bin_edge[i+1]} d cos(theta) = c * f(i),
+                where f(i) =    1       if i = 0 or i = -2 and
+                                N_phi   otherwise
+                and c is a constant
+    Then, to do an integral in solid angle, we have
+        {integral _0 ^pi} d -cos(theta) {integral _0 ^2*pi} d phi f(theta, phi) = sum(f(theta, phi), theta, phi) * (4*pi)/f(theta, phi).shape[0]
     Inputs:
-        sph:    np.ndarray of shape (N, 3)
-                arr[i] = [r, theta, phi]
-    Outputs:
-        cart:   np.ndarray of shape (N, 3)
-                cart[i] = [x, y, z]
-    """
-    z = sph[:,0]*np.cos(sph[:,1])
-    r = sph[:,0]*np.sin(sph[:,1])
-    x = r*np.cos(sph[:,2])
-    y = r*np.sin(sph[:,2])
-    cart = np.transpose([x, y, z])
-    cart = np.unique(np.round(cart, 10), axis = 0)
-    srt = np.argsort(np.linalg.norm(cart, axis = 1))
-    return cart[srt]
-
-def cartesian_to_spherical(cart: np.ndarray) -> np.ndarray:
-    """
-    Convert all vectors in cartesian coordinates to spherical coordinates.
-    Inputs:
-        cart:   np.ndarray of shape (N, 3)
+        N_theta:    int
+        N_phi:      int
     Returns:
-        sph:    np.ndarray of shape (N, 3)
+        bin_edge:   np.ndarray
     """
-    xy = cart[:,0]**2 + cart[:,1]**2
-    r = np.sqrt(cart[:,2]**2 + xy)
-    th = np.arctan2(np.sqrt(xy), cart[:,2])
-    ph = np.arctan2(cart[:,1], cart[:,0])
-    sph = np.transpose([r, th, ph])
-    return sph
+    i = np.arange(N_theta - 2)
+    N = 2 + (N_theta - 3)*N_phi                             # Note: we begin counting from 0 in our bin_edges, so to conserve shape we must subtract 1. 
+    b_i = np.append([1], 1 - 2/N*(1 + i*8))
+    b_i = np.append(b_i, [-1])
+    return np.arccos(b_i)
 
-def gen_q_vectors() -> tuple[np.ndarray, np.ndarray]:
+def construct_all_solid_angles(N_theta: int = 7, N_phi: int = 8) -> np.ndarray:
     """
-    NOTE: Add symmetrization: gen all relevant q-vectors, filter to unique q-vectors given SC symmetries:
-            rotations in x, y and z, and mirror symmetries about x, y and z.
-    Generate relevant q-vectors using parameters from input parameters in spherical coordinates
-    and construct cartesian coordinates. 
-    Inputs:
-        None
-    Outputs:
-        q_grid: np.ndarray of shape (N, 3)
-                q[i] = [q_x, q_y, q_z]
+    Construct points in theta and phi, such that the integral over solid angles is well-approximated by
+        {integral _0 ^pi} d -cos(theta) {integral _0 ^2*pi} d phi f(theta, phi) = sum(f(theta, phi), theta, phi) * (4*pi)/f(theta, phi).shape[0]
     """
-    if np.round(1%parmt.d_theta_q, 10) != 0 or np.round(1%parmt.d_phi_q, 10) != 0:
-        raise ValueError("Error in input_parameters.py, d_theta_q and d_phi_q must divide 1 exactly.\nGiven: d_theta_q = {:.5f}, d_phi_q = {:.5f}".format(parmt.d_theta_q, parmt.d_phi_q))
+    if type(N_theta) != int or type(N_phi) != int:
+        logging.info('Raising exception, in input_parameters.py, N_theta and N_phi must be of the type int.')
+        raise Exception('In input_parameters.py, N_theta and N_phi must be of the type int.')
+    if not N_theta%2:
+        logging.info('! WARNING: Given N_theta = {} is even and will not contain points in the x-y plane.\nThe accuracy of the dielectric function will remain unaffected.'.format(N_theta))
+    theta_bins = construct_theta_bins(N_theta, N_phi)
+    phi_bins = np.arange(0, 1., 1./N_phi)*2*np.pi
+    solid_angles = []
+    for theta in theta_bins:
+        if theta == 0 or round(theta, 9) == round(np.pi, 9):
+            solid_angles.append([theta, 0.])
+        else:
+            for phi in phi_bins:
+                solid_angles.append([theta, phi])
+    return np.array(solid_angles)
+
+def gen_q_vectors() -> np.ndarray:
+    Omega = construct_all_solid_angles(parmt.N_theta, parmt.N_phi)
     qr = np.arange(parmt.dq*0.5, parmt.q_max + parmt.dq*0.5, parmt.dq)
-    q_theta = np.arange(0, np.pi*(1 + 0.5*parmt.d_theta_q), np.pi*parmt.d_theta_q)
-    q_phi = np.arange(0, 2*np.pi, np.pi*parmt.d_phi_q)
-    q_grid = np.transpose(np.meshgrid(qr, q_theta, q_phi)).reshape((-1, 3))
-    q_grid = spherical_to_cartesian(q_grid)
-    return q_grid, cartesian_to_spherical(q_grid)
+    qra = []
+    for q in qr:
+        for O in Omega:
+            qra.append([q, O[0], O[1]])
+    return np.array(qra)
 
 def get_1BZ_q_vectors(q:np.ndarray):
     """
