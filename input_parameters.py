@@ -35,7 +35,7 @@ scissor_bandgap = None                                 # If None, scissor correc
      including q_max, bin widths, number of bands, etc"""
 dq = 0.02                                              # In units of alpha*(mass of electron) 
 q_max = 25                                              # In units of alpha*(mass of electron) 
-N_theta = 7                                            # Number of theta bins
+N_theta = 5                                            # Number of theta bins
 N_phi = 8                                              # Number of phi bins
 dE = 0.1                                               # In eV
 E_max = 50                                             # In eV

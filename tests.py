@@ -132,7 +132,7 @@ def get_IBZ_q_vectors(q:np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         else: #otherwise, qi is a new IBZ point
             q_IBZ = np.vstack([q_IBZ, np.round(qi,5)])   
             i_q[j] = q_IBZ.shape[0]
-    return q_IBZ, i_q
+    return q_IBZ[1:], i_q[1:]
 
 cell = build_cell_from_input()
 k = make_kpts(cell).kpts
