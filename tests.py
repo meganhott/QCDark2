@@ -2,6 +2,23 @@ from routines import *
 import matplotlib.pyplot as plt
 import spglib as spg
 
+def spherical_to_cartesian(sph: np.ndarray) -> np.ndarray:
+    """
+    Convert all vectors given in spherical polar coordinates to corresponding vectors in cartesian coordinates,
+    and remove non-unique vectors. They can come up when theta = 0 or pi, because phi becomes degenerate. 
+    Inputs:
+        sph:    np.ndarray of shape (N, 3)
+                arr[i] = [r, theta, phi]
+    Outputs:
+        cart:   np.ndarray of shape (N, 3)
+                cart[i] = [x, y, z]
+    """
+    z = sph[:,0]*np.cos(sph[:,1])
+    r = sph[:,0]*np.sin(sph[:,1])
+    x = r*np.cos(sph[:,2])
+    y = r*np.sin(sph[:,2])
+    return np.transpose([x, y, z])
+
 def construct_theta_bins(N_theta: int = 7, N_phi: int = 8) -> np.ndarray:
     """
     Construct bin edges in theta, such that the z and -z axis are endpoints, and each bin edge
@@ -21,14 +38,13 @@ def construct_theta_bins(N_theta: int = 7, N_phi: int = 8) -> np.ndarray:
     """
     i = np.arange(N_theta - 2)
     N = 2 + (N_theta - 3)*N_phi                             # Note: we begin counting from 0 in our bin_edges, so to conserve shape we must subtract 1. 
-    b_i = np.append([1], 1 - 2/N*(1 + i*8))
+    b_i = np.append([1], 1 - 2/N*(1 + i*N_phi))
     b_i = np.append(b_i, [-1])
     return np.arccos(b_i)
 
 def construct_all_solid_angles(N_theta: int = 7, N_phi: int = 8) -> np.ndarray:
     """
-    Construct points in theta and phi, such that the integral over solid angles is well-approximated by
-        {integral _0 ^pi} d -cos(theta) {integral _0 ^2*pi} d phi f(theta, phi) = sum(f(theta, phi), theta, phi) * (4*pi)/f(theta, phi).shape[0]
+    Construct points in theta and phi, such that the integral over solid angles is well-approximated by a trapezoidal rule integration law in theta.
     """
     if type(N_theta) != int or type(N_phi) != int:
         logging.info('Raising exception, in input_parameters.py, N_theta and N_phi must be of the type int.')
@@ -53,7 +69,7 @@ def gen_q_vectors() -> np.ndarray:
     for q in qr:
         for O in Omega:
             qra.append([q, O[0], O[1]])
-    return np.array(qra)
+    return spherical_to_cartesian(np.array(qra))
 
 def get_1BZ_q_vectors(q:np.ndarray):
     """
