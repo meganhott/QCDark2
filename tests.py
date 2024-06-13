@@ -21,10 +21,10 @@ def spherical_to_cartesian(sph: np.ndarray) -> np.ndarray:
 
 def construct_theta_bins(N_theta: int = 7, N_phi: int = 8) -> np.ndarray:
     """
-    Construct bin edges in theta, such that the z and -z axis are endpoints, and each bin edge
+    Construct bin edges in theta, such that the z and -z axis are endpoints, and each bin center
     follows the following requirements:
-        bin_edge[0], bin_edge[-1] = 0, pi
-        {integral _bin_edge[i] ^bin_edge[i+1]} d cos(theta) = c * f(i),
+        bin_center[0], bin_center[-1] = 0, pi
+        {integral _bin_edge[i] ^bin_edge[i+1]} d cos(theta) = c * f(bin_center[i]),
                 where f(i) =    1       if i = 0 or i = -2 and
                                 N_phi   otherwise
                 and c is a constant
@@ -34,10 +34,10 @@ def construct_theta_bins(N_theta: int = 7, N_phi: int = 8) -> np.ndarray:
         N_theta:    int
         N_phi:      int
     Returns:
-        bin_edge:   np.ndarray
+        bin_center:   np.ndarray
     """
-    i = np.arange(N_theta - 2)
-    N = 2 + (N_theta - 3)*N_phi                             # Note: we begin counting from 0 in our bin_edges, so to conserve shape we must subtract 1. 
+    i = np.arange(N_theta - 2) + .5
+    N = 2 + (N_theta - 2)*N_phi                             # Note: we begin counting from 0 in our bin_edges, so to conserve shape we must subtract 1. 
     b_i = np.append([1], 1 - 2/N*(1 + i*N_phi))
     b_i = np.append(b_i, [-1])
     return np.arccos(b_i)
