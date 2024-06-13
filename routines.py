@@ -345,25 +345,22 @@ def KS_NSCF(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS, k_nscf: np.ndarray) -> None:
     logging.info("NSCF Calculation for {} (k+q) points completed. Data stored to {}.".format(k_nscf.size//3, dft_path))
     return
 
-"""Generate all 1D primitive gaussian integrals and shape them accordingly"""
-def calc_ovlp_1D_prim_gauss(primgauss: np.ndarray) -> dict:
-    return None
-
-def get_eq_1BZ_kpoint(cell: pbcgto.cell.Cell, q:np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def gen_G_vectors(cell: pbcgto.cell.Cell) -> np.ndarray:
     """
-    Function to determine equivalent 1BZ k-point for a general wavevector q. The k-grid generated for this cell should include gamma and be centered at gamma: cell.make_kpts(with_gamma_point=True, wrap_around=True)
+    Generate G vectors given a cell.
     Inputs:
-        cell:   pyscf.pbc.gto.cell.Cell object, initialized in build_cell_from_input routine. 
-                This is needed to generate reciprocal lattice vectors.
-        q:      General q-point in reciprocal space
+        cell:       pyscf.pbc.gto.cell.Cell object
     Returns:
-        k:      k-point equivalent to q located in 1BZ
-        m_G:    np.ndarray of shape (1, 3), (m_G1,m_G2,m_G3) is number of reciprocal primitive lattice vectors that q is offset from k 
+        G_vectors:  np.ndarray object of shape (N, 3)
     """
-    G = cell.reciprocal_vectors()
-    D = np.linalg.inv(G.T)
-    q_D = np.round(D@q + 0.5, 5) #need to add 1/2 since 1BZ is defined for -1/2G < k < 1/2G
-    m_G = q_D // 1 
-    k_D = (q_D % 1) - 0.5 #shift back by 1/2
-    k = G.T @ k_D
-    return k, m_G #can return -0. instead of 0. - may be an issue
+    reciprocal_vectors = cell.reciprocal_vectors()
+    norm = np.min(np.linalg.norm(reciprocal_vectors, axis = 1))
+    n = int(2*parmt.q_max/norm)
+    N_range = list(range(-n,n+1)) 
+    triplets = list(itertools.product(N_range, repeat=3))
+    mygrid = np.asarray(triplets)
+    lattice = np.sum(mygrid[:,:,np.newaxis]*reciprocal_vectors[np.newaxis,:,:], axis = 1).astype('float')
+    lattice = lattice[np.linalg.norm(lattice, axis=1)<=parmt.q_max]
+    sortindx = np.argsort(np.linalg.norm(lattice, axis=1))
+    logging.info('Generated {} G vectors, with maximum q = {:.2f} atomic units.\n'.format(lattice.shape[0], parmt.q_max))
+    return lattice[sortindx]
