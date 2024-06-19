@@ -46,9 +46,8 @@ def initialize_cell() -> tuple[routines.pbcgto.cell.Cell, dict]:
      return cell, dark_objects
 
 def electronic_structure(cell: routines.pbcgto.cell.Cell) -> None:
-     kpts = routines.make_kpts(cell)
-     kmf = routines.KS_density_functional_theory(cell, kpts)
-     routines.KS_NSCF(kmf)
+     _ = routines.KS_electronic_structure(cell, True)
+     _ = routines.KS_electronic_structure(cell, False)
      return None
 
 def main():

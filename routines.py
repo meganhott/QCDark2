@@ -35,6 +35,9 @@ amu2eV = 9.315e8                                                                
 
 logging.basicConfig(filename=parmt.qcdark_outfile, filemode = 'w', level=logging.INFO, format='%(message)s') 
 
+#temporary
+pyscf.lib.num_threads(n = 20)
+
 def time_wrapper(func):
     """
     Wrapper for printing execution time to logger.
@@ -305,7 +308,6 @@ def construct_R_vectors(cell: pbcgto.cell.Cell) -> tuple[np.ndarray, np.ndarray]
     logging.info("\tNumber of unique scalars in R vectors, i.e., unique R_i for R = (R_1, R_2, R_3) = {}.".format(unR.size))
     return Rvecs, unR
 
-@time_wrapper
 def make_kpts(cell: pbcgto.cell.Cell, with_gamma: bool = True) -> pyscf.pbc.lib.kpts.KPoints:
     """
     Function to get the grid in reciprocal unit cell given k_grid density in input_parameters.py.
@@ -314,9 +316,15 @@ def make_kpts(cell: pbcgto.cell.Cell, with_gamma: bool = True) -> pyscf.pbc.lib.
     Returns:
         k_grid: np.ndarray of shape (N, 3), k vectors generated from the cell.
     """
-    kpts = cell.make_kpts(parmt.k_grid, wrap_around=True, with_gamma_point=True, space_group_symmetry=True)
-    np.save(parmt.store + '/k-pts.npy', kpts.kpts)
-    logging.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k_grid.npy', parmt.k_grid[0], parmt.k_grid[1], parmt.k_grid[2]))
+    if with_gamma:
+        k_grid = parmt.ik_grid
+        end = '_i'
+    else:
+        k_grid = parmt.fk_grid
+        end = '_f'
+    kpts = cell.make_kpts(k_grid, wrap_around=True, with_gamma_point=with_gamma, space_group_symmetry=True)
+    np.save(parmt.store + '/k-pts' + end, kpts.kpts)
+    logging.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k_grid.npy', k_grid[0], k_grid[1], k_grid[2]))
     return kpts
 
 @time_wrapper
@@ -345,7 +353,7 @@ def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> li
     return all_ao
 
 @time_wrapper
-def KS_density_functional_theory(cell: pbcgto.cell.Cell, kpts: pyscf.pbc.lib.kpts.KPoints = None) -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
+def KS_electronic_structure(cell: pbcgto.cell.Cell, init: bool = True) -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
     """
     Function to do density functional theory. Solves the RKS if only one kpoint in kgrid, otherwise 
     solves RKS at each k-point and constructs density matrix from integrating over 1BZ. 
@@ -360,36 +368,24 @@ def KS_density_functional_theory(cell: pbcgto.cell.Cell, kpts: pyscf.pbc.lib.kpt
     """
     dft_path = parmt.store + '/DFT'
     makedir(dft_path)
-    if kpts is None:
-        kpts = make_kpts(cell)
+    if init:
+        end = '_i'
+        logging.info('Initial states calculation:')
+    else:
+        end = '_f'
+        logging.info('Final States calculation:')
+    kpts = make_kpts(cell, init)
     kmf = pbcdft.KRKS(cell, kpts).density_fit()
     kmf.xc = parmt.xcfunc
     kmf.kernel()
     if kmf.converged:
-        np.save(dft_path + '/mo_en.npy', kpts.transform_mo_energy(kmf.mo_energy))
-        np.save(dft_path + '/mo_coeff.npy', kpts.transform_mo_coeff(kmf.mo_coeff))
-        np.save(dft_path + '/mo_occ.npy', kpts.transform_mo_occ(kmf.mo_occ))
+        np.save(dft_path + '/mo_en' + end, kpts.transform_mo_energy(kmf.mo_energy))
+        np.save(dft_path + '/mo_coeff' + end, kpts.transform_mo_coeff(kmf.mo_coeff))
+        np.save(dft_path + '/mo_occ' + end, kpts.transform_mo_occ(kmf.mo_occ))
     else:
         raise ValueError('DFT not converged. Might need to orthogonalize basis before continuing (Not Implemented).')
     logging.info('Electronic structure converged, KS energy is {:.2f} Hartrees.\n\tDFT data is stored to {}/'.format(kmf.e_tot, dft_path))
     return kmf
-
-@time_wrapper
-def KS_NSCF(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS) -> None:
-    """
-    Perform an NSCF Calculation on all points (k+q)%G and store N_SCF results to get |j \vec{k}+\vec{q}> and E_{j, \vec{k}+\vec{q}}.
-    """
-    dft_path = parmt.store + '/DFT/'
-    k_nscf = kmf.cell.make_kpts(parmt.nscf_grid, wrap_around=True, with_gamma_point=False, space_group_symmetry=True)
-    np.save(parmt.store+ '/k_nscf', k_nscf.kpts)
-    logging.info("{} k vectors generated for NSCF, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(k_nscf.nkpts, k_nscf.nkpts_ibz, parmt.store + '/k_nscf.npy', parmt.nscf_grid[0], parmt.nscf_grid[1], parmt.nscf_grid[2]))
-    e_k, c_k = kmf.get_bands(k_nscf.kpts_ibz)
-    e_k = k_nscf.transform_mo_energy(e_k)
-    c_k = k_nscf.transform_mo_coeff(c_k)
-    np.save(dft_path + 'nscf_ek', e_k)
-    np.save(dft_path + 'nscf_ck', c_k)
-    logging.info("NSCF Calculation for {} (k+q) points completed. Data stored to {}.".format(k_nscf.size//3, dft_path))
-    return
 
 @time_wrapper
 def gen_G_vectors(cell: pbcgto.cell.Cell) -> np.ndarray:
