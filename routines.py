@@ -339,8 +339,10 @@ def KS_NSCF(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS) -> None:
     Perform an NSCF Calculation on all points (k+q)%G and store N_SCF results to get |j \vec{k}+\vec{q}> and E_{j, \vec{k}+\vec{q}}.
     """
     dft_path = parmt.store + '/DFT/'
-    k_nscf = kmf.cell.make_kpts(parmt.nscf_grid, wrap_around=True, with_gamma_point=False, space_group_symmetry=False)
-    e_k, c_k = kmf.get_bands(k_nscf)
+    k_nscf = kmf.cell.make_kpts(parmt.nscf_grid, wrap_around=True, with_gamma_point=False, space_group_symmetry=True)
+    e_k, c_k = kmf.get_bands(k_nscf.kpts_ibz)
+    e_k = k_nscf.transform_mo_energy(e_k)
+    c_k = k_nscf.transform_mo_coeff(c_k)
     np.save(dft_path + 'nscf_ek', e_k)
     np.save(dft_path + 'nscf_ck', c_k)
     logging.info("NSCF Calculation for {} (k+q) points completed. Data stored to {}.".format(k_nscf.size//3, dft_path))
