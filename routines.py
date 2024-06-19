@@ -33,12 +33,34 @@ amu2eV = 9.315e8                                                                
 
 logging.basicConfig(filename=parmt.qcdark_outfile, filemode = 'w', level=logging.INFO, format='%(message)s') 
 
+def time_wrapper(func):
+    """
+    Wrapper for printing execution time to logger.
+    """
+    def wrap(*args, **kwargs):
+        logging.info('Entering function {}'.format(func.__name__))
+        start = time.time()
+        val = func(*args, **kwargs)
+        end = time.time()
+        logging.info('Exiting function {}. Time taken = {:.2f} s.\n'.format(func.__name__, end - start))
+        return val
+
+    return wrap
+
+@time_wrapper
 def check_requirements() -> None:
     """
     Function to check requirements for the implementation of the code.
     """
-    pass
+    if pyscf.__version__ < '2.2.0':
+        raise Exception('pyscf version {} found. The program uses features implemented in pyscf version 2.2.0, and has been verified to work in pyscf version 2.6.0.'.format(pyscf.__version__))
+    elif pyscf.__version__ < '2.6.0':
+        raise Warning('pyscf version {} found. While we do not anticipate compatibility issues, the program is tested for pyscf version >= 2.6.0.'.format(pyscf.__version__))
+    if pyscf.__version__ <= '2.6.0' and np.__version__ >= '2.0.0':
+        raise Warning('pyscf version {} and numpy version {} are not fuly compatible. There could be errors. We recommend updating pyscf to version 2.6.1 or above.'.format(pyscf.__version__, np.__version__))
+    return
 
+@time_wrapper
 def patch():
     """Apply PR-10305 / bpo-17560 connection send/receive max size update
 
@@ -51,7 +73,7 @@ def patch():
     patchname = "Multiprocessing connection patch for bpo-17560"
     if not (3, 3) < sys.version_info < (3, 8):
         logging.info(
-            patchname + " not applied, not an applicable Python version: %s.\n",
+            patchname + " not applied, not an applicable Python version: %s.",
             sys.version
         )
         return
@@ -64,7 +86,7 @@ def patch():
         orig_send_bytes.__code__.co_filename == __file__
         and orig_recv_bytes.__code__.co_filename == __file__
     ):
-        logging.info(patchname + " already applied, skipping.\n")
+        logging.info(patchname + " already applied, skipping.")
         return
 
     @functools.wraps(orig_send_bytes)
@@ -106,16 +128,17 @@ def makedir(dirname: str, log = False) -> None:
     try:
         os.mkdir(dirname)
         if log:
-            logging.info('Made directory \'' + dirname + '\'.\n')
+            logging.info('Made directory \'' + dirname + '\'.')
     except FileExistsError:
         if os.path.isdir(dirname):
             if log:
-                logging.info('Directory \''+dirname+'\' already exists.\n')
+                logging.info('Directory \''+dirname+'\' already exists.')
         else:
-            logging.info('File exists with name same as directory, \'' + dirname + '\'. Cannot make directory, raising exception.\n')
+            logging.info('File exists with name same as directory, \'' + dirname + '\'. Cannot make directory, raising exception.')
             raise FileExistsError('Cannot proceed with making directory \'' + dirname + '\', file exists with same name.')
     return None
 
+@time_wrapper
 def build_cell_from_input() -> pbcgto.cell.Cell:
     """
     Function that builds cell from inputs.
@@ -164,12 +187,13 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
         logging.info("\t\tNone, all-electron calculation.")
     
     logging.info("\tSelected precision: {}".format(cell.precision))
-    logging.info("Further information is in {}.\n".format(cell.output))
+    logging.info("Further information is in {}.".format(cell.output))
 
-    makedir(parmt.store, log = True)
+    makedir(parmt.store, log = False)
 
     return cell
 
+@time_wrapper
 def gen_all_1D_prim_gauss(cell: pbcgto.cell.Cell) -> np.ndarray:
     """
     Generates all primitive gaussians and their 1D components, and places them into an output np.ndarray.
@@ -201,9 +225,10 @@ def gen_all_1D_prim_gauss(cell: pbcgto.cell.Cell) -> np.ndarray:
             for element in elements:
                 for i in range(l+1):
                     primgauss = np.append(primgauss, [[atom_id, l, i, element[0], loc[0], loc[1], loc[2]]], axis = 0)
-    logging.info("All 1D primitive gaussians found for the cell.\n\tNumber of unique primitive gaussians = {}.\n\tThis includes all possible angular momentum in one direction.\n".format(primgauss.shape[0]))
+    logging.info("All 1D primitive gaussians found for the cell.\n\tNumber of unique primitive gaussians = {}.\n\tThis includes all possible angular momentum in one direction.".format(primgauss.shape[0]))
     return primgauss
 
+@time_wrapper
 def gen_prim_gauss_indices(primgauss: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """
     Function returns index in array containing atom_id, l, exponent, and initial index 
@@ -229,9 +254,10 @@ def gen_prim_gauss_indices(primgauss: np.ndarray) -> tuple[np.ndarray, np.ndarra
     for atm_id in unique_atoms:
         locs.append(primgauss[np.where(primgauss[:,0].astype(int) == atm_id)][0, 4:])
 
-    logging.info("Constructed unique exponent for each atom. Total number of exponents at different locations: {}\n".format(indx_arr.shape[0]))
+    logging.info("Constructed unique exponent for each atom. Total number of exponents at different locations: {}".format(indx_arr.shape[0]))
     return indx_arr, np.array(locs)
 
+@time_wrapper
 def get_all_unique_nums_in_array(array: np.ndarray, round_to: int = None, log_name: str = None) -> np.ndarray:
     """
     Given any array, np.ndarray, condense it into 1D and find all unique unique elements.
@@ -244,9 +270,10 @@ def get_all_unique_nums_in_array(array: np.ndarray, round_to: int = None, log_na
         array = np.round(array, round_to)
     unq = np.unique(array)
     if not log_name is None:
-        logging.info("Number of unique elements found for {} = {}.\n".format(log_name, unq.size))
+        logging.info("Number of unique elements found for {} = {}.".format(log_name, unq.size))
     return unq
 
+@time_wrapper
 def get_all_unique_vectors_in_array(array: np.ndarray, round_to: int = None) -> np.ndarray:
     """
     Finds all unique vectors in an (n, 3) array of vectors 
@@ -256,6 +283,7 @@ def get_all_unique_vectors_in_array(array: np.ndarray, round_to: int = None) -> 
     unq = np.unique(array, axis=0)
     return unq
 
+@time_wrapper
 def construct_R_vectors(cell: pbcgto.cell.Cell) -> tuple[np.ndarray, np.ndarray]:
     """
     Function to construct all R vectors {R_i} relevant to the cell. We use pyscf build in methods and sort the
@@ -271,10 +299,11 @@ def construct_R_vectors(cell: pbcgto.cell.Cell) -> tuple[np.ndarray, np.ndarray]
     np.save(parmt.store + '/R_vectors.npy', Rvecs)
     logging.info('{} R vectors generated for the cell given precision = {}, and saved to {}.'.format(Rvecs.shape[0], cell.precision, parmt.store + '/R_vectors.npy'))
     unR = get_all_unique_nums_in_array(Rvecs, round_to = 9, log_name = None)
-    logging.info("\tNumber of unique scalars in R vectors, i.e., unique R_i for R = (R_1, R_2, R_3) = {}.\n".format(unR.size))
+    logging.info("\tNumber of unique scalars in R vectors, i.e., unique R_i for R = (R_1, R_2, R_3) = {}.".format(unR.size))
     return Rvecs, unR
 
-def make_kpts(cell: pbcgto.cell.Cell) -> pyscf.pbc.lib.kpts.KPoints:
+@time_wrapper
+def make_kpts(cell: pbcgto.cell.Cell, with_gamma: bool = True) -> pyscf.pbc.lib.kpts.KPoints:
     """
     Function to get the grid in reciprocal unit cell given k_grid density in input_parameters.py.
     Inputs:
@@ -284,9 +313,10 @@ def make_kpts(cell: pbcgto.cell.Cell) -> pyscf.pbc.lib.kpts.KPoints:
     """
     kpts = cell.make_kpts(parmt.k_grid, wrap_around=True, with_gamma_point=True, space_group_symmetry=True)
     np.save(parmt.store + '/k-pts.npy', kpts.kpts)
-    logging.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.\n".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k_grid.npy', parmt.k_grid[0], parmt.k_grid[1], parmt.k_grid[2]))
+    logging.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k_grid.npy', parmt.k_grid[0], parmt.k_grid[1], parmt.k_grid[2]))
     return kpts
 
+@time_wrapper
 def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> list[cartmoments.AO]:
     """
     Given a cell, generate all atomic orbitals in the cell. Note that we, as usual assume Cartestian Gaussians.
@@ -306,11 +336,12 @@ def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> li
         for j in range(ncgto):
             for _ in range(cell.bas_len_cart(i)):
                 ijk = (cart_labs[i_cart].count('x'), cart_labs[i_cart].count('y'), cart_labs[i_cart].count('z'))
-                all_ao.append(cartmoments.AO(atom_index = atm_indx, exps = exps, coeffs = coeffs, ijk = ijk, primgauss = primgauss))
+                all_ao.append(cartmoments.AO(atom_index = atm_indx, exps = exps, coeffs = coeffs[:,j], ijk = ijk, primgauss = primgauss))
                 i_cart += 1
-    logging.info("Generated all cartesian contracted gaussians, number of shells = {}.\n".format(len(all_ao)))
+    logging.info("Generated all cartesian contracted gaussians, number of shells = {}.".format(len(all_ao)))
     return all_ao
 
+@time_wrapper
 def KS_density_functional_theory(cell: pbcgto.cell.Cell, kpts: pyscf.pbc.lib.kpts.KPoints = None) -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
     """
     Function to do density functional theory. Solves the RKS if only one kpoint in kgrid, otherwise 
@@ -340,12 +371,15 @@ def KS_density_functional_theory(cell: pbcgto.cell.Cell, kpts: pyscf.pbc.lib.kpt
     logging.info('Electronic structure converged, KS energy is {:.2f} Hartrees.\n\tDFT data is stored to {}/'.format(kmf.e_tot, dft_path))
     return kmf
 
+@time_wrapper
 def KS_NSCF(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS) -> None:
     """
     Perform an NSCF Calculation on all points (k+q)%G and store N_SCF results to get |j \vec{k}+\vec{q}> and E_{j, \vec{k}+\vec{q}}.
     """
     dft_path = parmt.store + '/DFT/'
     k_nscf = kmf.cell.make_kpts(parmt.nscf_grid, wrap_around=True, with_gamma_point=False, space_group_symmetry=True)
+    np.save(parmt.store+ '/k_nscf', k_nscf.kpts)
+    logging.info("{} k vectors generated for NSCF, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(k_nscf.nkpts, k_nscf.nkpts_ibz, parmt.store + '/k_nscf.npy', parmt.nscf_grid[0], parmt.nscf_grid[1], parmt.nscf_grid[2]))
     e_k, c_k = kmf.get_bands(k_nscf.kpts_ibz)
     e_k = k_nscf.transform_mo_energy(e_k)
     c_k = k_nscf.transform_mo_coeff(c_k)
@@ -354,6 +388,7 @@ def KS_NSCF(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS) -> None:
     logging.info("NSCF Calculation for {} (k+q) points completed. Data stored to {}.".format(k_nscf.size//3, dft_path))
     return
 
+@time_wrapper
 def gen_G_vectors(cell: pbcgto.cell.Cell) -> np.ndarray:
     """
     Generate G vectors given a cell.
@@ -371,5 +406,7 @@ def gen_G_vectors(cell: pbcgto.cell.Cell) -> np.ndarray:
     lattice = np.sum(mygrid[:,:,np.newaxis]*reciprocal_vectors[np.newaxis,:,:], axis = 1).astype('float')
     lattice = lattice[np.linalg.norm(lattice, axis=1)<=parmt.q_max]
     sortindx = np.argsort(np.linalg.norm(lattice, axis=1))
-    logging.info('Generated {} G vectors, with maximum q = {:.2f} atomic units.\n'.format(lattice.shape[0], parmt.q_max))
-    return lattice[sortindx]
+    logging.info('Generated {} G vectors, with maximum q = {:.2f} atomic units.'.format(lattice.shape[0], parmt.q_max))
+    lattice = lattice[sortindx]
+    np.save(parmt.store + '/G_vectors', lattice)
+    return lattice

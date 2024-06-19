@@ -1,10 +1,16 @@
 import numpy as np
 import math
-from scipy.special import factorial2 as fact2
+from scipy.special import factorial2
 from scipy.special import gamma
 
 e = math.e
 etol = 10.**8
+
+def fact2(n):
+     if n <= 1:
+          return 1.
+     else:
+          return factorial2(n)
 
 def get_E_ijt(a: float, b: float, i_max: int, j_max: int, Qx: float) -> list[list[list[float]]]:
      """

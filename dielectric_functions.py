@@ -34,23 +34,30 @@ import input_parameters as parmt
 def initialize_cell() -> tuple[routines.pbcgto.cell.Cell, dict]:
      cell = routines.build_cell_from_input()                                    # Build cell object
      primgauss = routines.gen_all_1D_prim_gauss(cell)                           # Get all primitive gaussian objects
+     primindices = routines.gen_prim_gauss_indices(primgauss)                   # Get all main indices for primitive gaussian objects. 
      all_ao = routines.gen_all_atomic_orbitals(cell, primgauss)                 # Get all atomic orbitals
+     G_vectors = routines.gen_G_vectors(cell)                                   # Get all relevant G vectors
      dark_objects = {
           'primitive_gaussians': primgauss,
-          'all_ao': all_ao
+          'all_ao': all_ao,
+          'G_vectors': G_vectors,
+          'primguass_i': primindices
      }
      return cell, dark_objects
 
-def electronic_structure(cell: routines.pbcgto.cell.Cell):
+def electronic_structure(cell: routines.pbcgto.cell.Cell) -> None:
      kpts = routines.make_kpts(cell)
      kmf = routines.KS_density_functional_theory(cell, kpts)
+     routines.KS_NSCF(kmf)
      return None
 
 def main():
      cell, dark_objects = initialize_cell()
+     electronic_structure(cell)
      return
 
 if __name__ == '__main__':
+     routines.check_requirements()                                              # Check requirements
      routines.patch()                                                           # Patch required for some versions, 
                                                                                 # see function for details
      main()
