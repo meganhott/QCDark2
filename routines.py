@@ -334,11 +334,12 @@ def KS_density_functional_theory(cell: pbcgto.cell.Cell, kpts: pyscf.pbc.lib.kpt
     logging.info('Electronic structure converged, KS energy is {:.2f} Hartrees.\n\tDFT data is stored to {}/'.format(kmf.e_tot, dft_path))
     return kmf
 
-def KS_NSCF(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS, k_nscf: np.ndarray) -> None:
+def KS_NSCF(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS) -> None:
     """
     Perform an NSCF Calculation on all points (k+q)%G and store N_SCF results to get |j \vec{k}+\vec{q}> and E_{j, \vec{k}+\vec{q}}.
     """
     dft_path = parmt.store + '/DFT/'
+    k_nscf = kmf.cell.make_kpts(parmt.nscf_grid, wrap_around=True, with_gamma_point=False, space_group_symmetry=False)
     e_k, c_k = kmf.get_bands(k_nscf)
     np.save(dft_path + 'nscf_ek', e_k)
     np.save(dft_path + 'nscf_ck', c_k)
