@@ -8,11 +8,13 @@ Authors: Megan Hott, Aman Singal
 """
 
 import os, time, itertools, logging, pdb, struct, sys, h5py, functools, psutil
+import warnings
 import numpy as np
 import pyscf.pbc.gto as pbcgto
 import pyscf.pbc.dft as pbcdft
 import pyscf.pbc
 import pyscf
+import scipy
 import cartesian_moments as cartmoments
 from multiprocessing import Pool
 from functools import partial
@@ -55,9 +57,10 @@ def check_requirements() -> None:
     if pyscf.__version__ < '2.2.0':
         raise Exception('pyscf version {} found. The program uses features implemented in pyscf version 2.2.0, and has been verified to work in pyscf version 2.6.0.'.format(pyscf.__version__))
     elif pyscf.__version__ < '2.6.0':
-        raise Warning('pyscf version {} found. While we do not anticipate compatibility issues, the program is tested for pyscf version >= 2.6.0.'.format(pyscf.__version__))
+        warnings.warn('pyscf version {} found. While we do not anticipate compatibility issues, the program is tested for pyscf version >= 2.6.0.'.format(pyscf.__version__))
     if pyscf.__version__ <= '2.6.0' and np.__version__ >= '2.0.0':
-        raise Warning('pyscf version {} and numpy version {} are not fuly compatible. There could be errors. We recommend updating pyscf to version 2.6.1 or above.'.format(pyscf.__version__, np.__version__))
+        warnings.warn('pyscf version {} and numpy version {} are not fully compatible. There could be errors. We recommend updating pyscf to version 2.6.1 or above.'.format(pyscf.__version__, np.__version__))
+    logging.info('\tpython version {},\n\tpyscf version {},\n\tnumpy version {},\n\tscipy version {}.'.format(sys.version, pyscf.__version__, np.__version__, scipy.__version__))
     return
 
 @time_wrapper
