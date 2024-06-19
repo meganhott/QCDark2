@@ -11,8 +11,8 @@ import os, time, itertools, logging, pdb, struct, sys, h5py, functools, psutil
 import numpy as np
 import pyscf.pbc.gto as pbcgto
 import pyscf.pbc.dft as pbcdft
-import pyscf.pbc.gw as pbcgw
 import pyscf.pbc
+import pyscf
 import cartesian_moments as cartmoments
 from multiprocessing import Pool
 from functools import partial
@@ -32,6 +32,12 @@ hbarc = 0.1973269804*10**(-6)                                                   
 amu2eV = 9.315e8                                                                # eV/u
 
 logging.basicConfig(filename=parmt.qcdark_outfile, filemode = 'w', level=logging.INFO, format='%(message)s') 
+
+def check_requirements() -> None:
+    """
+    Function to check requirements for the implementation of the code.
+    """
+    pass
 
 def patch():
     """Apply PR-10305 / bpo-17560 connection send/receive max size update
