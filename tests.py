@@ -146,7 +146,7 @@ def get_IBZ_q_vectors(q:np.ndarray) -> tuple[np.ndarray, np.ndarray]:
             i_q[j] = q_IBZ.shape[0]-2 #need -2 since we are getting rid of first q_IBZ and indexing starts at 0
     return q_IBZ[1:], i_q
 
-def nearest_kq(q, q_far_min=3, tolerance=1/max(parmt.k_grid)**2):
+def nearest_kq(q, q_far_min=3, tolerance=1/max(parmt.ik_grid)**2):
     """
     Test function for reducing nscf computations for large q when integrating
     q should be in spherical coordinates

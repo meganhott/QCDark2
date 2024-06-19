@@ -324,7 +324,7 @@ def make_kpts(cell: pbcgto.cell.Cell, with_gamma: bool = True) -> pyscf.pbc.lib.
         end = '_f'
     kpts = cell.make_kpts(k_grid, wrap_around=True, with_gamma_point=with_gamma, space_group_symmetry=True)
     np.save(parmt.store + '/k-pts' + end, kpts.kpts)
-    logging.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k_grid.npy', k_grid[0], k_grid[1], k_grid[2]))
+    logging.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k-pts' + end + '.npy', k_grid[0], k_grid[1], k_grid[2]))
     return kpts
 
 @time_wrapper
@@ -398,7 +398,7 @@ def gen_G_vectors(cell: pbcgto.cell.Cell) -> np.ndarray:
     """
     reciprocal_vectors = cell.reciprocal_vectors()
     norm = np.min(np.linalg.norm(reciprocal_vectors, axis = 1))
-    n = int(2*parmt.q_max/norm)
+    n = int(2*(parmt.q_max + np.max(np.linalg.norm(reciprocal_vectors, axis = 1))*(3**.5))/norm)
     N_range = list(range(-n,n+1)) 
     triplets = list(itertools.product(N_range, repeat=3))
     mygrid = np.asarray(triplets)
