@@ -407,7 +407,7 @@ def gen_G_vectors(cell: pbcgto.cell.Cell) -> np.ndarray:
     triplets = list(itertools.product(N_range, repeat=3))
     mygrid = np.asarray(triplets)
     lattice = np.sum(mygrid[:,:,np.newaxis]*reciprocal_vectors[np.newaxis,:,:], axis = 1).astype('float')
-    lattice = lattice[np.linalg.norm(lattice, axis=1)<=parmt.q_max]
+    lattice = lattice[np.linalg.norm(lattice, axis=1)<=parmt.q_max + np.max(np.linalg.norm(reciprocal_vectors, axis = 1))*(3**.5)]
     sortindx = np.argsort(np.linalg.norm(lattice, axis=1))
     logging.info('Generated {} G vectors, with maximum q = {:.2f} atomic units.'.format(lattice.shape[0], parmt.q_max))
     lattice = lattice[sortindx]
