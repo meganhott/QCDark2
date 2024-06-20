@@ -45,14 +45,15 @@ def initialize_cell() -> tuple[routines.pbcgto.cell.Cell, dict]:
      }
      return cell, dark_objects
 
-def electronic_structure(cell: routines.pbcgto.cell.Cell) -> None:
+def electronic_structure(cell: routines.pbcgto.cell.Cell, dark_objects: dict) -> None:
      kmf = routines.KS_electronic_structure(cell)
      routines.KS_non_self_consistent_field(kmf)
+     dark_objects['unique_q'] = routines.get_1BZ_q_points(cell)
      return None
 
 def main():
      cell, dark_objects = initialize_cell()
-     electronic_structure(cell)
+     electronic_structure(cell, dark_objects)
      return
 
 if __name__ == '__main__':

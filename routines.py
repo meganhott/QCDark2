@@ -423,3 +423,43 @@ def gen_G_vectors(cell: pbcgto.cell.Cell) -> np.ndarray:
     lattice = lattice[sortindx]
     np.save(parmt.store + '/G_vectors', lattice)
     return lattice
+
+@time_wrapper
+def get_1BZ_q_points(cell: pbcgto.cell.Cell) -> dict:
+    """
+    Function to read both initial and final state k-points, and make all q = k2 - k1.
+    We then project all q to 1BZ and keep all the unique q-points. All unique q are stored 
+    as a numpy array file, and the function returns a dictionary object described below. 
+    Inputs:
+        cell:   pyscf.pbc.gto.cell.Cell object
+    Returns:
+        q_1BZ:  dict, keys are unique q vectors, and each key contains
+                        the indices of [k2, k1] pair which lead to the unique q vector. 
+    """
+    def project_vectors_to_1BZ(G: np.ndarray, D: np.ndarray, q: np.ndarray) -> np.ndarray:
+        """
+        Take in a list of vectors, with q.ndim = 3, and return their projection to 1BZ.
+        Inputs:
+            G:      np.ndarray, reciprocal vectors of the cell
+            D:      np.ndarray, inverse of G (equivalent to cell.lattice_vectors().T/2/np.pi)
+            q:      np.ndarray of shape (N, M, 3)
+        Returns:
+            q_1BZ:  np.ndarray of shape (N, M, 3)
+        """
+        if q.ndim != 3 or q.shape[2] != 3:
+            raise Exception("Input to project_vectors_to_1BZ must be 3-dimensional, with q.shape[2] == 3.")
+        q = np.transpose(np.tensordot(D, q, axes=(1,-1)), axes = (1, 2, 0)) + 0.5
+        q = q%1 - 0.5
+        return np.round(np.transpose(np.tensordot(G, q, axes=(0,-1)), axes = (1, 2, 0)), 10)
+    
+    G = cell.reciprocal_vectors()
+    D = np.linalg.inv(G)
+    k1 = np.load(parmt.store + '/k-pts_i.npy')
+    k2 = np.load(parmt.store + '/k-pts_f.npy')
+    allq = project_vectors_to_1BZ(G, D, k2[None,:,:] - k1[:,None,:])
+    qu = np.unique(np.round(allq.reshape((-1, 3)), 10), axis = 0)
+    np.save(parmt.store + '/unique_q', qu)
+    dic = {}
+    for uq in qu:
+        dic[tuple([uq[i] for i in range(3)])] = np.where(np.prod([allq[:,:,i] == uq[i] for i in range(3)], axis = 0) == 1)
+    return dic
