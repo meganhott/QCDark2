@@ -35,7 +35,7 @@ scissor_bandgap = None                                 # If None, scissor correc
 """parameters for dielectric function calculations,
      including q_max, bin widths, number of bands, etc"""
 dq = 0.02                                              # In units of alpha*(mass of electron) 
-q_max = 25                                              # In units of alpha*(mass of electron) 
+q_max = .5                                              # In units of alpha*(mass of electron) 
 N_theta = 9                                            # Number of theta bins
 N_phi = 16                                              # Number of phi bins
 dE = 0.1                                               # In eV

@@ -353,7 +353,7 @@ def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> li
     return all_ao
 
 @time_wrapper
-def KS_electronic_structure(cell: pbcgto.cell.Cell, init: bool = True) -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
+def KS_electronic_structure(cell: pbcgto.cell.Cell) -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
     """
     Function to do density functional theory. Solves the RKS if only one kpoint in kgrid, otherwise 
     solves RKS at each k-point and constructs density matrix from integrating over 1BZ. 
@@ -366,26 +366,40 @@ def KS_electronic_structure(cell: pbcgto.cell.Cell, init: bool = True) -> pbcdft
     Saves:
         molecular energies, molecular coefficients and molecular occupation numbers.
     """
-    dft_path = parmt.store + '/DFT'
+    dft_path = parmt.store + '/DFT/'
     makedir(dft_path)
-    if init:
-        end = '_i'
-        logging.info('Initial states calculation:')
-    else:
-        end = '_f'
-        logging.info('Final States calculation:')
-    kpts = make_kpts(cell, init)
+    logging.info('Initial state calculation:')
+    kpts = make_kpts(cell, True)
     kmf = pbcdft.KRKS(cell, kpts).density_fit()
     kmf.xc = parmt.xcfunc
     kmf.kernel()
     if kmf.converged:
-        np.save(dft_path + '/mo_en' + end, kpts.transform_mo_energy(kmf.mo_energy))
-        np.save(dft_path + '/mo_coeff' + end, kpts.transform_mo_coeff(kmf.mo_coeff))
-        np.save(dft_path + '/mo_occ' + end, kpts.transform_mo_occ(kmf.mo_occ))
+        np.save(dft_path + 'mo_en_i', kpts.transform_mo_energy(kmf.mo_energy))
+        np.save(dft_path + 'mo_coeff_i', kpts.transform_mo_coeff(kmf.mo_coeff))
+        np.save(dft_path + 'mo_occ_i', kpts.transform_mo_occ(kmf.mo_occ))
     else:
         raise ValueError('DFT not converged. Might need to orthogonalize basis before continuing (Not Implemented).')
-    logging.info('Electronic structure converged, KS energy is {:.2f} Hartrees.\n\tDFT data is stored to {}/'.format(kmf.e_tot, dft_path))
+    logging.info('Electronic structure converged, KS energy is {:.2f} Hartrees.\n\tDFT data is stored to {}.'.format(kmf.e_tot, dft_path))
     return kmf
+
+@time_wrapper
+def KS_non_self_consistent_field(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS) -> None:
+    """
+    Non self consistent field calculation for final states.
+    Inputs:
+        kmf:    pyscf.pbc.dft.krks_ksymm.KsymAdaptedKRKS object
+    Return:
+        None
+    """
+    dft_path = parmt.store + '/DFT/'
+    kpts = make_kpts(kmf.cell, False)
+    ek , ck = kmf.get_bands(kpts.kpts_ibz)
+    ek = kpts.transform_mo_energy(ek)
+    ck = kpts.transform_mo_coeff(ck)
+    np.save(dft_path + 'mo_en_f', ek)
+    np.save(dft_path + 'mo_coeff_f', ck)
+    logging.info('Non self consistent field equations solved for final state k-points. Data is stored to {}.'.format(dft_path))
+    return None
 
 @time_wrapper
 def gen_G_vectors(cell: pbcgto.cell.Cell) -> np.ndarray:
