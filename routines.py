@@ -316,15 +316,10 @@ def make_kpts(cell: pbcgto.cell.Cell, with_gamma: bool = True) -> pyscf.pbc.lib.
     Returns:
         k_grid: np.ndarray of shape (N, 3), k vectors generated from the cell.
     """
-    if with_gamma:
-        k_grid = parmt.ik_grid
-        end = '_i'
-    else:
-        k_grid = parmt.fk_grid
-        end = '_f'
+    k_grid = parmt.ik_grid
     kpts = cell.make_kpts(k_grid, wrap_around=True, with_gamma_point=with_gamma, space_group_symmetry=True)
-    np.save(parmt.store + '/k-pts' + end, kpts.kpts)
-    logging.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k-pts' + end + '.npy', k_grid[0], k_grid[1], k_grid[2]))
+    np.save(parmt.store + '/k-pts_i', kpts.kpts)
+    logging.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k-pts_i.npy', k_grid[0], k_grid[1], k_grid[2]))
     return kpts
 
 @time_wrapper
@@ -391,8 +386,15 @@ def KS_non_self_consistent_field(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS) -> None
     Return:
         None
     """
+    logging.info("Final State Calculation:")
+    from pyscf.pbc.lib import kpts as libkpts
     dft_path = parmt.store + '/DFT/'
-    kpts = make_kpts(kmf.cell, False)
+    #kpts = make_kpts(kmf.cell, False)
+    k_grid = parmt.fk_grid
+    kpts = kmf.cell.make_kpts(k_grid, space_group_symmetry=False, wrap_around = True, with_gamma_point = True) + np.ones(3)[None, :]*parmt.dq*.5/(3**.5)
+    kpts = libkpts.make_kpts(kmf.cell, kpts, True, False)
+    np.save(parmt.store + '/k-pts_f', kpts.kpts)
+    logging.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k-pts_f.npy', k_grid[0], k_grid[1], k_grid[2]))
     ek , ck = kmf.get_bands(kpts.kpts_ibz)
     ek = kpts.transform_mo_energy(ek)
     ck = kpts.transform_mo_coeff(ck)
