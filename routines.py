@@ -395,8 +395,7 @@ def KS_non_self_consistent_field(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS) -> None
     dft_path = parmt.store + '/DFT/'
     #kpts = make_kpts(kmf.cell, False)
     k_grid = parmt.fk_grid
-    kpts = kmf.cell.make_kpts(k_grid, space_group_symmetry=False, wrap_around = True, with_gamma_point = True) + np.ones(3)[None, :]*parmt.dq*.5/(3**.5)
-    kpts = libkpts.make_kpts(kmf.cell, kpts, True, False)
+    kpts = kmf.cell.make_kpts(k_grid, space_group_symmetry=False, wrap_around = True, scaled_center = kmf.cell.get_scaled_kpts(np.ones(3)[None, :]*parmt.dq*.5/(3**.5)))
     np.save(parmt.store + '/k-pts_f', kpts.kpts)
     logging.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k-pts_f.npy', k_grid[0], k_grid[1], k_grid[2]))
     ek , ck = kmf.get_bands(kpts.kpts_ibz)

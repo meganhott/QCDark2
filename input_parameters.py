@@ -19,7 +19,7 @@ lattice_vectors = [[2.715,    2.715,    0. ],
                    [2.715,    0.,       2.715]]
 atomloc =  ''' Si	0.	     0.	     0.    
 		     Si	1.3575	1.3575	1.3575'''
-mybasis = {'Si': 'cc-pvdz'}                            # Recommended to keep all basis sets same, however can be made different
+mybasis = {'Si': 'cc-pvtz'}                            # Recommended to keep all basis sets same, however can be made different
                                                        # We follow pyscf notations, see pyscf documentation
 effective_core_potential = None                        # All electron basis sets mandate the use of no ECPs,
                                                        # basis sets and ECPS must be chosen consistently
@@ -28,8 +28,8 @@ effective_core_potential = None                        # All electron basis sets
      these determine precision, and whether optional parameters are applied"""
 precision = 1e-12                                      # precision parameter, fed to pyscf only
 xcfunc = 'pbe'                                         # Exchange-Correlation Functional
-ik_grid = [8,8,8]                                      # k-grid: resolution of grid points in reciprocal space
-fk_grid = [10,10,10]	                              # Grid size for NSCF calculation
+ik_grid = [6,6,6]                                      # k-grid: resolution of grid points in reciprocal space
+fk_grid = [8,8,8]	                              # Grid size for NSCF calculation
 scissor_bandgap = None                                 # If None, scissor correction is not applied, generally float
 
 """parameters for dielectric function calculations,
