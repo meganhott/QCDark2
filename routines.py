@@ -177,6 +177,10 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
     for a in cell.lattice_vectors():
         logging.info("\t\t{:.5f}\t{:.5f}\t{:.5f}".format(a[0], a[1], a[2]))
 
+    logging.info("\tReciprocal Vectors:")
+    for a in cell.reciprocal_vectors():
+        logging.info("\t\t{:.5f}\t{:.5f}\t{:.5f}".format(a[0], a[1], a[2]))
+
     logging.info("\tAtom locations:")
     for a in cell._atom:
         logging.info("\t\t{}:\t{:.5f}\t{:.5f}\t{:.5f}".format(a[0], a[1][0], a[1][1], a[1][2]))
