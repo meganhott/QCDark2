@@ -89,7 +89,7 @@ def get_1BZ_q_vectors(q:np.ndarray, mod='G'):
     q_D = np.tensordot(D, q, axes=(1,1)).T + 0.5 #need to add 1/2 since 1BZ is defined for -1/2G < k < 1/2G
 
     if mod == 'k':
-        k_grid = np.array(parmt.k_grid)
+        k_grid = np.array(parmt.ik_grid)
         m_G = (q_D*k_grid // 1)/k_grid #need to do this for floating-point errors
         q_1BZ_D = (q_D*k_grid % 1)/k_grid - 0.5 
     elif mod == 'G':
@@ -146,7 +146,7 @@ def get_IBZ_q_vectors(q:np.ndarray) -> tuple[np.ndarray, np.ndarray]:
             i_q[j] = q_IBZ.shape[0]-2 #need -2 since we are getting rid of first q_IBZ and indexing starts at 0
     return q_IBZ[1:], i_q
 
-def nearest_kq(q, q_far_min=3, tolerance=1/max(parmt.ik_grid)**2):
+def nearest_kq(q, tolerance, q_far_min=3): #tolerance=1/max(parmt.ik_grid)**2):
     """
     Test function for reducing nscf computations for large q when integrating
     q should be in spherical coordinates
@@ -173,22 +173,28 @@ def nearest_kq(q, q_far_min=3, tolerance=1/max(parmt.ik_grid)**2):
 
     return q_far, q_far_modk, m_Gk, q_far_modk_unique[1:], i_modk_q
 
-def test_nearest_kq():
-    q = gen_q_vectors(cartesian=False)
-    q_far, q_far_modk, m_Gk, q_far_modk_unique, i_modk_q = nearest_kq(q)
-    print(f'q_far: {q_far.shape[0]}, unique q_far mod k: {q_far_modk_unique.shape[0]}')
-    
-    fig = plt.figure()
-    ax = fig.add_subplot(projection='3d')
-    ax.scatter(q_far.T[0],q_far.T[1],q_far.T[2]) #original points
-
+def test_nearest_kq(plot=False):
+    cell = build_cell_from_input()
     G = cell.reciprocal_vectors()
-    q_far_approx = q_far_modk_unique[i_modk_q] + np.tensordot(G,m_Gk,(0,1)).T
 
-    ax.scatter(q_far_approx.T[0],q_far_approx.T[1],q_far_approx.T[2]) #approximate points
+    q = gen_q_vectors(cartesian=False)
+    q_far, q_far_modk, m_Gk, q_far_modk_unique, i_modk_q = nearest_kq(q, parmt.dq/np.linalg.norm(G[0])) #tolerance is dq
+    print(f'q_far: {q_far.shape[0]}, unique q_far mod k: {q_far_modk_unique.shape[0]} for q > 3ame')
 
-    #ax.scatter(q_far_modk_unique.T[0],q_far_modk_unique.T[1],q_far_modk_unique.T[2], alpha = 0.9)
-    plt.show()
+    q_far, q_far_modk, m_Gk, q_far_modk_unique, i_modk_q = nearest_kq(q, parmt.dq/np.linalg.norm(G[0]),q_far_min=0)
+    print(f'q_far: {q_far.shape[0]}, unique q_far mod k: {q_far_modk_unique.shape[0]} for all q')
+    
+    if plot:
+        fig = plt.figure()
+        ax = fig.add_subplot(projection='3d')
+        ax.scatter(q_far.T[0],q_far.T[1],q_far.T[2]) #original points
+
+        q_far_approx = q_far_modk_unique[i_modk_q] + np.tensordot(G,m_Gk,(0,1)).T
+
+        ax.scatter(q_far_approx.T[0],q_far_approx.T[1],q_far_approx.T[2]) #approximate points
+
+        #ax.scatter(q_far_modk_unique.T[0],q_far_modk_unique.T[1],q_far_modk_unique.T[2], alpha = 0.9)
+        plt.show()
     
     #return q, q_far, q_far_modk_unique, i_modk_q
 
