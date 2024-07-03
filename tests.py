@@ -199,26 +199,6 @@ def test_nearest_kq(plot=False):
     #return q, q_far, q_far_modk_unique, i_modk_q
 
 cell = build_cell_from_input()
-k = make_kpts(cell)
-q = gen_q_vectors()
-qr = np.linalg.norm(q, axis = 1)
-q = q[qr <= np.linalg.norm(cell.reciprocal_vectors())*(3**.5)]
-q, mG = get_1BZ_q_vectors(q)
-q = q[np.linalg.norm(mG, axis = 1) == 0.]
-print(q.shape)
-
-k2 = q[None,:,:] + k.kpts[:,None,:]
-k2 = k2.reshape((-1, 3))
-print(k2.shape)
-
-#kmf = pbcdft.KRKS(cell, k).density_fit()
-#kmf.xc = 'pbe'
-#kmf.kernel()
-
-#st = time.time()
-#ek, ck = kmf.get_bands(k2)
-#et = time.time()
-#print("time = {:.2f}".format(et - st))
 
 def get_1BZ_testing_plots():
     #Make sure dq is large and k-grid is small for these plots!! 
