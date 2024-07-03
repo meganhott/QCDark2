@@ -395,7 +395,7 @@ def KS_non_self_consistent_field(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS) -> None
     dft_path = parmt.store + '/DFT/'
     #kpts = make_kpts(kmf.cell, False)
     k_grid = parmt.fk_grid
-    kpts = kmf.cell.make_kpts(k_grid, space_group_symmetry=False, wrap_around = True, scaled_center = kmf.cell.get_scaled_kpts(np.ones(3)[None, :]*parmt.dq*.5/(3**.5)))
+    kpts = kmf.cell.make_kpts(k_grid, space_group_symmetry=True, wrap_around = True, scaled_center = kmf.cell.get_scaled_kpts(np.ones(3)[None, :]*parmt.dq*.5/(3**.5)))
     np.save(parmt.store + '/k-pts_f', kpts.kpts)
     logging.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k-pts_f.npy', k_grid[0], k_grid[1], k_grid[2]))
     ek , ck = kmf.get_bands(kpts.kpts_ibz)
@@ -428,6 +428,40 @@ def gen_G_vectors(cell: pbcgto.cell.Cell) -> np.ndarray:
     lattice = lattice[sortindx]
     np.save(parmt.store + '/G_vectors', lattice)
     return lattice
+
+@time_wrapper
+def convert_to_eV_and_scissor(cell: pbcgto.cell.Cell) -> None:
+    """
+    Function converts energies from Ryd to eV - prints bandgap, if scissor - scissor corrects bandgap.
+    and scissor corrects to given bandgap. Otherwise
+    Inputs:
+        cell:                               pyscf.pbc.gto.cell.Cell object
+    Reads:
+        parmt.scissor_bandgap:              float, scissor energies in eV
+        parmt.store + '/DFT/mo_en_i.npy':   np.ndarray object, stored to disk
+        parmt.store + '/DFT/mo_en_f.npy':   np.ndarray object, stored to disk
+    Writes:
+        parmt.store + '/DFT/mo_en_i.npy':   np.ndarray object, stored to disk
+        parmt.store + '/DFT/mo_en_f.npy':   np.ndarray object, stored to disk
+    """
+    occ_orb = cell.tot_electrons()//2
+    en_i = np.load(parmt.store + '/DFT/mo_en_i.npy')*alpha*alpha*me
+    en_f = np.load(parmt.store + '/DFT/mo_en_f.npy')*alpha*alpha*me
+    homo = max(en_i[:,:occ_orb].max(), en_f[:,:occ_orb].max())
+    en_i, en_f = en_i - homo, en_f - homo
+    homo = 0
+    lumo = min(en_i[:,occ_orb:].min(), en_f[:,occ_orb:].min())
+    logging.info("All energies converted to eV. Calculated Bandgap = {:.2f} eV.".format(lumo - homo))
+    if parmt.scissor_bandgap is not None:
+        if type(parmt.scissor_bandgap) != float:
+            raise ValueError("Parameter scissor_bandgap in input_parameters.py must be either None or of type float.")
+        correction = parmt.scissor_bandgap - lumo
+        en_i[:,occ_orb:], en_f[:,occ_orb:] = en_i[:,occ_orb:] + correction, en_f[:,occ_orb:] + correction
+        logging.info("Scissor Correction applied, new bandgap is {:.2f} eV.".format(parmt.scissor_bandgap))
+    np.save(parmt.store + '/DFT/mo_en_i.npy', en_i)
+    np.save(parmt.store + '/DFT/mo_en_f.npy', en_f)
+    logging.info("Electronic structure energies updated in files.")
+    return
 
 @time_wrapper
 def get_1BZ_q_points(cell: pbcgto.cell.Cell) -> dict:
