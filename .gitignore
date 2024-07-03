@@ -6,3 +6,4 @@
 /reference_dir/Si*
 /test
 /run_on_slurm.sh
+/configure_pyscf.py
