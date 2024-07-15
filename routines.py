@@ -499,10 +499,10 @@ def get_1BZ_q_points(cell: pbcgto.cell.Cell) -> dict:
     k1 = np.load(parmt.store + '/k-pts_i.npy')
     k2 = np.load(parmt.store + '/k-pts_f.npy')
     allq = project_vectors_to_1BZ(G, D, k2[None,:,:] - k1[:,None,:])
-    qu = np.unique(np.round(allq.reshape((-1, 3)), 10), axis = 0)
+    qu = np.unique(np.round(allq.reshape((-1, 3)), int(np.floor(-np.log10(parmt.precision)))), axis = 0)
     np.save(parmt.store + '/unique_q', qu)
     logging.info("{} unique q-vectors found in 1BZ. Storing all unique q-vectors in {} + /unique_q.npy.".format(qu.shape[0], parmt.store))
     dic = {}
     for uq in qu:
-        dic[tuple([uq[i] for i in range(3)])] = np.where(np.prod([allq[:,:,i] == uq[i] for i in range(3)], axis = 0) == 1)
+        dic[tuple([uq[i] for i in range(3)])] = np.where(np.prod([np.isclose(allq[:,:,i], uq[i]) for i in range(3)], axis = 0) == 1)
     return dic
