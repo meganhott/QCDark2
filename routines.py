@@ -466,6 +466,22 @@ def convert_to_eV_and_scissor(cell: pbcgto.cell.Cell) -> None:
     logging.info("Electronic structure energies updated in files.")
     return
 
+def project_vectors_to_1BZ(G: np.ndarray, D: np.ndarray, q: np.ndarray) -> np.ndarray:
+    """
+    Take in a list of vectors, with q.ndim = 3, and return their projection to 1BZ.
+    Inputs:
+        G:      np.ndarray, reciprocal vectors of the cell
+        D:      np.ndarray, inverse of G (equivalent to cell.lattice_vectors().T/2/np.pi)
+        q:      np.ndarray of shape (N, M, 3)
+    Returns:
+        q_1BZ:  np.ndarray of shape (N, M, 3)
+    """
+    if q.ndim != 3 or q.shape[2] != 3:
+        raise Exception("Input to project_vectors_to_1BZ must be 3-dimensional, with q.shape[2] == 3.")
+    q = np.transpose(np.tensordot(D, q, axes=(1,-1)), axes = (1, 2, 0)) + 0.5
+    q = q%1 - 0.5
+    return np.transpose(np.tensordot(G, q, axes=(0,-1)), axes = (1, 2, 0))
+
 @time_wrapper
 def get_1BZ_q_points(cell: pbcgto.cell.Cell) -> dict:
     """
@@ -478,31 +494,19 @@ def get_1BZ_q_points(cell: pbcgto.cell.Cell) -> dict:
         q_1BZ:  dict, keys are unique q vectors, and each key contains
                         the indices of [k2, k1] pair which lead to the unique q vector. 
     """
-    def project_vectors_to_1BZ(G: np.ndarray, D: np.ndarray, q: np.ndarray) -> np.ndarray:
-        """
-        Take in a list of vectors, with q.ndim = 3, and return their projection to 1BZ.
-        Inputs:
-            G:      np.ndarray, reciprocal vectors of the cell
-            D:      np.ndarray, inverse of G (equivalent to cell.lattice_vectors().T/2/np.pi)
-            q:      np.ndarray of shape (N, M, 3)
-        Returns:
-            q_1BZ:  np.ndarray of shape (N, M, 3)
-        """
-        if q.ndim != 3 or q.shape[2] != 3:
-            raise Exception("Input to project_vectors_to_1BZ must be 3-dimensional, with q.shape[2] == 3.")
-        q = np.transpose(np.tensordot(D, q, axes=(1,-1)), axes = (1, 2, 0)) + 0.5
-        q = q%1 - 0.5
-        return np.round(np.transpose(np.tensordot(G, q, axes=(0,-1)), axes = (1, 2, 0)), int(np.floor(-np.log10(parmt.precision))))
-    
     G = cell.reciprocal_vectors()
     D = np.linalg.inv(G)
     k1 = np.load(parmt.store + '/k-pts_i.npy')
     k2 = np.load(parmt.store + '/k-pts_f.npy')
-    allq = project_vectors_to_1BZ(G, D, k2[None,:,:] - k1[:,None,:])
-    qu = np.unique(np.round(allq.reshape((-1, 3)), int(np.floor(-np.log10(parmt.precision)))), axis = 0)
-    np.save(parmt.store + '/unique_q', qu)
-    logging.info("{} unique q-vectors found in 1BZ. Storing all unique q-vectors in {} + /unique_q.npy.".format(qu.shape[0], parmt.store))
+    allq = project_vectors_to_1BZ(G, D, k1[None,:,:] - k2[:,None,:])
     dic = {}
-    for uq in qu:
-        dic[tuple([uq[i] for i in range(3)])] = np.where(np.prod([np.isclose(allq[:,:,i], uq[i]) for i in range(3)], axis = 0) == 1)
+    for i, qa in enumerate(allq):
+        for j, q in enumerate(qa):
+            tup = tuple(np.round(q, 10))
+            if tup in dic:
+                dic[tup].append([i, j])
+            else:
+                dic[tup] = [[i, j]]
+    qu = np.array(list(dic.keys()))
+    logging.info("{} unique q-vectors found in 1BZ. Storing all unique q-vectors in {} + /unique_q.npy.".format(qu.shape[0], parmt.store))
     return dic
