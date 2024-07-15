@@ -498,7 +498,7 @@ def get_1BZ_q_points(cell: pbcgto.cell.Cell) -> dict:
     D = np.linalg.inv(G)
     k1 = np.load(parmt.store + '/k-pts_i.npy')
     k2 = np.load(parmt.store + '/k-pts_f.npy')
-    allq = project_vectors_to_1BZ(G, D, k1[None,:,:] - k2[:,None,:])
+    allq = project_vectors_to_1BZ(G, D, k2[None,:,:] - k1[:,None,:])
     dic = {}
     for i, qa in enumerate(allq):
         for j, q in enumerate(qa):
