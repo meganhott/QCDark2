@@ -288,3 +288,94 @@ def get_IBZ_testing_plots():
     ax.scatter(q_re.T[0],q_re.T[1],q_re.T[2])
 
     plt.show()
+
+def get_eps():
+    cell = build_cell_from_input()
+
+    #scf at k_i and nscf at k_f
+    kmf = KS_electronic_structure(cell)
+    KS_non_self_consistent_field(kmf)
+    convert_to_eV_and_scissor(cell) #updates energies
+
+    #load in energies, coefficients, and k-grids
+    k1 = np.load(parmt.store + '/k-pts_i.npy')
+    k2 = np.load(parmt.store + '/k-pts_f.npy')
+
+    dft_path = parmt.store + '/DFT/'
+    mo_en_i = np.load(dft_path + 'mo_en_i.npy') #is it faster to load these in or take from kmf if possible?
+    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')
+    mo_occ_i = np.load(dft_path + 'mo_occ_i.npy')
+    mo_en_f = np.load(dft_path + 'mo_en_f.npy')
+    mo_coeff_f = np.load(dft_path + 'mo_coeff_f.npy')
+    #mo_occ_f = np.load(dft_path + 'mo_occ_f.npy')
+
+    #generate all 1BZ q vectors (q = k2 - k1)
+    q_1BZ_dic = get_1BZ_q_points(cell) #or load from save
+    q_1BZ = np.array(list(q_1BZ_dic.keys())) #unique q
+
+    G_vectors = gen_G_vectors(cell)
+
+    #primitive Gaussians
+    primgauss = gen_all_1D_prim_gauss(cell)
+    primgauss_indx_arr, atom_locs = gen_prim_gauss_indices(primgauss)
+
+    #overlap integrals dictionary
+
+
+    #epsilon(q, E, G, G')
+    """
+    What is best way to store epsilon?
+    dict[q][E] = array(G,G')?
+    """
+    for q in q_1BZ: #will parallelize this step
+        """
+        Two ideas: 
+        1) Calculate and store all eta first since G and Gp will run through same vectors, then loop through G,Gp when calculating chi components
+        2) Make G, Gp meshgrid and calculate eta directly for each gridpoint
+
+        Not sure if there is some way to combine these: the following code is currently a mess
+        """
+        num_bands = mo_en_i.shape[1]
+        num_G_vectors = G_vectors.shape[0]
+        #create and store all eta first for given q
+        #dictionary: eta_q[(G_id, k_pair_id, i, j)]
+        #want to change this so you can input G_id meshgrid
+        eta_q = {}
+        for G_id,G in enumerate(G_vectors):
+            for k_pair_id,k_pair in enumerate(q_1BZ_dic[q]):
+                for i in range(num_bands):
+                    for j in range(num_bands):
+                        tup = tuple(G_id, k_pair_id, i, j)
+                        eta_q[tup] = eta(q,G,k1[k_pair[0]],k2[k_pair[1]],i,j)
+
+        #polarizability
+        for E in np.arange(parmt.dE, parmt.E_max+parmt.dE, parmt.dE): #energies - problem at E = 0 so not inlcuded?
+            """
+            for G_id, G in enumerate(G_vectors): #make G index meshgrid instead?
+                for Gp_id, Gp in enumerate(G_vectors):
+            """
+            G_id = np.arange(0,num_G_vectors,1)
+            G_id, Gp_id = np.meshgrid(G_id, G_id)
+            chi = np.zeros_like(G_id)
+            for k_pair_id, k_pair in q_1BZ_dic[q]:
+                k_i = k1[k_pair[0]]
+                k_f = k2[k_pair[1]] 
+                for i in range(num_bands):
+                    for j in range(num_bands):
+                        chi += np.conjugate(eta_q[G_id, k_pair_id, i, j])*eta_q[Gp_id, k_pair_id, i, j] / (mo_en_i[k_pair[0],i] - mo_en_f[k_pair[1],j] + E ) #+i*eta, also multiply by occupancy
+
+
+            #dielectric function
+
+
+            #take inverse for LFE
+            if parmt.lfe_q_cutoff is not None:
+                if type(parmt.lfe_q_cutoff) != float:
+                    raise ValueError("Parameter lfe_q_cutoff in input_parameters.py must be either None or of type float.")
+                #LFE calculation
+
+def eta(q, G, k_i, k_f, i, j):
+    """
+    Still need to make this!
+    """
+    return 1

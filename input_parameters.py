@@ -31,6 +31,7 @@ xcfunc = 'pbe'                                         # Exchange-Correlation Fu
 ik_grid = [8,8,8]                                      # k-grid: resolution of grid points in reciprocal space
 fk_grid = [10,10,10]	                              # Grid size for NSCF calculation
 scissor_bandgap = 1.1                                  # If None, scissor correction is not applied, generally float in eV
+lfe_q_cutoff = None                                    # If None, does not incorporate local field effects into the calculation of epsilon. If set to a float in units of alpha*(mass of electron), LFEs will be calculated by inverting eps_{GG'} for 0 < q < LFE_q_cutoff 
 
 """parameters for dielectric function calculations,
      including q_max, bin widths, number of bands, etc"""
