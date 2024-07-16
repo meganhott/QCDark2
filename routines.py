@@ -453,7 +453,7 @@ def get_1BZ_q_points(cell: pbcgto.cell.Cell) -> dict:
         """
         if q.ndim != 3 or q.shape[2] != 3:
             raise Exception("Input to project_vectors_to_1BZ must be 3-dimensional, with q.shape[2] == 3.")
-        q = np.transpose(np.tensordot(D, q, axes=(1,-1)), axes = (1, 2, 0)) + 0.5
+        q = np.transpose(np.tensordot(D, q, axes=(0,-1)), axes = (1, 2, 0)) + 0.5
         q = q%1 - 0.5
         return np.round(np.transpose(np.tensordot(G, q, axes=(0,-1)), axes = (1, 2, 0)), 10)
     
