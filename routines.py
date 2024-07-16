@@ -36,7 +36,10 @@ amu2eV = 9.315e8                                                                
 logging.basicConfig(filename=parmt.qcdark_outfile, filemode = 'w', level=logging.INFO, format='%(message)s') 
 
 #temporary
-pyscf.lib.num_threads(n = 20)
+try:
+    import configure_pyscf
+except:
+    pass
 
 def time_wrapper(func):
     """
@@ -395,7 +398,7 @@ def KS_non_self_consistent_field(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS) -> None
     dft_path = parmt.store + '/DFT/'
     #kpts = make_kpts(kmf.cell, False)
     k_grid = parmt.fk_grid
-    kpts = kmf.cell.make_kpts(k_grid, space_group_symmetry=False, wrap_around = True, scaled_center = kmf.cell.get_scaled_kpts(np.ones(3)[None, :]*parmt.dq*.5/(3**.5)))
+    kpts = kmf.cell.make_kpts(k_grid, space_group_symmetry=True, wrap_around = True, scaled_center = kmf.cell.get_scaled_kpts(np.ones(3)[None, :]*parmt.dq*.5/(3**.5)))
     np.save(parmt.store + '/k-pts_f', kpts.kpts)
     logging.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k-pts_f.npy', k_grid[0], k_grid[1], k_grid[2]))
     ek , ck = kmf.get_bands(kpts.kpts_ibz)
@@ -430,6 +433,56 @@ def gen_G_vectors(cell: pbcgto.cell.Cell) -> np.ndarray:
     return lattice
 
 @time_wrapper
+def convert_to_eV_and_scissor(cell: pbcgto.cell.Cell) -> None:
+    """
+    Function converts energies from Ryd to eV - prints bandgap, if scissor - scissor corrects bandgap.
+    and scissor corrects to given bandgap. Otherwise
+    Inputs:
+        cell:                               pyscf.pbc.gto.cell.Cell object
+    Reads:
+        parmt.scissor_bandgap:              float, scissor energies in eV
+        parmt.store + '/DFT/mo_en_i.npy':   np.ndarray object, stored to disk
+        parmt.store + '/DFT/mo_en_f.npy':   np.ndarray object, stored to disk
+    Writes:
+        parmt.store + '/DFT/mo_en_i.npy':   np.ndarray object, stored to disk
+        parmt.store + '/DFT/mo_en_f.npy':   np.ndarray object, stored to disk
+    """
+    occ_orb = cell.tot_electrons()//2
+    en_i = np.load(parmt.store + '/DFT/mo_en_i.npy')*alpha*alpha*me
+    en_f = np.load(parmt.store + '/DFT/mo_en_f.npy')*alpha*alpha*me
+    homo = max(en_i[:,:occ_orb].max(), en_f[:,:occ_orb].max())
+    en_i, en_f = en_i - homo, en_f - homo
+    homo = 0
+    lumo = min(en_i[:,occ_orb:].min(), en_f[:,occ_orb:].min())
+    logging.info("All energies converted to eV. Calculated Bandgap = {:.2f} eV.".format(lumo - homo))
+    if parmt.scissor_bandgap is not None:
+        if type(parmt.scissor_bandgap) != float:
+            raise ValueError("Parameter scissor_bandgap in input_parameters.py must be either None or of type float.")
+        correction = parmt.scissor_bandgap - lumo
+        en_i[:,occ_orb:], en_f[:,occ_orb:] = en_i[:,occ_orb:] + correction, en_f[:,occ_orb:] + correction
+        logging.info("Scissor Correction applied, new bandgap is {:.2f} eV.".format(parmt.scissor_bandgap))
+    np.save(parmt.store + '/DFT/mo_en_i.npy', en_i)
+    np.save(parmt.store + '/DFT/mo_en_f.npy', en_f)
+    logging.info("Electronic structure energies updated in files.")
+    return
+
+def project_vectors_to_1BZ(G: np.ndarray, D: np.ndarray, q: np.ndarray) -> np.ndarray:
+    """
+    Take in a list of vectors, with q.ndim = 3, and return their projection to 1BZ.
+    Inputs:
+        G:      np.ndarray, reciprocal vectors of the cell
+        D:      np.ndarray, inverse of G (equivalent to cell.lattice_vectors().T/2/np.pi)
+        q:      np.ndarray of shape (N, M, 3)
+    Returns:
+        q_1BZ:  np.ndarray of shape (N, M, 3)
+    """
+    if q.ndim != 3 or q.shape[2] != 3:
+        raise Exception("Input to project_vectors_to_1BZ must be 3-dimensional, with q.shape[2] == 3.")
+    q = np.transpose(np.tensordot(D, q, axes=(1,-1)), axes = (1, 2, 0)) + 0.5
+    q = q%1 - 0.5
+    return np.transpose(np.tensordot(G, q, axes=(0,-1)), axes = (1, 2, 0))
+
+@time_wrapper
 def get_1BZ_q_points(cell: pbcgto.cell.Cell) -> dict:
     """
     Function to read both initial and final state k-points, and make all q = k2 - k1.
@@ -441,31 +494,19 @@ def get_1BZ_q_points(cell: pbcgto.cell.Cell) -> dict:
         q_1BZ:  dict, keys are unique q vectors, and each key contains
                         the indices of [k2, k1] pair which lead to the unique q vector. 
     """
-    def project_vectors_to_1BZ(G: np.ndarray, D: np.ndarray, q: np.ndarray) -> np.ndarray:
-        """
-        Take in a list of vectors, with q.ndim = 3, and return their projection to 1BZ.
-        Inputs:
-            G:      np.ndarray, reciprocal vectors of the cell
-            D:      np.ndarray, inverse of G (equivalent to cell.lattice_vectors().T/2/np.pi)
-            q:      np.ndarray of shape (N, M, 3)
-        Returns:
-            q_1BZ:  np.ndarray of shape (N, M, 3)
-        """
-        if q.ndim != 3 or q.shape[2] != 3:
-            raise Exception("Input to project_vectors_to_1BZ must be 3-dimensional, with q.shape[2] == 3.")
-        q = np.transpose(np.tensordot(D, q, axes=(0,-1)), axes = (1, 2, 0)) + 0.5
-        q = q%1 - 0.5
-        return np.round(np.transpose(np.tensordot(G, q, axes=(0,-1)), axes = (1, 2, 0)), 10)
-    
     G = cell.reciprocal_vectors()
     D = np.linalg.inv(G)
     k1 = np.load(parmt.store + '/k-pts_i.npy')
     k2 = np.load(parmt.store + '/k-pts_f.npy')
     allq = project_vectors_to_1BZ(G, D, k2[None,:,:] - k1[:,None,:])
-    qu = np.unique(np.round(allq.reshape((-1, 3)), 10), axis = 0)
-    np.save(parmt.store + '/unique_q', qu)
-    logging.info("{} unique q-vectors found in 1BZ. Storing all unique q-vectors in {} + /unique_q.npy.".format(qu.shape[0], parmt.store))
     dic = {}
-    for uq in qu:
-        dic[tuple([uq[i] for i in range(3)])] = np.where(np.prod([allq[:,:,i] == uq[i] for i in range(3)], axis = 0) == 1)
+    for i, qa in enumerate(allq):
+        for j, q in enumerate(qa):
+            tup = tuple(np.round(q, 10))
+            if tup in dic:
+                dic[tup].append([i, j])
+            else:
+                dic[tup] = [[i, j]]
+    qu = np.array(list(dic.keys()))
+    logging.info("{} unique q-vectors found in 1BZ. Storing all unique q-vectors in {} + /unique_q.npy.".format(qu.shape[0], parmt.store))
     return dic
