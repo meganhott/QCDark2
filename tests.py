@@ -1,4 +1,5 @@
 from routines import *
+from cartesian_moments import *
 import matplotlib.pyplot as plt
 import spglib as spg
 
@@ -315,12 +316,8 @@ def get_eps():
 
     G_vectors = gen_G_vectors(cell)
 
-    #primitive Gaussians
-    primgauss = gen_all_1D_prim_gauss(cell)
-    primgauss_indx_arr, atom_locs = gen_prim_gauss_indices(primgauss)
-
     #overlap integrals dictionary
-
+    prim_1D_overlap_dic = get_all_prim_1D_overlap(cell, q_1BZ, G_vectors) #this will be referenced later by all nodes in parallel calculation
 
     #epsilon(q, E, G, G')
     """
@@ -373,6 +370,44 @@ def get_eps():
                 if type(parmt.lfe_q_cutoff) != float:
                     raise ValueError("Parameter lfe_q_cutoff in input_parameters.py must be either None or of type float.")
                 #LFE calculation
+
+def get_all_prim_1D_overlap(cell, q_vectors, G_vectors, R_vectors):
+    """
+    Inputs: cell, all 1BZ q vectors, all G vectors
+    Returns: dictionary of all 1D primitive Gaussian overlaps: prim_1D_overlap_dic[q,G,R,l,m,xi_a,xi_b,A,B]
+
+    This stores the overlap integrals differently than cartesian_moments.get_prim_1D_overlap - this one may have fewer elements stored because unique xi_a, xi_b, A, B are found instead of using primitive Gaussians from prim gauss array. Still need to test
+    """
+    #generate all 1D primitive Gaussians
+    primgauss = gen_all_1D_prim_gauss(cell)
+    primgauss_indx_arr, atom_locs = gen_prim_gauss_indices(primgauss)
+
+    #get all unique parameters
+    q_unique = get_all_unique_nums_in_array(q_vectors, round_to=10) #q_i
+    G_unique = get_all_unique_nums_in_array(G_vectors, round_to=10) #G_i
+    R_unique = construct_R_vectors(cell)[1] #R_i
+    exp_unique = get_all_unique_nums_in_array(primgauss_indx_arr[:,2],round_to=10) #xi_a and xi_b
+    atom_locs_unique = get_all_unique_nums_in_array(atom_locs, round_to=10) #A_i and B_i
+    l_max = int(np.max(primgauss_indx_arr[:,1])) #l_i,m_i <= l_max
+
+    #might be able to optimize further since it should be equivalent if {A, l, xi_a} <-> {B, m, xi_b}
+    prim_1D_overlap_dic = {}
+    for xi_a in exp_unique:
+        for xi_b in exp_unique:
+            p = xi_a + xi_b
+            for A in atom_locs_unique:
+                for B in atom_locs_unique:
+                    E_ijt = get_E_ijt(xi_a,xi_b,l_max,l_max,A-B)
+                    for R in R_unique:
+                        P = (xi_b*(B+R) + xi_a*A) / (xi_a+xi_b)
+                        for l in range(l_max+1):
+                            for m in range(l_max+1):
+                                for q in q_unique:
+                                    for G in G_unique:
+                                        tup = tuple(q,G,R,l,m,xi_a,xi_b,A,B)
+                                        prim_1D_overlap_dic[tup] = np.sqrt(np.pi/p) * np.exp(1j*(q+G)*P - (q+G)**2/4/p) * sum([E_ijt[l][m][t]*(1j*(q+G))**t for t in range(l+m)])
+    #store dic
+    return prim_1D_overlap_dic
 
 def eta(q, G, k_i, k_f, i, j):
     """
