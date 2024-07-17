@@ -317,7 +317,43 @@ def get_eps():
     G_vectors = gen_G_vectors(cell)
 
     #overlap integrals dictionary
-    prim_1D_overlap_dic = get_all_prim_1D_overlap(cell, q_1BZ, G_vectors) #this will be referenced later by all nodes in parallel calculation
+    I = get_all_prim_1D_overlap(cell, q_1BZ, G_vectors) #dictionary of all 1D primitive Gaussian overlaps: this will be referenced later by all nodes in parallel calculation
+
+    #generate list of all atomic orbitals (needed for eta)
+    all_ao = gen_all_atomic_orbitals(cell, gen_all_1D_prim_gauss(cell))
+
+    def get_3D_overlap(q_vector, G_vector, k_i_id, k_f_id, i, j, all_ao):
+        """
+        Still need to test!
+        Calculates 3D overlap eta = <jk'|exp(i(q+G)r)|ik> using stored 1D overlaps
+        Inputs:
+            q_vector:   np.ndarray of shape (3,): one q vector in 1BZ
+            G_vector:   np.ndarray of shape (3,): one G vector
+            k_i_id:     int: index of k_initial
+            k_f_id:     int: index of k_final
+            i:          int: initial state band
+            j:          int: final state band
+            all_ao:     list(AO): all atomic orbitals
+        Outputs:
+            eta:        complex: 3D overlap <jk'|exp(i(q+G)r)|ik>
+        """
+        def f(q_vector, G_vector, ao_a, ao_b, R_vector):
+            """
+            Subroutine to calculate 3D primitive Gaussian overlap integral. ao_a and ao_b are atomic orbitals.
+            """
+            f_sum = 0
+            for m in range(ao_a.Nprim):
+                for n in range(ao_b.Nprim):
+                    f_sum += ao_a.norm[m]*ao_a.coef[m]*ao_b.norm[n]*ao_b.coef[n] * np.prod([I[q_vector[i],G_vector[i],R_vector[i],ao_a.shell[i],ao_b.shell[i],ao_a.exp[m],ao_b.exp[n],ao_a.loc[i],ao_b.loc[i]] for i in range(3)])
+            return f_sum
+
+        R_vectors = construct_R_vectors(cell)[0]
+        eta = 0
+        for a, ao_a in enumerate(all_ao):
+            for b, ao_b in enumerate(all_ao):
+                eta += np.conjugate(mo_coeff_f[k_f_id, j, b])*mo_coeff_i[k_i_id, i, a] * sum([np.exp(-1j*np.dot(k2[k_f_id], R))*f(q_vector,G_vector,ao_a,ao_b,R) for R in R_vectors])
+    
+        return eta
 
     #epsilon(q, E, G, G')
     """
@@ -343,7 +379,7 @@ def get_eps():
                 for i in range(num_bands):
                     for j in range(num_bands):
                         tup = tuple(G_id, k_pair_id, i, j)
-                        eta_q[tup] = eta(q,G,k1[k_pair[0]],k2[k_pair[1]],i,j)
+                        eta_q[tup] = get_3D_overlap(q,G,k_pair[0],k_pair[1],i,j,all_ao)
 
         #polarizability
         for E in np.arange(parmt.dE, parmt.E_max+parmt.dE, parmt.dE): #energies - problem at E = 0 so not inlcuded?
@@ -371,10 +407,10 @@ def get_eps():
                     raise ValueError("Parameter lfe_q_cutoff in input_parameters.py must be either None or of type float.")
                 #LFE calculation
 
-def get_all_prim_1D_overlap(cell, q_vectors, G_vectors, R_vectors):
+def get_all_prim_1D_overlap(cell, q_vectors, G_vectors):
     """
     Inputs: cell, all 1BZ q vectors, all G vectors
-    Returns: dictionary of all 1D primitive Gaussian overlaps: prim_1D_overlap_dic[q,G,R,l,m,xi_a,xi_b,A,B]
+    Returns: dictionary of all 1D primitive Gaussian overlaps: prim_1D_overlap_dic = I[q,G,R,l,m,xi_a,xi_b,A,B]
 
     This stores the overlap integrals differently than cartesian_moments.get_prim_1D_overlap - this one may have fewer elements stored because unique xi_a, xi_b, A, B are found instead of using primitive Gaussians from prim gauss array. Still need to test
     """
@@ -409,8 +445,3 @@ def get_all_prim_1D_overlap(cell, q_vectors, G_vectors, R_vectors):
     #store dic
     return prim_1D_overlap_dic
 
-def eta(q, G, k_i, k_f, i, j):
-    """
-    Still need to make this!
-    """
-    return 1
