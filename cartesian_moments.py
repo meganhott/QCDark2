@@ -124,6 +124,7 @@ class AO(object):
           atom:          int, index of atom
           loc:           np.ndarray of shape (3,), contains origin of atom
           shell:         tuple of len = 3, angular momentum components for all 3 directions
+          Nprim:         int, number of primitive gaussians, N_prim
           exp:           np.ndarray of shape (N_prim, )
                          contains all exponents in the contracted gaussian
           coef:          np.ndarray of shape (N_prim, )
@@ -156,6 +157,7 @@ class AO(object):
           self.atom = atom_index
           self.loc = None
           self.shell = tuple(ijk)
+          self.Nprim = coeffs.shape[0]
           self.exp = exps
           self.coef = coeffs
           self.norm = None
