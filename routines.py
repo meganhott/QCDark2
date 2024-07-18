@@ -16,7 +16,7 @@ import pyscf.pbc
 import pyscf
 import scipy
 import cartesian_moments as cartmoments
-from multiprocessing import Pool
+from multiprocessing import Pool, Manager
 from functools import partial
 import shutil
 import input_parameters as parmt
