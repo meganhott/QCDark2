@@ -366,7 +366,6 @@ def get_eps():
         num_G_vectors = G_vectors.shape[0]
         #create and store all eta first for given q
         #dictionary: eta_q[(G_id, k_pair_id, i, j)]
-        #want to change this so you can input G_id meshgrid
         eta_q = {}
         for G_id,G in enumerate(G_vectors):
             for k_pair_id,k_pair in enumerate(q_1BZ_dic[q]):
@@ -404,6 +403,7 @@ def get_all_prim_1D_overlap(cell, q_vectors, G_vectors):
     primgauss = gen_all_1D_prim_gauss(cell)
     primgauss_indx_arr, atom_locs = gen_prim_gauss_indices(primgauss)
 
+    """
     #get all unique parameters
     q_unique = get_all_unique_nums_in_array(q_vectors, round_to=10) #q_i
     G_unique = get_all_unique_nums_in_array(G_vectors, round_to=10) #G_i
@@ -411,15 +411,39 @@ def get_all_prim_1D_overlap(cell, q_vectors, G_vectors):
     exp_unique = get_all_unique_nums_in_array(primgauss_indx_arr[:,2],round_to=10) #xi_a and xi_b
     atom_locs_unique = get_all_unique_nums_in_array(atom_locs, round_to=10) #A_i and B_i
     l_max = int(np.max(primgauss_indx_arr[:,1])) #l_i,m_i <= l_max
+    """
 
     #might be able to optimize further since it should be equivalent if {A, l, xi_a} <-> {B, m, xi_b}
     prim_1D_overlap_dic = {}
+    for d in range(3): #direction: x,y,z
+        #get all unique parameters in direction d
+        q_unique = get_all_unique_nums_in_array(q_vectors[:,d], round_to=10) #actually only need unique q+G
+        G_unique = get_all_unique_nums_in_array(G_vectors[:,d], round_to=10)
+        R_unique = get_all_unique_nums_in_array(construct_R_vectors(cell)[0][:,d])
+
+        for R in R_unique:
+            for primgauss_a in primgauss_indx_arr: #parallelize
+                A = atom_locs(int(primgauss_a[0]))[d]
+                l_max_a = int(primgauss_a[1])
+                xi_a = primgauss_a[2]
+                for primgauss_b in primgauss_indx_arr:
+                    B = atom_locs(int(primgauss_b[0]))[d]
+                    l_max_b = int(primgauss_a[1])
+                    xi_a = primgauss_a[2]
+                    E_ijt = get_E_ijt(xi_a,xi_b,l_max,l_max,A-B-R)
+                    for l:
+                        for m:
+                            
+                    
+
+
+
     for xi_a in exp_unique:
         for xi_b in exp_unique:
             p = xi_a + xi_b
             for A in atom_locs_unique:
                 for B in atom_locs_unique:
-                    E_ijt = get_E_ijt(xi_a,xi_b,l_max,l_max,A-B)
+                    E_ijt = get_E_ijt(xi_a,xi_b,l_max,l_max,A-B-R)
                     for R in R_unique:
                         P = (xi_b*(B+R) + xi_a*A) / (xi_a+xi_b)
                         for l in range(l_max+1):
@@ -433,7 +457,8 @@ def get_all_prim_1D_overlap(cell, q_vectors, G_vectors):
 
 def test_get_all_prim_1D_overlap():
     cell = build_cell_from_input()
-    q = gen_q_vectors(cell)[:10,:] #only testing for a few vectors to reduce size of dictionary
+    q_1BZ_dic = get_1BZ_q_points(cell) #or load from save
+    q_1BZ = np.array(list(q_1BZ_dic.keys()))[:10,:] ##only testing for a few vectors to reduce size of dictionary
     G = gen_G_vectors(cell)[:10,:]
     I = get_all_prim_1D_overlap(cell, q, G)
     return I
