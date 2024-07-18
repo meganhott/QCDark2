@@ -41,7 +41,8 @@ def initialize_cell() -> tuple[routines.pbcgto.cell.Cell, dict]:
           'primitive_gaussians': primgauss,
           'all_ao': all_ao,
           'G_vectors': G_vectors,
-          'primguass_i': primindices
+          'primindices': primindices[0],
+          'atom_locs': primindices[1]
      }
      return cell, dark_objects
 
