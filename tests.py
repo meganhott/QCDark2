@@ -395,63 +395,50 @@ def get_eps():
 def get_all_prim_1D_overlap(cell, q_vectors, G_vectors):
     """
     Inputs: cell, all 1BZ q vectors, all G vectors
-    Returns: dictionary of all 1D primitive Gaussian overlaps: prim_1D_overlap_dic = I[q,G,R,l,m,xi_a,xi_b,A,B]
-
-    This stores the overlap integrals differently than cartesian_moments.get_prim_1D_overlap - this one may have fewer elements stored because unique xi_a, xi_b, A, B are found instead of using primitive Gaussians from prim gauss array. Still need to test
+    Returns: dictionary of all 1D primitive Gaussian overlaps: prim_1D_overlap_dic = I[d, q+G, R, P_a, P_b] where P_a and P_b are primitive Gaussians in primgauss (P_a -> (xi_a, l_a, A_a)).
     """
+    def update_dic(d,R,primind_a,primind_b,qG_unique,dic):
+        """
+        primind_a and primind_b: rows from primgauss_indx_arr
+        qG_unique: (N,) array of unique q+G scalars in d direction
+        R: scalar component of R_vector in d direction 
+        """
+        A = atom_locs(int(primind_a[0]))[d]
+        l_max_a = int(primind_a[1])
+        xi_a = primind_a[2]
+        first_P_a = int(primind_a[3])
+        B = atom_locs(int(primind_b[0]))[d]
+        l_max_b = int(primind_b[1])
+        xi_b = primind_b[2]
+        first_P_b = int(primind_b[3])
+
+        E_ijt = get_E_ijt(xi_a,xi_b,l_max_a,l_max_b,A-B-R)
+        p = xi_a + xi_b
+        P = (xi_b*(B+R) + xi_a*A) / (xi_a+xi_b)
+        for l_a in range(l_max_a+1):
+            for l_b in range(l_max_b+1):
+                for qG in qG_unique:
+                    P_a = first_P_a + l_a #primgauss indices
+                    P_b = first_P_b + l_b
+                    tup = tuple([d,qG,R,P_a,P_b])
+                    dic[tup] = np.sqrt(np.pi/p) * np.exp(1j*qG*P - qG**2/4/p) * sum([E_ijt[l_a][l_b][t]*(1j*qG)**t for t in range(l_a+l_b)])
+        return None
+    
     #generate all 1D primitive Gaussians
     primgauss = gen_all_1D_prim_gauss(cell)
     primgauss_indx_arr, atom_locs = gen_prim_gauss_indices(primgauss)
 
-    """
-    #get all unique parameters
-    q_unique = get_all_unique_nums_in_array(q_vectors, round_to=10) #q_i
-    G_unique = get_all_unique_nums_in_array(G_vectors, round_to=10) #G_i
-    R_unique = construct_R_vectors(cell)[1] #R_i
-    exp_unique = get_all_unique_nums_in_array(primgauss_indx_arr[:,2],round_to=10) #xi_a and xi_b
-    atom_locs_unique = get_all_unique_nums_in_array(atom_locs, round_to=10) #A_i and B_i
-    l_max = int(np.max(primgauss_indx_arr[:,1])) #l_i,m_i <= l_max
-    """
-
-    #might be able to optimize further since it should be equivalent if {A, l, xi_a} <-> {B, m, xi_b}
     prim_1D_overlap_dic = {}
     for d in range(3): #direction: x,y,z
         #get all unique parameters in direction d
-        q_unique = get_all_unique_nums_in_array(q_vectors[:,d], round_to=10) #actually only need unique q+G
-        G_unique = get_all_unique_nums_in_array(G_vectors[:,d], round_to=10)
+        qG_unique = get_all_unique_nums_in_array(q_vectors[:,d][None,:]+G_vectors[:,d][:,None], round_to=10)
         R_unique = get_all_unique_nums_in_array(construct_R_vectors(cell)[0][:,d])
 
         for R in R_unique:
-            for primgauss_a in primgauss_indx_arr: #parallelize
-                A = atom_locs(int(primgauss_a[0]))[d]
-                l_max_a = int(primgauss_a[1])
-                xi_a = primgauss_a[2]
-                for primgauss_b in primgauss_indx_arr:
-                    B = atom_locs(int(primgauss_b[0]))[d]
-                    l_max_b = int(primgauss_a[1])
-                    xi_a = primgauss_a[2]
-                    E_ijt = get_E_ijt(xi_a,xi_b,l_max,l_max,A-B-R)
-                    for l:
-                        for m:
+            for primind_a in primgauss_indx_arr: #parallelize
+                for primind_b in primgauss_indx_arr:
+                    update_dic(d,R,primind_a,primind_b,qG_unique,primgauss_indx_arr,prim_1D_overlap_dic)
                             
-                    
-
-
-
-    for xi_a in exp_unique:
-        for xi_b in exp_unique:
-            p = xi_a + xi_b
-            for A in atom_locs_unique:
-                for B in atom_locs_unique:
-                    E_ijt = get_E_ijt(xi_a,xi_b,l_max,l_max,A-B-R)
-                    for R in R_unique:
-                        P = (xi_b*(B+R) + xi_a*A) / (xi_a+xi_b)
-                        for l in range(l_max+1):
-                            for m in range(l_max+1):
-                                for q in q_unique:
-                                    for G in G_unique:
-                                        tup = tuple([q,G,R,l,m,xi_a,xi_b,A,B])
-                                        prim_1D_overlap_dic[tup] = np.sqrt(np.pi/p) * np.exp(1j*(q+G)*P - (q+G)**2/4/p) * sum([E_ijt[l][m][t]*(1j*(q+G))**t for t in range(l+m)])
     #store dic
     return prim_1D_overlap_dic
 
