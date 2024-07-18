@@ -28,8 +28,8 @@ effective_core_potential = None                        # All electron basis sets
      these determine precision, and whether optional parameters are applied"""
 precision = 1e-12                                      # precision parameter, fed to pyscf only
 xcfunc = 'pbe'                                         # Exchange-Correlation Functional
-ik_grid = [8,8,8]                                      # k-grid: resolution of grid points in reciprocal space
-fk_grid = [10,10,10]	                              # Grid size for NSCF calculation
+ik_grid = [4,4,4]                                      # k-grid: resolution of grid points in reciprocal space
+fk_grid = [6,6,6]	                              # Grid size for NSCF calculation
 scissor_bandgap = 1.1                                  # If None, scissor correction is not applied, generally float in eV
 lfe_q_cutoff = None                                    # If None, does not incorporate local field effects into the calculation of epsilon. If set to a float in units of alpha*(mass of electron), LFEs will be calculated by inverting eps_{GG'} for 0 < q < LFE_q_cutoff 
 

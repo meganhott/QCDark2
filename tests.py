@@ -392,7 +392,7 @@ def get_eps():
                     raise ValueError("Parameter lfe_q_cutoff in input_parameters.py must be either None or of type float.")
                 #LFE calculation
 
-def update_dic(ia, ib, primindices, d, R, qG_unique, dic, atom_locs):
+def update_dic(ia, ib, primindices, d, R_unique, qG, dic, atom_locs):
     """
     primind_a and primind_b: rows from primgauss_indx_arr
     qG_unique: (N,) array of unique q+G scalars in d direction
@@ -407,17 +407,18 @@ def update_dic(ia, ib, primindices, d, R, qG_unique, dic, atom_locs):
     l_max_b = int(primind_b[1])
     xi_b = primind_b[2]
     first_P_b = int(primind_b[3])
-
-    E_ijt = get_E_ijt(xi_a,xi_b,l_max_a,l_max_b,A-B-R)
-    p = xi_a + xi_b
-    P = (xi_b*(B+R) + xi_a*A) / (xi_a+xi_b)
-    for l_a in range(l_max_a+1):
-        for l_b in range(l_max_b+1):
-            for qG in qG_unique:
-                P_a = first_P_a + l_a #primgauss indices
+    for R in R_unique:
+        E_ijt = get_E_ijt(xi_a,xi_b,l_max_a,l_max_b,A-B-R)
+        p = xi_a + xi_b
+        P = (xi_b*(B+R) + xi_a*A) / (xi_a+xi_b)
+        for l_a in range(l_max_a+1):
+            P_a = first_P_a + l_a #primgauss indices
+            for l_b in range(l_max_b+1):
                 P_b = first_P_b + l_b
-                tup = tuple([d,qG,round(R, 10),P_a,P_b])
-                dic[tup] = np.sqrt(np.pi/p) * np.exp(1j*qG*P - qG**2/4/p) * sum([E_ijt[l_a][l_b][t]*(1j*qG)**t for t in range(l_a+l_b+1)])
+                vals = np.sqrt(np.pi/p) * np.exp(1j*qG*P - qG**2/4/p) * sum([E_ijt[l_a][l_b][t]*(1j*qG)**t for t in range(l_a+l_b+1)])
+                for q, v in zip(qG, vals):
+                    tup = tuple([d,q,round(R, 10),P_a,P_b])
+                    dic[tup] = v
     return None
 
 def get_all_prim_1D_overlap(cell, q_vectors, G_vectors):
@@ -442,12 +443,11 @@ def get_all_prim_1D_overlap(cell, q_vectors, G_vectors):
         dic = manager.dict()
         for d in range(3): #direction: x,y,z
             #get all unique parameters in direction d
-            qG_unique = get_all_unique_nums_in_array(q_vectors[:,d][None,:]+G_vectors[:,d][:,None], round_to=10)
+            qG_unique = get_all_unique_nums_in_array(q_vectors[None,:,d]+G_vectors[:,None,d], round_to=10)
             R_unique = get_all_unique_nums_in_array(Rv[:,d])
             print(d, qG_unique.shape, R_unique.shape)
-            for R in R_unique:
-                with Pool(24) as pool:
-                    pool.starmap(partial(update_dic, primindices = primgauss_indx_arr, d = d, R = R, qG_unique = qG_unique, dic = dic, atom_locs = atom_locs), l)
+            with Pool(24) as pool:
+                pool.starmap(partial(update_dic, primindices = primgauss_indx_arr, d = d, R_unique = R_unique, qG = qG_unique, dic = dic, atom_locs = atom_locs), l)
         prim_1D_overlap_dic = dict(dic)
         del dic
     return prim_1D_overlap_dic
@@ -457,7 +457,6 @@ def get_all_prim_1D_overlap_srl(cell, q_vectors, G_vectors):
     Inputs: cell, all 1BZ q vectors, all G vectors
     Returns: dictionary of all 1D primitive Gaussian overlaps: prim_1D_overlap_dic = I[d, q+G, R, P_a, P_b] where P_a and P_b are primitive Gaussians in primgauss (P_a -> (xi_a, l_a, A_a)).
     """
-    
     
     #generate all 1D primitive Gaussians
     primgauss = gen_all_1D_prim_gauss(cell)
@@ -471,10 +470,9 @@ def get_all_prim_1D_overlap_srl(cell, q_vectors, G_vectors):
         qG_unique = get_all_unique_nums_in_array(q_vectors[:,d][None,:]+G_vectors[:,d][:,None], round_to=10)
         R_unique = get_all_unique_nums_in_array(Rv[:,d])
         print(d, qG_unique.shape, R_unique.shape)
-        for R in R_unique:
-            for ia in range(len(primgauss_indx_arr)): 
-                for ib in range(len(primgauss_indx_arr)):
-                    update_dic(ia, ib, primgauss_indx_arr, d, R, qG_unique, dic, atom_locs)
+        for ia in range(len(primgauss_indx_arr)): 
+            for ib in range(len(primgauss_indx_arr)):
+                update_dic(ia, ib, primgauss_indx_arr, d, R_unique, qG_unique, dic, atom_locs)
     
     return dic
 
