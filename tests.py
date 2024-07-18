@@ -358,16 +358,10 @@ def get_eps():
     #epsilon(q, E, G, G')
     """
     What is best way to store epsilon?
-    dict[q][E] = array(G,G')?
+    dict[q,E] = array(G,G')?
     """
+    eps = {}
     for q in q_1BZ: #will parallelize this step
-        """
-        Two ideas: 
-        1) Calculate and store all eta first since G and Gp will run through same vectors, then loop through G,Gp when calculating chi components
-        2) Make G, Gp meshgrid and calculate eta directly for each gridpoint
-
-        Not sure if there is some way to combine these: the following code is currently a mess
-        """
         num_bands = mo_en_i.shape[1]
         num_G_vectors = G_vectors.shape[0]
         #create and store all eta first for given q
@@ -378,28 +372,20 @@ def get_eps():
             for k_pair_id,k_pair in enumerate(q_1BZ_dic[q]):
                 for i in range(num_bands):
                     for j in range(num_bands):
-                        tup = tuple(G_id, k_pair_id, i, j)
+                        tup = tuple([G_id, k_pair_id, i, j])
                         eta_q[tup] = get_3D_overlap(q,G,k_pair[0],k_pair[1],i,j,all_ao)
 
-        #polarizability
+        eps[q,E] = np.zeros(num_G_vectors,num_G_vectors)
         for E in np.arange(parmt.dE, parmt.E_max+parmt.dE, parmt.dE): #energies - problem at E = 0 so not inlcuded?
-            """
-            for G_id, G in enumerate(G_vectors): #make G index meshgrid instead?
+            for G_id, G in enumerate(G_vectors):
                 for Gp_id, Gp in enumerate(G_vectors):
-            """
-            G_id = np.arange(0,num_G_vectors,1)
-            G_id, Gp_id = np.meshgrid(G_id, G_id)
-            chi = np.zeros_like(G_id)
-            for k_pair_id, k_pair in q_1BZ_dic[q]:
-                k_i = k1[k_pair[0]]
-                k_f = k2[k_pair[1]] 
-                for i in range(num_bands):
-                    for j in range(num_bands):
-                        chi += np.conjugate(eta_q[G_id, k_pair_id, i, j])*eta_q[Gp_id, k_pair_id, i, j] / (mo_en_i[k_pair[0],i] - mo_en_f[k_pair[1],j] + E ) #+i*eta, also multiply by occupancy
-
-
-            #dielectric function
-
+                    chi = 0
+                    for k_pair_id, k_pair in q_1BZ_dic[q]: 
+                        for i in range(num_bands):
+                            for j in range(num_bands):
+                                chi += np.conjugate(eta_q[G_id, k_pair_id, i, j])*eta_q[Gp_id, k_pair_id, i, j] / (mo_en_i[k_pair[0],i] - mo_en_f[k_pair[1],j] + E ) #+i*eta, also multiply by occupancy
+                    eps[q,E][G_id,Gp_id] = -(4*np.pi)**2 / np.linalg.norm(q+G) / np.linalg.norm(q+Gp) * chi
+            eps[q,E] = eps[q,E] + np.identity(num_G_vectors) #delta_GGp
 
             #take inverse for LFE
             if parmt.lfe_q_cutoff is not None:
@@ -440,8 +426,14 @@ def get_all_prim_1D_overlap(cell, q_vectors, G_vectors):
                             for m in range(l_max+1):
                                 for q in q_unique:
                                     for G in G_unique:
-                                        tup = tuple(q,G,R,l,m,xi_a,xi_b,A,B)
+                                        tup = tuple([q,G,R,l,m,xi_a,xi_b,A,B])
                                         prim_1D_overlap_dic[tup] = np.sqrt(np.pi/p) * np.exp(1j*(q+G)*P - (q+G)**2/4/p) * sum([E_ijt[l][m][t]*(1j*(q+G))**t for t in range(l+m)])
     #store dic
     return prim_1D_overlap_dic
 
+def test_get_all_prim_1D_overlap():
+    cell = build_cell_from_input()
+    q = gen_q_vectors(cell)[:10,:] #only testing for a few vectors to reduce size of dictionary
+    G = gen_G_vectors(cell)[:10,:]
+    I = get_all_prim_1D_overlap(cell, q, G)
+    return I
