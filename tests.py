@@ -291,6 +291,94 @@ def get_IBZ_testing_plots():
     plt.show()
 
 def get_eps():
+    """
+    To Do: 
+    - change number of unoccupied bands included in calculation based on parmt.numcon
+    - How to store eps: Will we want to save eps[q,E] to a file for each q instead of having one huge dictionary that continues to grow in memory? In that case, we can have eps_qi.npy = eps[E]
+    - calculate spacial average to get eps(|q+G|,E)
+    - Maybe move 3D_overlap function back in get_eps so we can have global variables 
+    """
+    def get_3D_overlap(q_vector, G_vector, k_i_id, k_f_id, i, j, I):
+        (q,G,k_pair[0],k_pair[1],i,j,all_ao)
+        """
+        Still need to test!
+        Calculates 3D overlap eta = <jk'|exp(i(q+G)r)|ik> using stored 1D overlaps
+        Inputs:
+            q_vector:   np.ndarray of shape (3,): one q vector in 1BZ
+            G_vector:   np.ndarray of shape (3,): one G vector
+            k_i_id:     int: index of k_initial
+            k_f_id:     int: index of k_final
+            i:          int: initial state band
+            j:          int: final state band
+            I:          dict: dictionary of all 1D overlaps from get_all_prim_1D_overlaps
+            #k_f:        np.ndarray of shape (N,3): all k_final vectors
+            #mo_coeff_i: np.ndarray of shape (M,A,A): initial molecular orbital coefficients
+            #mo_coeff_f: np.ndarray of shape (N,A,A): final molecular orbital coefficients
+            #all_ao:     list[AO] of length A: all atomic orbitals
+        Outputs:
+            eta:        complex: 3D overlap <jk'|exp(i(q+G)r)|ik>
+        """
+        def f(q_vector, G_vector, ao_a, ao_b, R_vector):
+            """
+            Subroutine to calculate 3D primitive Gaussian overlap integral. ao_a and ao_b are atomic orbitals.
+            """
+            f_sum = 0
+            for m in range(ao_a.Nprim):
+                for n in range(ao_b.Nprim):
+                    f_sum += ao_a.norm[m]*ao_a.coef[m]*ao_b.norm[n]*ao_b.coef[n] * np.prod([I[q_vector[i],G_vector[i],R_vector[i],ao_a.shell[i],ao_b.shell[i],ao_a.exp[m],ao_b.exp[n],ao_a.loc[i],ao_b.loc[i]] for i in range(3)])
+            return f_sum
+
+        R_vectors = construct_R_vectors(cell)[0]
+        eta = 0
+        for a, ao_a in enumerate(all_ao):
+            for b, ao_b in enumerate(all_ao):
+                eta += np.conjugate(mo_coeff_f[k_f_id, j, b])*mo_coeff_i[k_i_id, i, a] * sum([np.exp(-1j*np.dot(k2[k_f_id], R))*f(q_vector,G_vector,ao_a,ao_b,R) for R in R_vectors])
+        
+        return eta
+
+    def calc_chi(q,E,G_id,Gp_id):
+        """
+        Calculates the Kohn-Sham susceptibility chi^0_{GGp}(q,E)
+
+        Inputs:
+        q:      np.ndarray of shape (3,): q-vector in 1BZ
+        E:      float: energy
+        G_id:   int: index of G vector from G_vectors
+        Gp_id:  int: index of G' vector from G_vectors
+
+        Outputs:
+        chi:    complex: Kohn-Sham susceptibility, Eq.() 
+        """
+        chi = 0
+        for k_pair_id, k_pair in q_1BZ_dic[q]: 
+            f = mo_occ_i[k_pair_id[0]]
+            for i in range(num_occ_bands): #occupied bands
+                for j in range(num_occ_bands,num_bands): #unoccupied bands
+                    delE = mo_en_f[k_pair[1],j] - mo_en_i[k_pair[0],i] #initial to final state transition energy
+                    if delE != E: #only calculates real part if the denominator is not exactly 0
+                        chi += f_i*np.conjugate(eta_q[G_id, k_pair_id, i, j])*eta_q[Gp_id, k_pair_id, i, j] / (E - delE) #real part
+                    if abs(delE) < parmt.dE:
+                        chi += 1j*(-np.pi)*delta(E, delE) #imaginary part
+        return chi
+    
+    def delta(E, delE):
+        """
+        Triange approximation of delta function used to calculate imaginary part of dielectric function. The width is determined by parmt.dE.
+
+        Inputs:
+        E:  float: energy of eps(q,E)
+        dE: float: initial to final state transition energy, i.e. E_{jk'} - E_{ik}
+
+        Outputs:
+        d:  float: numerical approximation of delta function 
+        """
+        if delE <= E:
+            d = (delE - (E-parmt.dE))/parmt.dE
+        else: #delE > E
+            d = (E + parmt.dE - delE)/parmt.dE
+        return d
+    
+
     cell = build_cell_from_input()
 
     #scf at k_i and nscf at k_f
@@ -322,48 +410,17 @@ def get_eps():
     #generate list of all atomic orbitals (needed for eta)
     all_ao = gen_all_atomic_orbitals(cell, gen_all_1D_prim_gauss(cell))
 
-    def get_3D_overlap(q_vector, G_vector, k_i_id, k_f_id, i, j, all_ao):
-        """
-        Still need to test!
-        Calculates 3D overlap eta = <jk'|exp(i(q+G)r)|ik> using stored 1D overlaps
-        Inputs:
-            q_vector:   np.ndarray of shape (3,): one q vector in 1BZ
-            G_vector:   np.ndarray of shape (3,): one G vector
-            k_i_id:     int: index of k_initial
-            k_f_id:     int: index of k_final
-            i:          int: initial state band
-            j:          int: final state band
-            all_ao:     list(AO): all atomic orbitals
-        Outputs:
-            eta:        complex: 3D overlap <jk'|exp(i(q+G)r)|ik>
-        """
-        def f(q_vector, G_vector, ao_a, ao_b, R_vector):
-            """
-            Subroutine to calculate 3D primitive Gaussian overlap integral. ao_a and ao_b are atomic orbitals.
-            """
-            f_sum = 0
-            for m in range(ao_a.Nprim):
-                for n in range(ao_b.Nprim):
-                    f_sum += ao_a.norm[m]*ao_a.coef[m]*ao_b.norm[n]*ao_b.coef[n] * np.prod([I[q_vector[i],G_vector[i],R_vector[i],ao_a.shell[i],ao_b.shell[i],ao_a.exp[m],ao_b.exp[n],ao_a.loc[i],ao_b.loc[i]] for i in range(3)])
-            return f_sum
+    #should also incorporate parmt.numcon in below check
+    if (mo_occ_i == mo_occ_i[0]).all():
+        #Makes sure material is semiconductor (occupancy should not vary with k since complete band is filled). Partially filled bands may cause issues determining occupied and unoccupied states, especially since k_f is different from k_i.
+        num_bands = mo_occ_i.shape[1]
+        num_occ_bands = sum(mo_occ_i[0] != 0)
+        f_i = mo_occ_i[0][0]
+    else:
+        raise Exception('Occupancy of molecular orbitals was found to vary with k. Partially filled bands may cause issues determining occupied and unoccupied states, especially since k_f is different from k_i. Check mo_occ_i.npy.')
 
-        R_vectors = construct_R_vectors(cell)[0]
-        eta = 0
-        for a, ao_a in enumerate(all_ao):
-            for b, ao_b in enumerate(all_ao):
-                eta += np.conjugate(mo_coeff_f[k_f_id, j, b])*mo_coeff_i[k_i_id, i, a] * sum([np.exp(-1j*np.dot(k2[k_f_id], R))*f(q_vector,G_vector,ao_a,ao_b,R) for R in R_vectors])
-    
-        return eta
-
-    #epsilon(q, E, G, G')
-    """
-    What is best way to store epsilon?
-    dict[q,E] = array(G,G')?
-    """
     eps = {}
     for q in q_1BZ: #will parallelize this step
-        num_bands = mo_en_i.shape[1]
-        num_G_vectors = G_vectors.shape[0]
         #create and store all eta first for given q
         #dictionary: eta_q[(G_id, k_pair_id, i, j)]
         eta_q = {}
@@ -374,62 +431,37 @@ def get_eps():
                         tup = tuple([G_id, k_pair_id, i, j])
                         eta_q[tup] = get_3D_overlap(q,G,k_pair[0],k_pair[1],i,j,all_ao)
 
-        eps[q,E] = np.zeros(num_G_vectors,num_G_vectors)
+        #determine all G vectors with |q + G| < lfe_q_cutoff to include in LFE calculation
+        G_id_no_lfe = []
+        G_id_lfe = []
+        if parmt.lfe_q_cutoff is not None:
+            for G_id,G in enumerate(G_vectors):
+                if np.linalg.norm(q+G) < parmt.lfe_q_cutoff:
+                    G_id_lfe.append(G_id)
+                else:
+                    G_id_no_lfe.append(G_id)
+
+        num_G_lfe = len(G_id_lfe)
+        num_G_no_lfe = len(G_id_no_lfe)
+        eps_lfe_matrix = np.zeros((num_G_lfe,num_G_lfe))
+        eps_no_lfe = np.zeros(num_G_no_lfe)
+
         for E in np.arange(parmt.dE, parmt.E_max+parmt.dE, parmt.dE): #energies - problem at E = 0 so not inlcuded?
-            for G_id, G in enumerate(G_vectors):
-                for Gp_id, Gp in enumerate(G_vectors):
-                    chi = 0
-                    for k_pair_id, k_pair in q_1BZ_dic[q]: 
-                        for i in range(num_bands):
-                            for j in range(num_bands):
-                                chi += np.conjugate(eta_q[G_id, k_pair_id, i, j])*eta_q[Gp_id, k_pair_id, i, j] / (mo_en_i[k_pair[0],i] - mo_en_f[k_pair[1],j] + E ) #+i*eta, also multiply by occupancy
-                    eps[q,E][G_id,Gp_id] = -(4*np.pi)**2 / np.linalg.norm(q+G) / np.linalg.norm(q+Gp) * chi
-            eps[q,E] = eps[q,E] + np.identity(num_G_vectors) #delta_GGp
+            for G_id_i, G_id in enumerate(G_id_no_lfe): #Non-LFE: only calculate diagonal elements Gp=G
+                G = G_vectors[G_id]
+                eps_no_lfe[G_id_i] = 1 - (4*np.pi)**2 / (np.dot(q,q)+np.dot(G,G)) * calc_chi(q,E,G_id,G_id)
 
-            #take inverse for LFE
-            if parmt.lfe_q_cutoff is not None:
-                if type(parmt.lfe_q_cutoff) != float:
-                    raise ValueError("Parameter lfe_q_cutoff in input_parameters.py must be either None or of type float.")
-                #LFE calculation
-
-def get_3D_overlap(q_vector, G_vector, k_i_id, k_f_id, i, j, k_f, mo_coeff_i, mo_coeff_f, all_ao, I):
-    """
-    Still need to test!
-    Calculates 3D overlap eta = <jk'|exp(i(q+G)r)|ik> using stored 1D overlaps
-    Inputs:
-        q_vector:   np.ndarray of shape (3,): one q vector in 1BZ
-        G_vector:   np.ndarray of shape (3,): one G vector
-        k_i_id:     int: index of k_initial
-        k_f_id:     int: index of k_final
-        i:          int: initial state band
-        j:          int: final state band
-        k_f:        np.ndarray of shape (N,3): all k_final vectors
-        mo_coeff_i: np.ndarray of shape (M,A,A): initial molecular orbital coefficients
-        mo_coeff_f: np.ndarray of shape (N,A,A): final molecular orbital coefficients
-        all_ao:     list[AO] of length A: all atomic orbitals
-        I:          dict: dictionary of all 1D overlaps from get_all_prim_1D_overlaps
-    Outputs:
-        eta:        complex: 3D overlap <jk'|exp(i(q+G)r)|ik>
-    """
-    def f(q_vector, G_vector, ao_a, ao_b, R_vector):
-        """
-        Subroutine to calculate 3D primitive Gaussian overlap integral. ao_a and ao_b are atomic orbitals.
-        """
-        f_sum = 0
-        for m in range(ao_a.Nprim):
-            for n in range(ao_b.Nprim):
-                f_sum += ao_a.norm[m]*ao_a.coef[m]*ao_b.norm[n]*ao_b.coef[n] * np.prod([I[q_vector[i],G_vector[i],R_vector[i],ao_a.shell[i],ao_b.shell[i],ao_a.exp[m],ao_b.exp[n],ao_a.loc[i],ao_b.loc[i]] for i in range(3)])
-        return f_sum
-
-    R_vectors = construct_R_vectors(cell)[0]
-    eta = 0
-    for a, ao_a in enumerate(all_ao):
-        for b, ao_b in enumerate(all_ao):
-            eta += np.conjugate(mo_coeff_f[k_f_id, j, b])*mo_coeff_i[k_i_id, i, a] * sum([np.exp(-1j*np.dot(k_f[k_f_id], R))*f(q_vector,G_vector,ao_a,ao_b,R) for R in R_vectors])
-    
-    return eta
-
-
+            for G_id_i, G_id in enumerate(G_id_lfe): #LFE
+                G = G_vectors[G_id]
+                for Gp_id_i, Gp_id in enumerate(G_id_lfe):
+                    Gp = G_vectors[Gp_id]
+                    eps_lfe_matrix[G_id_i,Gp_id_i] = -(4*np.pi)**2 / np.linalg.norm(q+G) / np.linalg.norm(q+Gp) * calc_chi(q,E,G_id,Gp_id)
+            eps_lfe_matrix = eps_lfe_matrix + np.identity(num_G_lfe) #+delta_GGp
+            eps_lfe = 1/np.diag(np.linalg.inv(eps_lfe_matrix))
+            
+            eps_G_id = np.concatenate((G_id_lfe, G_id_no_lfe)) 
+            eps[q,E] = np.concatenate((eps_lfe, eps_no_lfe))[np.argsort(eps_G_id)] #resorts so eps[G] is in same order as original G_vectors
+    return None
 
 def update_dic(ia, ib, primindices, d, R, qG_unique, dic, atom_locs):
     """
