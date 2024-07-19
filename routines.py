@@ -394,7 +394,6 @@ def KS_non_self_consistent_field(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS) -> None
         None
     """
     logging.info("Final State Calculation:")
-    from pyscf.pbc.lib import kpts as libkpts
     dft_path = parmt.store + '/DFT/'
     #kpts = make_kpts(kmf.cell, False)
     k_grid = parmt.fk_grid
@@ -508,5 +507,6 @@ def get_1BZ_q_points(cell: pbcgto.cell.Cell) -> dict:
             else:
                 dic[tup] = [[i, j]]
     qu = np.array(list(dic.keys()))
+    np.save(parmt.store + '/unique_q', qu)
     logging.info("{} unique q-vectors found in 1BZ. Storing all unique q-vectors in {} + /unique_q.npy.".format(qu.shape[0], parmt.store))
     return dic

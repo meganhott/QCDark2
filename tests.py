@@ -444,7 +444,7 @@ def get_all_prim_1D_overlap(cell, q_vectors, G_vectors):
         for d in range(3): #direction: x,y,z
             #get all unique parameters in direction d
             qG_unique = get_all_unique_nums_in_array(q_vectors[None,:,d]+G_vectors[:,None,d], round_to=10)
-            R_unique = get_all_unique_nums_in_array(Rv[:,d])
+            R_unique = get_all_unique_nums_in_array(Rv[:,d], round_to = 10)
             print(d, qG_unique.shape, R_unique.shape)
             with Pool(24) as pool:
                 pool.starmap(partial(update_dic, primindices = primgauss_indx_arr, d = d, R_unique = R_unique, qG = qG_unique, dic = dic, atom_locs = atom_locs), l)
