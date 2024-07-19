@@ -392,7 +392,46 @@ def get_eps():
                     raise ValueError("Parameter lfe_q_cutoff in input_parameters.py must be either None or of type float.")
                 #LFE calculation
 
-def update_dic(ia, ib, primindices, d, R_unique, qG, dic, atom_locs):
+def get_3D_overlap(q_vector, G_vector, k_i_id, k_f_id, i, j, k_f, mo_coeff_i, mo_coeff_f, all_ao, I):
+    """
+    Still need to test!
+    Calculates 3D overlap eta = <jk'|exp(i(q+G)r)|ik> using stored 1D overlaps
+    Inputs:
+        q_vector:   np.ndarray of shape (3,): one q vector in 1BZ
+        G_vector:   np.ndarray of shape (3,): one G vector
+        k_i_id:     int: index of k_initial
+        k_f_id:     int: index of k_final
+        i:          int: initial state band
+        j:          int: final state band
+        k_f:        np.ndarray of shape (N,3): all k_final vectors
+        mo_coeff_i: np.ndarray of shape (M,A,A): initial molecular orbital coefficients
+        mo_coeff_f: np.ndarray of shape (N,A,A): final molecular orbital coefficients
+        all_ao:     list[AO] of length A: all atomic orbitals
+        I:          dict: dictionary of all 1D overlaps from get_all_prim_1D_overlaps
+    Outputs:
+        eta:        complex: 3D overlap <jk'|exp(i(q+G)r)|ik>
+    """
+    def f(q_vector, G_vector, ao_a, ao_b, R_vector):
+        """
+        Subroutine to calculate 3D primitive Gaussian overlap integral. ao_a and ao_b are atomic orbitals.
+        """
+        f_sum = 0
+        for m in range(ao_a.Nprim):
+            for n in range(ao_b.Nprim):
+                f_sum += ao_a.norm[m]*ao_a.coef[m]*ao_b.norm[n]*ao_b.coef[n] * np.prod([I[q_vector[i],G_vector[i],R_vector[i],ao_a.shell[i],ao_b.shell[i],ao_a.exp[m],ao_b.exp[n],ao_a.loc[i],ao_b.loc[i]] for i in range(3)])
+        return f_sum
+
+    R_vectors = construct_R_vectors(cell)[0]
+    eta = 0
+    for a, ao_a in enumerate(all_ao):
+        for b, ao_b in enumerate(all_ao):
+            eta += np.conjugate(mo_coeff_f[k_f_id, j, b])*mo_coeff_i[k_i_id, i, a] * sum([np.exp(-1j*np.dot(k_f[k_f_id], R))*f(q_vector,G_vector,ao_a,ao_b,R) for R in R_vectors])
+    
+    return eta
+
+
+
+def update_dic(ia, ib, primindices, d, R, qG_unique, dic, atom_locs):
     """
     primind_a and primind_b: rows from primgauss_indx_arr
     qG_unique: (N,) array of unique q+G scalars in d direction
