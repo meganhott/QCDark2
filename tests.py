@@ -2,7 +2,7 @@ from routines import *
 from cartesian_moments import *
 import matplotlib.pyplot as plt
 import spglib as spg
-
+import tester_func
 def spherical_to_cartesian(sph: np.ndarray) -> np.ndarray:
     """
     Convert all vectors given in spherical polar coordinates to corresponding vectors in cartesian coordinates,
@@ -473,8 +473,28 @@ def get_all_prim_1D_overlap_srl(cell, q_vectors, G_vectors):
         for ia in range(len(primgauss_indx_arr)): 
             for ib in range(len(primgauss_indx_arr)):
                 update_dic(ia, ib, primgauss_indx_arr, d, R_unique, qG_unique, dic, atom_locs)
-    
+
     return dic
+
+def primgauss_1D_overlaps(cell: pbcgto.cell.Cell, q: np.ndarray, G: np.ndarray):
+    primgauss = gen_all_1D_prim_gauss(cell)
+    primindices, atom_locs = gen_prim_gauss_indices(primgauss)
+    del primgauss
+
+    Rv, _ = construct_R_vectors(cell)
+    f = []
+    
+    for d in range(3):
+        qu, Gu = get_all_unique_nums_in_array(q[:,d], round_to=10), get_all_unique_nums_in_array(G[:,d], round_to=10)
+        qG = (qu[:, None] + Gu[None, :]).reshape((-1))
+        qG = get_all_unique_nums_in_array(qG, round_to=10)
+        qG = qG[np.abs(qG) <= parmt.q_max]
+        Ru = get_all_unique_nums_in_array(Rv[:,d], round_to=10)
+        print(d, Ru.shape, qG.shape)
+        with Pool(10) as p:
+            res = p.map(partial(tester_func.primgauss_1D_overlaps_uR, primindices = primindices, q = qG, atom_locs = atom_locs[:,d]), Ru)
+        f.append(res)
+    return f
 
 def test_get_all_prim_1D_overlap():
     cell = build_cell_from_input()

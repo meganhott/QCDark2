@@ -311,7 +311,7 @@ def construct_R_vectors(cell: pbcgto.cell.Cell) -> tuple[np.ndarray, np.ndarray]
     Rvecs = cell.get_lattice_Ls()
     np.save(parmt.store + '/R_vectors.npy', Rvecs)
     logging.info('{} R vectors generated for the cell given precision = {}, and saved to {}.'.format(Rvecs.shape[0], cell.precision, parmt.store + '/R_vectors.npy'))
-    unR = get_all_unique_nums_in_array(Rvecs, round_to = 9, log_name = None)
+    unR = get_all_unique_nums_in_array(Rvecs, round_to = 10, log_name = None)
     logging.info("\tNumber of unique scalars in R vectors, i.e., unique R_i for R = (R_1, R_2, R_3) = {}.".format(unR.size))
     return Rvecs, unR
 
