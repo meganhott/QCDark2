@@ -126,6 +126,15 @@ def patch():
 
     logging.info(patchname + " applied")
 
+def check_inputs():
+    """
+    Ensures correct format for parameters in input_parameters.py before starting computation.
+
+    Need to add all checks eventually!
+    """
+    if (parmt.lfe_q_cutoff is not None) or (type(parmt.lfe_q_cutoff) is not float):
+        raise ValueError('Parameter lfe_q_cutoff in input_parameters.py must be either None or of type float.')
+
 def makedir(dirname: str, log = False) -> None:
     """
     Function that makes a directory if it does not exist.
