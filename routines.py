@@ -521,17 +521,15 @@ def get_1BZ_q_points(cell: pbcgto.cell.Cell) -> dict:
     return dic
 
 @time_wrapper
-def primgauss_1D_overlaps(cell: pbcgto.cell.Cell, q: np.ndarray, G: np.ndarray) -> np.ndarray:
+def primgauss_1D_overlaps(dark_objects: dict) -> np.ndarray:
     """
     Store all 1D primitive gaussians in files. 
     """
-    primgauss = gen_all_1D_prim_gauss(cell)
-    primindices, atom_locs = gen_prim_gauss_indices(primgauss)
-    del primgauss
-
+    primindices = dark_objects['primindices']
+    atom_locs = dark_objects['atom_locs']
+    q, G = np.load(parmt.store + '/unique_q.npy'), np.load(parmt.store + '/G_vectors.npy')
     Rv, _ = construct_R_vectors(cell)
     f = []
-    
     for d in range(3):
         qu, Gu = get_all_unique_nums_in_array(q[:,d], round_to=10), get_all_unique_nums_in_array(G[:,d], round_to=10)
         qG = (qu[:, None] + Gu[None, :]).reshape((-1))
