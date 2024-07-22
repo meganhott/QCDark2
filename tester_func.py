@@ -8,10 +8,10 @@ def primgauss_1D_overlaps_uR(R: float, primindices: np.ndarray, q: np.ndarray, a
         A = atom_locs[a1]
         for p2 in primindices:
             a2, l2, e2, I2 = int(p2[0]), int(p2[1]), p2[2], int(p2[3])
-            B = atom_locs[a2]
-            E_ijt = get_E_ijt(e1,e2,l1,l2,A-B-R)
+            B = atom_locs[a2]+R
+            E_ijt = get_E_ijt(e1,e2,l1,l2,A-B)
             p = e1 + e2
-            P = (e2*(B+R) + e1*A) / p
+            P = (e2*B + e1*A) / p
             for i1 in range(l1+1):
                 I = I1 + i1
                 for i2 in range(l2+1):
