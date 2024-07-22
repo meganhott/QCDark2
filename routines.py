@@ -551,6 +551,6 @@ def primgauss_1D_overlaps(dark_objects: dict):
         with Pool(10) as p:
             res = p.map(partial(cartmoments.primgauss_1D_overlaps_uR, primindices = primindices, q = qG, atom_locs = atom_locs[:,d]), Ru)
         res = np.asarray(res)
-        store_primgauss_1D(d, qG, res)
+        store_primgauss_1D(d, qG, res, Ru)
     logging.info("Generated overlaps of 1D primitive gaussians.")
-    return 
+    return None
