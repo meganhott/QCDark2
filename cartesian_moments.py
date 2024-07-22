@@ -73,49 +73,24 @@ def get_E_ijt(a: float, b: float, i_max: int, j_max: int, Qx: float) -> list[lis
      
      return E_ijt
 
-def get_prim_1D_overlap(i: int, j: int, prim_array: np.ndarray, locations: np.ndarray, unique_R: np.ndarray, unique_k: np.ndarray, target: dict) -> None:
-     """
-     NOTE: UNTESTED!
-     Function to get 1D overlap matrix, \int dx G_i (x - A - R, a) * e^{i kx x} * G_j (x - B, b).
-     Inputs:
-          i:             int, index of 1D primitive gaussian #1 in prim_array
-          j:             int, index of 1D primitive gaussian #2 in prim_array
-          prim_array:    np.ndarray of shape (N,4) from routines.py/gen_prim_gauss_indices
-                         each row contains the following information: 
-                              [atom_id, <total angular momentum on l>, exponent on primitive gaussian, <index of first point in primgauss>]
-          locations:     np.ndarray of shape (n_atom, 3), location of atom with atom_id
-          unique_R:      np.ndarray of shape (nR, ) containing all unique R from the set of R_vectors
-          unique_k:      np.ndarray of shape (nk, ) containing all unique k from the set of k_vectors
-          target:        multiprocessing.Manager().dict() pointer
-                         results get added to this dictionary like object.
-                         target[int(prim_array[i, 3])][int(prim_array[i, 4])][direction][R][k] = complex128
-     Returns:
-          None
-     """
-     prim1, prim2 = prim_array[i], prim_array[j]
-     atom1, atom2 = locations[int(prim1[0]), int(prim2[0])]
-     i_max, j_max = int(prim1[1], prim2[1])
-     a, b = prim1[2], prim2[1]
-     init1, init2 = int(prim1[3]), int(prim2[3])
-     p = a + b
-
-     for dir in range(3):
-          Bx = atom2[dir]
-          for R in unique_R:
-               Ax = atom1[dir] + R
-               Px = (a*Ax + b*Bx)/p
-               E_ijt = get_E_ijt(a, b, i_max, j_max, Ax - Bx)
-               re1 = {}
-               for i in range(i_max + 1):
-                    for j in range(j_max + 1):
-                         target[init1+i][init2+j][dir] = {}
-                         target[init1+i][init2+j][dir][R] = {}
-                         for k in unique_k:
-                              target[init1+i][init2+j][dir][R][k] = 0
-                              for t in range(i+j+1):
-                                   target[init1+i][init2+j][dir][R][k] += E_ijt[i][j][k] * (1.j * k)**t
-                              target[init1+i][init2+j][dir][R][k] *= ((np.pi)**0.5)*(np.e**(1.j*k*Px - (k**2)/(4.*p)))
-     return None
+def primgauss_1D_overlaps_uR(R: float, primindices: np.ndarray, q: np.ndarray, atom_locs: np.ndarray) -> np.ndarray:
+    TN = int(round(primindices[-1, -1] + primindices[-1, 1] + 1))
+    res = np.zeros((TN, TN, len(q))).astype('complex128')
+    for p1 in primindices:
+        a1, l1, e1, I1 = int(p1[0]), int(p1[1]), p1[2], int(p1[3])
+        A = atom_locs[a1]
+        for p2 in primindices:
+            a2, l2, e2, I2 = int(p2[0]), int(p2[1]), p2[2], int(p2[3])
+            B = atom_locs[a2]+R
+            E_ijt = get_E_ijt(e1,e2,l1,l2,A-B)
+            p = e1 + e2
+            P = (e2*B + e1*A) / p
+            for i1 in range(l1+1):
+                I = I1 + i1
+                for i2 in range(l2+1):
+                    J = I2+i2
+                    res[I, J, :] = np.sqrt(np.pi/p) * np.exp(1j*q*P - q**2/4/p)*sum([E_ijt[i1][i2][t]*(1j*q)**t for t in range(i1+i2+1)])
+    return res
 
 class AO(object):
      """
