@@ -558,3 +558,72 @@ def primgauss_1D_overlaps(dark_objects: dict) -> np.ndarray:
         f.append(res)
     logging.info("Generated overlaps of 1D primitive gaussians.")
     return np.array(f)
+
+def include_bands():
+    """
+    Outputs:
+        num_all_occ:        int: total number of occupied (valence) bands obtained from DFT calculation
+        num_occ_bands:      int: number of occupied (valence) bands to include in dielectric function calculation
+        num_unocc_bands:    int: number of unoccupied (conduction) bands to include in dielectric function calculation
+        f_i:                int: occupancy of initial states: f_{ik} factor assuming temperature = 0K
+    """
+    dft_path = parmt.store + '/DFT/'
+    mo_occ_i = np.load(dft_path + 'mo_coeff_i.npy')
+
+    if (mo_occ_i == mo_occ_i[0]).all():
+        num_bands = mo_occ_i.shape[1]
+        num_all_occ = sum(mo_occ_i[0] != 0) #total number of occupied bands from dft calculation
+
+        if parmt.numval == 'all':
+            num_occ_bands = num_all_occ
+        else:
+            if parmt.numval <= num_all_occ:
+                num_occ_bands = parmt.numval
+            else:
+                raise Exception(f'The specified number of valence bands to include ({parmt.numval}) is larger than the number of valence bands obtained from the DFT calculation ({num_all_occ}). Check input parameter "numval" and DFT output file mo_occ_i.npy.')
+        f_i = mo_occ_i[0][num_all_occ-1] #occupancy of valence bands
+
+        if parmt.numcon == 'all':
+            num_unocc_bands = num_bands - num_occ_bands
+        else:
+            if parmt.numcon <= num_bands - num_all_occ:
+                num_unocc_bands = parmt.numcon
+            else:
+                raise Exception(f'The specified number of conduction bands to include ({parmt.numcon}) is larger than the number of conduction bands obtained from the DFT calculation ({num_bands - num_occ_bands}). To increase the number of conduction bands, consider using a larger basis set. Check input parameters "numcon" and "mybasis", and DFT output file mo_occ_i.npy.')
+
+        f_i = mo_occ_i[0][0] #occupancy of valence bands
+    else:
+        raise Exception('Occupancy of molecular orbitals was found to vary with k. Partially filled bands may cause issues determining occupied and unoccupied states, especially since k_f is different from k_i. Check mo_occ_i.npy.')
+    return num_all_occ, num_occ_bands, num_unocc_bands, f_i
+
+def RPA_susceptibility(q, E, G_id, Gp_id, dark_objects):
+    #calc_chi from tests.py
+    """
+    Calculates the Kohn-Sham susceptibility chi^0_{GGp}(q,E)
+
+    Inputs:
+    q:              np.ndarray of shape (3,): q-vector in 1BZ
+    E:              float: energy
+    G_id:           int: index of G vector from G_vectors
+    Gp_id:          int: index of G' vector from G_vectors
+    dark_objects:
+
+    Outputs:
+    chi:    complex: Kohn-Sham susceptibility, Eq.() 
+    """
+    num_all_occ, num_occ_bands, num_unocc_bands, f_i = include_bands()
+
+    dft_path = parmt.store + '/DFT/'
+    mo_en_i = np.load(dft_path + 'mo_en_i.npy')[:,num_all_occ-num_occ_bands:num_all_occ] #only keeps energies for last num_occ_bands valence bands in memory
+    mo_en_f = np.load(dft_path + 'mo_en_f.npy')[:,num_all_occ:num_all_occ+num_unocc_bands] #only keeps energies for first num_unocc_bands conduction bands in memory
+
+    chi = 0
+    for k_pair_id, k_pair in dark_objects['unique_q'][q]: 
+        for i in range(num_occ_bands):
+            for j in range(num_unocc_bands):
+                delE = mo_en_f[k_pair[1],j] - mo_en_i[k_pair[0],i] #initial to final state transition energy
+                if delE != E: #only calculates real part if the denominator is not exactly 0
+                    chi += f_i*np.conjugate(eta_q[G_id, k_pair_id, i, j])*eta_q[Gp_id, k_pair_id, i, j] / (E - delE) #real part
+                if abs(delE) < parmt.dE:
+                    chi += 1j*(-np.pi)*delta(E, delE) #imaginary part
+    return chi
