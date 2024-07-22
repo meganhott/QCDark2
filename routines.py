@@ -522,11 +522,15 @@ def get_1BZ_q_points(cell: pbcgto.cell.Cell) -> dict:
 def primgauss_1D_overlaps(dark_objects: dict) -> np.ndarray:
     """
     Store all 1D primitive gaussians in files. 
+    NOTE: Currently returns one numpy array for all overlaps. This is not good and will not work for anisotropic systems.
+    NOTE: Implement file stores with name parmt.store + '/1d_overlaps/{}_{}.npy'.format(d, q) 
+    Inputs:
+        dark_objects:   dict: equivalent to a class object, except not self-referential.
     """
     primindices = dark_objects['primindices']
     atom_locs = dark_objects['atom_locs']
     q, G = np.load(parmt.store + '/unique_q.npy'), dark_objects['G_vectors']
-    Rv, _ = dark_objects['R_vectors']
+    Rv = dark_objects['R_vectors']
     f = []
     for d in range(3):
         qu, Gu = get_all_unique_nums_in_array(q[:,d], round_to=10), get_all_unique_nums_in_array(G[:,d], round_to=10)
