@@ -279,7 +279,6 @@ def gen_prim_gauss_indices(primgauss: np.ndarray) -> tuple[np.ndarray, np.ndarra
     logging.info("Constructed unique exponent for each atom. Total number of exponents at different locations: {}".format(indx_arr.shape[0]))
     return indx_arr, np.array(locs)
 
-@time_wrapper
 def get_all_unique_nums_in_array(array: np.ndarray, round_to: int = None, log_name: str = None) -> np.ndarray:
     """
     Given any array, np.ndarray, condense it into 1D and find all unique unique elements.
@@ -518,6 +517,14 @@ def get_1BZ_q_points(cell: pbcgto.cell.Cell) -> dict:
     logging.info("{} unique q-vectors found in 1BZ. Storing all unique q-vectors in {} + /unique_q.npy.".format(qu.shape[0], parmt.store))
     return dic
 
+def store_primgauss_1D(dim: int, qG: np.ndarray, results: np.ndarray):
+    dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
+    makedir(dir)
+    results = np.transpose(results, axes = (3, 0, 1, 2))
+    for q, res in zip(qG, results):
+        np.save(dir + '{:.5f}'.format(q), res)
+    return None
+
 @time_wrapper
 def primgauss_1D_overlaps(dark_objects: dict) -> np.ndarray:
     """
@@ -532,15 +539,22 @@ def primgauss_1D_overlaps(dark_objects: dict) -> np.ndarray:
     q, G = np.load(parmt.store + '/unique_q.npy'), dark_objects['G_vectors']
     Rv = dark_objects['R_vectors']
     f = []
+    logging.info("Generating overlaps of 1D primitve gaussians.")
+    makedir(parmt.store + '/primgauss_1d_integrals/')
     for d in range(3):
         qu, Gu = get_all_unique_nums_in_array(q[:,d], round_to=10), get_all_unique_nums_in_array(G[:,d], round_to=10)
         qG = (qu[:, None] + Gu[None, :]).reshape((-1))
         qG = get_all_unique_nums_in_array(qG, round_to=10)
         qG = qG[np.abs(qG) <= parmt.q_max]
         Ru = get_all_unique_nums_in_array(Rv[:,d], round_to=10)
-        print(d, Ru.shape, qG.shape)
+        dark_objects['dim_{}'.format(d)] = {}
+        dark_objects['dim_{}'.format(d)]['uq'] = qG
+        dark_objects['dim_{}'.format(d)]['uR'] = Ru
+        logging.info('\tDimension = {}:\n\t\tNumber of unique q = {};\n\t\tNumber of unique R = {}.'.format(d, qG.size, Ru.size))
         with Pool(10) as p:
             res = p.map(partial(cartmoments.primgauss_1D_overlaps_uR, primindices = primindices, q = qG, atom_locs = atom_locs[:,d]), Ru)
         res = np.asarray(res)
+        store_primgauss_1D(d, qG, res)
         f.append(res)
+    logging.info("Generated overlaps of 1D primitive gaussians.")
     return np.array(f)
