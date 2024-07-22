@@ -320,9 +320,7 @@ def construct_R_vectors(cell: pbcgto.cell.Cell) -> tuple[np.ndarray, np.ndarray]
     Rvecs = cell.get_lattice_Ls()
     np.save(parmt.store + '/R_vectors.npy', Rvecs)
     logging.info('{} R vectors generated for the cell given precision = {}, and saved to {}.'.format(Rvecs.shape[0], cell.precision, parmt.store + '/R_vectors.npy'))
-    unR = get_all_unique_nums_in_array(Rvecs, round_to = 10, log_name = None)
-    logging.info("\tNumber of unique scalars in R vectors, i.e., unique R_i for R = (R_1, R_2, R_3) = {}.".format(unR.size))
-    return Rvecs, unR
+    return Rvecs
 
 def make_kpts(cell: pbcgto.cell.Cell, with_gamma: bool = True) -> pyscf.pbc.lib.kpts.KPoints:
     """
@@ -527,8 +525,8 @@ def primgauss_1D_overlaps(dark_objects: dict) -> np.ndarray:
     """
     primindices = dark_objects['primindices']
     atom_locs = dark_objects['atom_locs']
-    q, G = np.load(parmt.store + '/unique_q.npy'), np.load(parmt.store + '/G_vectors.npy')
-    Rv, _ = construct_R_vectors(cell)
+    q, G = np.load(parmt.store + '/unique_q.npy'), dark_objects['G_vectors']
+    Rv, _ = dark_objects['R_vectors']
     f = []
     for d in range(3):
         qu, Gu = get_all_unique_nums_in_array(q[:,d], round_to=10), get_all_unique_nums_in_array(G[:,d], round_to=10)

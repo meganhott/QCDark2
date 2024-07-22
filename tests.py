@@ -471,8 +471,7 @@ def primgauss_1D_overlaps(cell: pbcgto.cell.Cell, q: np.ndarray, G: np.ndarray) 
     primgauss = gen_all_1D_prim_gauss(cell)
     primindices, atom_locs = gen_prim_gauss_indices(primgauss)
     del primgauss
-
-    Rv, _ = construct_R_vectors(cell)
+    Rv= construct_R_vectors(cell)
     f = []
     
     for d in range(3):
