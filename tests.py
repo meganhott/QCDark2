@@ -463,17 +463,15 @@ def get_eps():
             eps[q,E] = np.concatenate((eps_lfe, eps_no_lfe))[np.argsort(eps_G_id)] #resorts so eps[G] is in same order as original G_vectors
     return None
 
-def primgauss_1D_overlaps(cell: pbcgto.cell.Cell, q: np.ndarray, G: np.ndarray):
+def primgauss_1D_overlaps(dark_objects: dict) -> np.ndarray:
     """
     Store all 1D primitive gaussians in files. 
     """
-    primgauss = gen_all_1D_prim_gauss(cell)
-    primindices, atom_locs = gen_prim_gauss_indices(primgauss)
-    del primgauss
-
+    primindices = dark_objects['primindices']
+    atom_locs = dark_objects['atom_locs']
+    q, G = np.load(parmt.store + '/unique_q.npy'), np.load(parmt.store + '/G_vectors.npy')
     Rv, _ = construct_R_vectors(cell)
     f = []
-    
     for d in range(3):
         qu, Gu = get_all_unique_nums_in_array(q[:,d], round_to=10), get_all_unique_nums_in_array(G[:,d], round_to=10)
         qG = (qu[:, None] + Gu[None, :]).reshape((-1))
@@ -484,12 +482,5 @@ def primgauss_1D_overlaps(cell: pbcgto.cell.Cell, q: np.ndarray, G: np.ndarray):
         with Pool(10) as p:
             res = p.map(partial(cartmoments.primgauss_1D_overlaps_uR, primindices = primindices, q = qG, atom_locs = atom_locs[:,d]), Ru)
         res = np.asarray(res)
-    return 
-
-def test_get_all_prim_1D_overlap():
-    cell = build_cell_from_input()
-    q_1BZ_dic = get_1BZ_q_points(cell) #or load from save
-    q_1BZ = np.array(list(q_1BZ_dic.keys()))[:10,:] ##only testing for a few vectors to reduce size of dictionary
-    G = gen_G_vectors(cell)[:10,:]
-    I = get_all_prim_1D_overlap(cell, q, G)
-    return I
+        f.append(res)
+    return np.array(f)

@@ -53,9 +53,14 @@ def electronic_structure(cell: routines.pbcgto.cell.Cell, dark_objects: dict) ->
      dark_objects['unique_q'] = routines.get_1BZ_q_points(cell)
      return dark_objects
 
+def dielectric_RPA(dark_objects: dict) -> None:
+     dark_objects['1d_ovlp'] = routines.primgauss_1D_overlaps(dark_objects)
+     return dark_objects
+
 def main():
      cell, dark_objects = initialize_cell()
-     electronic_structure(cell, dark_objects)
+     dark_objects = electronic_structure(cell, dark_objects)
+     dark_objects = dielectric_RPA(dark_objects)
      return
 
 if __name__ == '__main__':
