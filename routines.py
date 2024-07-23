@@ -16,7 +16,7 @@ import pyscf.pbc
 import pyscf
 import scipy
 import cartesian_moments as cartmoments
-from multiprocessing import Pool, Manager
+from multiprocessing import Pool
 from functools import partial
 import shutil
 import input_parameters as parmt
@@ -550,10 +550,12 @@ def primgauss_1D_overlaps(dark_objects: dict):
         logging.info('\tDimension = {}:\n\t\tNumber of unique q = {};\n\t\tNumber of unique R = {}.'.format(d, qG.size, Ru.size))
         with Pool(10) as p:
             res = p.map(partial(cartmoments.primgauss_1D_overlaps_uR, primindices = primindices, q = qG, atom_locs = atom_locs[:,d]), Ru)
-        res = np.asarray(res)
+            p.close()
+            p.join()
+        res = np.array(res)
         store_primgauss_1D(d, qG, res, Ru)
     logging.info("Generated overlaps of 1D primitive gaussians.")
-    return None
+    return 
 
 def include_bands():
     """

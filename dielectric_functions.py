@@ -35,8 +35,8 @@ def electronic_structure(cell: routines.pbcgto.cell.Cell, dark_objects: dict) ->
     return dark_objects
 
 def dielectric_RPA(dark_objects: dict) -> None:
-     routines.primgauss_1D_overlaps(dark_objects)
-     return dark_objects
+    routines.primgauss_1D_overlaps(dark_objects)
+    return dark_objects
 
 def main():
     cell, dark_objects = initialize_cell()
