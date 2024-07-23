@@ -16,7 +16,7 @@ import pyscf.pbc
 import pyscf
 import scipy
 import cartesian_moments as cartmoments
-from multiprocessing import Pool
+import multiprocessing as mp
 from functools import partial
 import shutil
 import input_parameters as parmt
@@ -541,19 +541,17 @@ def primgauss_1D_overlaps(dark_objects: dict):
     Rv = dark_objects['R_vectors']
     logging.info("Generating overlaps of 1D primitve gaussians.")
     makedir(parmt.store + '/primgauss_1d_integrals/')
-    for d in range(3):
-        qu, Gu = get_all_unique_nums_in_array(q[:,d], round_to=10), get_all_unique_nums_in_array(G[:,d], round_to=10)
-        qG = (qu[:, None] + Gu[None, :]).reshape((-1))
-        qG = get_all_unique_nums_in_array(qG, round_to=10)
-        qG = qG[np.abs(qG) <= parmt.q_max]
-        Ru = get_all_unique_nums_in_array(Rv[:,d], round_to=10)
-        logging.info('\tDimension = {}:\n\t\tNumber of unique q = {};\n\t\tNumber of unique R = {}.'.format(d, qG.size, Ru.size))
-        with Pool(10) as p:
+    with mp.get_context('fork').Pool(10) as p:
+        for d in range(3):
+            qu, Gu = get_all_unique_nums_in_array(q[:,d], round_to=10), get_all_unique_nums_in_array(G[:,d], round_to=10)
+            qG = (qu[:, None] + Gu[None, :]).reshape((-1))
+            qG = get_all_unique_nums_in_array(qG, round_to=10)
+            qG = qG[np.abs(qG) <= parmt.q_max]
+            Ru = get_all_unique_nums_in_array(Rv[:,d], round_to=10)
+            logging.info('\tDimension = {}:\n\t\tNumber of unique q = {};\n\t\tNumber of unique R = {}.'.format(d, qG.size, Ru.size))
             res = p.map(partial(cartmoments.primgauss_1D_overlaps_uR, primindices = primindices, q = qG, atom_locs = atom_locs[:,d]), Ru)
-            p.close()
-            p.join()
-        res = np.array(res)
-        store_primgauss_1D(d, qG, res, Ru)
+            res = np.array(res)
+            store_primgauss_1D(d, qG, res, Ru)
     logging.info("Generated overlaps of 1D primitive gaussians.")
     return 
 
