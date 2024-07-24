@@ -20,6 +20,28 @@ def spherical_to_cartesian(sph: np.ndarray) -> np.ndarray:
     y = r*np.sin(sph[:,2])
     return np.transpose([x, y, z])
 
+def cartesian_to_spherical(cart: np.ndarray) -> np.ndarray:
+    """
+    Converts all vectors given in cartesian coordinates to corresponding vectors in spherical polar coordinates,
+    and remove non-unique vectors.
+    Inputs:
+        cart:   np.ndarray of shape (N, 3)
+                cart[i] = [x, y, z]
+    Outputs:
+        sph:    np.ndarray of shape (N, 3)
+                sph[i] = [r, theta, phi]
+                0 <= theta <= pi, -pi <= phi < pi 
+    """
+    r = np.sqrt(cart[:,0]**2 + cart[:,1]**2 + cart[:,2]**2)
+    theta = np.arccos(cart[:,2]/r)
+    phi = np.arctan2(cart[:,1],cart[:,0])
+    for i,th in enumerate(theta):
+        if th == 0 or round(th, 9) == round(np.pi, 9):
+            phi[i] = 0
+        if round(phi[i],9) == round(np.pi, 9): 
+            phi[i] = -np.pi
+    return np.transpose([r, theta, phi])
+
 def construct_theta_bins(N_theta: int = 7, N_phi: int = 8) -> np.ndarray:
     """
     Construct bin edges in theta, such that the z and -z axis are endpoints, and each bin center
@@ -53,7 +75,7 @@ def construct_all_solid_angles(N_theta: int = 7, N_phi: int = 8) -> np.ndarray:
     if not N_theta%2:
         logging.info('! WARNING: Given N_theta = {} is even and will not contain points in the x-y plane.\nThe accuracy of the dielectric function will remain unaffected.'.format(N_theta))
     theta_bins = construct_theta_bins(N_theta, N_phi)
-    phi_bins = np.arange(0, 1., 1./N_phi)*2*np.pi
+    phi_bins = np.arange(-0.5, 0.5, 1./N_phi)*2*np.pi #-pi <= phi <pi
     solid_angles = []
     for theta in theta_bins:
         if theta == 0 or round(theta, 9) == round(np.pi, 9):
@@ -63,7 +85,7 @@ def construct_all_solid_angles(N_theta: int = 7, N_phi: int = 8) -> np.ndarray:
                 solid_angles.append([theta, phi])
     return np.array(solid_angles)
 
-def gen_q_vectors(cartesian=True) -> np.ndarray:
+def gen_bin_centers(cartesian=True) -> np.ndarray:
     Omega = construct_all_solid_angles(parmt.N_theta, parmt.N_phi)
     qr = np.arange(parmt.dq*0.5, parmt.q_max + parmt.dq*0.5, parmt.dq)
     qra = []

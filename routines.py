@@ -588,7 +588,7 @@ def include_bands():
                 raise Exception(f'The specified number of conduction bands to include ({parmt.numcon}) is larger than the number of conduction bands obtained from the DFT calculation ({num_bands - num_occ_bands}). To increase the number of conduction bands, consider using a larger basis set. Check input parameters "numcon" and "mybasis", and DFT output file mo_occ_i.npy.')
 
         f_i = mo_occ_i[0][0] #occupancy of valence bands
-    else:
+    else: #not implemented error
         raise Exception('Occupancy of molecular orbitals was found to vary with k. Partially filled bands may cause issues determining occupied and unoccupied states, especially since k_f is different from k_i. Check mo_occ_i.npy.')
     return num_all_occ, num_occ_bands, num_unocc_bands, f_i
 
@@ -756,3 +756,41 @@ def RPA_dielectric(q, dark_objects, eps):
         eps_G_id = np.concatenate((G_id_lfe, G_id_no_lfe)) 
         eps[q,E] = np.concatenate((eps_lfe, eps_no_lfe))[np.argsort(eps_G_id)] #resorts so eps[G] is in same order as original G_vectors
     return eps
+
+def cartesian_to_spherical(cart: np.ndarray) -> np.ndarray:
+    """
+    Converts all vectors given in cartesian coordinates to corresponding vectors in spherical polar coordinates,
+    and remove non-unique vectors.
+    Inputs:
+        cart:   np.ndarray of shape (N, 3)
+                cart[i] = [x, y, z]
+    Outputs:
+        sph:    np.ndarray of shape (N, 3)
+                sph[i] = [r, theta, phi]
+                0 <= theta <= pi, -pi <= phi < pi 
+    """
+    r = np.sqrt(cart[:,0]**2 + cart[:,1]**2 + cart[:,2]**2)
+    theta = np.arccos(cart[:,2]/r)
+    phi = np.arctan2(cart[:,1],cart[:,0])
+    for i,th in enumerate(theta):
+        if th == 0 or round(th, 9) == round(np.pi, 9):
+            phi[i] = 0
+        if round(phi[i],9) == round(np.pi, 9): 
+            phi[i] = -np.pi
+    return np.transpose([r, theta, phi])
+
+def bin_q(q, G_vectors, bin_centers):
+    """
+    Bin centers currently generated in tests
+    """
+    #convert q+G to spherical coords
+    qG_sh = cartesian_to_spherical(q + G_vectors)
+    #determine closest r bin centers
+    np.round(qG_sh[:,0]/parmt.dq)
+    r_l = (np.round(qG_sh[:,0]/parmt.dq) - 0.5)*parmt.dq
+    r_g = (np.round(qG_sh[:,0]/parmt.dq) + 0.5)*parmt.dq
+
+    #determine closest solid angles 
+
+    #match to bins
+    #record list of all bins q+G contributes to with weights
