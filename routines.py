@@ -555,7 +555,7 @@ def primgauss_1D_overlaps(dark_objects: dict):
     logging.info("Generated overlaps of 1D primitive gaussians.")
     return 
 
-def include_bands():
+def get_band_indices():
     """
     Outputs:
         num_all_occ:        int: total number of occupied (valence) bands obtained from DFT calculation
@@ -564,37 +564,41 @@ def include_bands():
         f_i:                int: occupancy of initial states: f_{ik} factor assuming temperature = 0K
     """
     dft_path = parmt.store + '/DFT/'
-    mo_occ_i = np.load(dft_path + 'mo_coeff_i.npy')
+    mo_occ_i = np.load(dft_path + 'mo_occ_i.npy')
 
-    if (mo_occ_i == mo_occ_i[0]).all():
-        num_bands = mo_occ_i.shape[1]
-        num_all_occ = sum(mo_occ_i[0] != 0) #total number of occupied bands from dft calculation
+    if not (mo_occ_i == mo_occ_i[0]).all():
+        raise NotImplementedError('Occupancy of bands was found to vary with k. Partially filled bands may cause issues determining occupied and unoccupied states, especially since k_f is different from k_i. Check mo_occ_i.npy.')
+    
+    if mo_occ_i[0][0] != 2:
+        raise NotImplementedError('Occupancy of filled bands is not 2. Spin-dependent DFT has not been implemented. Check mo_occ_i.npy if you expect filled bands to have an occupancy of 2.')
+    
+    num_bands = mo_occ_i.shape[1]
+    num_all_val = sum(mo_occ_i[0] != 0) #total number of occupied bands from dft calculation
 
-        if parmt.numval == 'all':
-            num_occ_bands = num_all_occ
-        else:
-            if parmt.numval <= num_all_occ:
-                num_occ_bands = parmt.numval
-            else:
-                raise Exception(f'The specified number of valence bands to include ({parmt.numval}) is larger than the number of valence bands obtained from the DFT calculation ({num_all_occ}). Check input parameter "numval" and DFT output file mo_occ_i.npy.')
-        f_i = mo_occ_i[0][num_all_occ-1] #occupancy of valence bands
+    if parmt.numval == 'all':
+        num_val = num_all_val
+    elif parmt.numval > num_all_val:
+        raise Exception(f'The specified number of valence bands to include ({parmt.numval}) is larger than the number of valence bands obtained from the DFT calculation ({num_all_val}). Check input parameter "numval" and DFT output file mo_occ_i.npy.')
+    else:
+        num_val = parmt.numval
+    
+    if parmt.numcon == 'all':
+        num_con = num_bands - num_all_val
+    elif parmt.numcon > num_bands - num_all_val:
+        raise Exception(f'The specified number of conduction bands to include ({parmt.numcon}) is larger than the number of conduction bands obtained from the DFT calculation ({num_bands - num_all_val}). To increase the number of conduction bands, consider using a larger basis set. Check input parameters "numcon" and "mybasis", and DFT output file mo_occ_i.npy.')
+    else:
+        num_con = parmt.numcon
 
-        if parmt.numcon == 'all':
-            num_unocc_bands = num_bands - num_occ_bands
-        else:
-            if parmt.numcon <= num_bands - num_all_occ:
-                num_unocc_bands = parmt.numcon
-            else:
-                raise Exception(f'The specified number of conduction bands to include ({parmt.numcon}) is larger than the number of conduction bands obtained from the DFT calculation ({num_bands - num_occ_bands}). To increase the number of conduction bands, consider using a larger basis set. Check input parameters "numcon" and "mybasis", and DFT output file mo_occ_i.npy.')
+    ivaltop = num_all_val-1 #index of the highest valence band included
+    ivalbot = ivaltop-num_val+1 #index of the lowest valence band included
+    iconbot = ivaltop+1 #index of the lowest conduction band included
+    icontop = iconbot+num_con-1 #index of the highest conduction band included
 
-        f_i = mo_occ_i[0][0] #occupancy of valence bands
-    else: #not implemented error
-        raise Exception('Occupancy of molecular orbitals was found to vary with k. Partially filled bands may cause issues determining occupied and unoccupied states, especially since k_f is different from k_i. Check mo_occ_i.npy.')
-    return num_all_occ, num_occ_bands, num_unocc_bands, f_i
+    np.save(parmt.store + '/bands.npy', np.array([ivalbot, ivaltop, iconbot, icontop]))
 
 def dirac_delta(E, delE):
     """
-    Triange approximation of dirac delta function used to calculate imaginary part of dielectric function. The width is determined by parmt.dE.
+    Triangle approximation of dirac delta function used to calculate imaginary part of dielectric function. The width is determined by parmt.dE.
 
     Inputs:
     E:  float: energy of eps(q,E)
@@ -685,21 +689,22 @@ def RPA_susceptibility(q, E, G_id, Gp_id, dark_objects, eta_q):
     Outputs:
     chi:    complex: Kohn-Sham susceptibility, Eq.() 
     """
-    num_all_occ, num_occ_bands, num_unocc_bands, f_i = include_bands()
+    ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
 
     dft_path = parmt.store + '/DFT/'
-    mo_en_i = np.load(dft_path + 'mo_en_i.npy')[:,num_all_occ-num_occ_bands:num_all_occ] #only keeps energies for last num_occ_bands valence bands in memory
-    mo_en_f = np.load(dft_path + 'mo_en_f.npy')[:,num_all_occ:num_all_occ+num_unocc_bands] #only keeps energies for first num_unocc_bands conduction bands in memory
+    mo_en_i = np.load(dft_path + 'mo_en_i.npy')[:,ivalbot:ivaltop] #only keeps energies for last num_occ_bands valence bands in memory
+    mo_en_f = np.load(dft_path + 'mo_en_f.npy')[:,iconbot:icontop] #only keeps energies for first num_unocc_bands conduction bands in memory
 
     chi = 0
     for k_pair_id, k_pair in dark_objects['unique_q'][q]: 
-        for i in range(num_occ_bands):
-            for j in range(num_unocc_bands):
+        for i in range(ivaltop-ivalbot):
+            for j in range(icontop-iconbot):
                 delE = mo_en_f[k_pair[1],j] - mo_en_i[k_pair[0],i] #initial to final state transition energy
+                chi_num = 2*np.conjugate(eta_q[G_id, k_pair_id, i, j])*eta_q[Gp_id, k_pair_id, i, j]
                 if delE != E: #only calculates real part if the denominator is not exactly 0
-                    chi += f_i*np.conjugate(eta_q[G_id, k_pair_id, i, j])*eta_q[Gp_id, k_pair_id, i, j] / (E - delE) #real part
+                    chi += chi_num / (E - delE) #real part
                 if abs(delE) < parmt.dE:
-                    chi += 1j*(-np.pi)*dirac_delta(E, delE) #imaginary part
+                    chi += 1j*(-np.pi)*dirac_delta(E, delE)*chi_num #imaginary part
     return chi
 
 def RPA_dielectric(q, dark_objects, eps):
@@ -717,10 +722,10 @@ def RPA_dielectric(q, dark_objects, eps):
     Outputs:
         eps:            dict[q,E]: epsilon_{GG}(q,E) 
     """
-    num_all_occ, num_occ_bands, num_unocc_bands, f_i = include_bands()
+    ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
     dft_path = parmt.store + '/DFT/'
-    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,num_all_occ-num_occ_bands:num_all_occ,:]
-    mo_coeff_f = np.load(dft_path + 'mo_coeff_f.npy')[:,num_all_occ:num_all_occ+num_unocc_bands,:]
+    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,ivalbot:ivaltop,:]
+    mo_coeff_f = np.load(dft_path + 'mo_coeff_f.npy')[:,iconbot:icontop,:]
     k2 = np.load(parmt.store + '/k-pts_f.npy')
 
     eta_q = get_3D_overlaps(q, dark_objects, mo_coeff_i, mo_coeff_f, k2) #all 3D overlap integrals eta
@@ -743,10 +748,10 @@ def RPA_dielectric_lfe(q, dark_objects, eps):
     Outputs:
         eps:            dict[q,E]: epsilon_{GG}(q,E) 
     """
-    num_all_occ, num_occ_bands, num_unocc_bands, f_i = include_bands()
+    ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
     dft_path = parmt.store + '/DFT/'
-    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,num_all_occ-num_occ_bands:num_all_occ,:]
-    mo_coeff_f = np.load(dft_path + 'mo_coeff_f.npy')[:,num_all_occ:num_all_occ+num_unocc_bands,:]
+    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,ivalbot:ivaltop,:]
+    mo_coeff_f = np.load(dft_path + 'mo_coeff_f.npy')[:,iconbot:icontop,:]
     k2 = np.load(parmt.store + '/k-pts_f.npy')
 
     eta_q = get_3D_overlaps(q, dark_objects, mo_coeff_i, mo_coeff_f, k2) #all 3D overlap integrals eta
