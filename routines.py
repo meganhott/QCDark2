@@ -541,7 +541,7 @@ def primgauss_1D_overlaps(dark_objects: dict):
     Rv = dark_objects['R_vectors']
     logging.info("Generating overlaps of 1D primitve gaussians.")
     makedir(parmt.store + '/primgauss_1d_integrals/')
-    with mp.get_context('fork').Pool(10) as p:
+    with mp.get_context('fork').Pool(mp.cpu_count()) as p:
         for d in range(3):
             qu, Gu = get_all_unique_nums_in_array(q[:,d], round_to=10), get_all_unique_nums_in_array(G[:,d], round_to=10)
             qG = (qu[:, None] + Gu[None, :]).reshape((-1))
