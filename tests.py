@@ -485,6 +485,59 @@ def get_eps():
             eps[q,E] = np.concatenate((eps_lfe, eps_no_lfe))[np.argsort(eps_G_id)] #resorts so eps[G] is in same order as original G_vectors
     return None
 
+def RPA_dielectric_combinedLFE(q, dark_objects, eps):
+    """
+    Includes LFEs up to specified cutoff. 
+
+    Calculates epsilon_{GG}(q, E) for all energies E and G-vectors G at single 1BZ q-vector.
+
+    Inputs:
+        q:              np.ndarray of shape (3,): 1BZ q-vector
+        dark_objects:   dict:
+        eps:            dict[q,E]: epsilon_{GG}(q,E)
+    Outputs:
+        eps:            dict[q,E]: epsilon_{GG}(q,E) 
+    """
+    num_all_occ, num_occ_bands, num_unocc_bands, f_i = include_bands()
+    dft_path = parmt.store + '/DFT/'
+    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,num_all_occ-num_occ_bands:num_all_occ,:]
+    mo_coeff_f = np.load(dft_path + 'mo_coeff_f.npy')[:,num_all_occ:num_all_occ+num_unocc_bands,:]
+    k2 = np.load(parmt.store + '/k-pts_f.npy')
+
+    eta_q = get_3D_overlaps(q, dark_objects, mo_coeff_i, mo_coeff_f, k2) #all 3D overlap integrals eta
+
+    #determine all G vectors with |q + G| < lfe_q_cutoff to include in LFE calculation
+    G_id_no_lfe = []
+    G_id_lfe = []
+    if parmt.lfe_q_cutoff is not None:
+        for G_id,G in enumerate(dark_objects['G_vectors']):
+            if np.linalg.norm(q+G) < parmt.lfe_q_cutoff:
+                G_id_lfe.append(G_id)
+            else:
+                G_id_no_lfe.append(G_id)
+
+    num_G_lfe = len(G_id_lfe)
+    num_G_no_lfe = len(G_id_no_lfe)
+    eps_lfe_matrix = np.zeros((num_G_lfe,num_G_lfe))
+    eps_no_lfe = np.zeros(num_G_no_lfe)
+
+    for E in np.arange(parmt.dE, parmt.E_max+parmt.dE, parmt.dE): #energies - problem at E = 0 so not inlcuded?
+        for G_id_i, G_id in enumerate(G_id_no_lfe): #Non-LFE: only calculate diagonal elements Gp=G
+            G = dark_objects['G_vectors'][G_id]
+            eps_no_lfe[G_id_i] = 1 - (4*np.pi)**2 / (np.dot(q,q)+np.dot(G,G)) * RPA_susceptibility(q,E,G_id,G_id,dark_objects,eta_q)
+
+        for G_id_i, G_id in enumerate(G_id_lfe): #LFE
+            G = dark_objects['G_vectors'][G_id]
+            for Gp_id_i, Gp_id in enumerate(G_id_lfe):
+                Gp = dark_objects['G_vectors'][Gp_id]
+                eps_lfe_matrix[G_id_i,Gp_id_i] = -(4*np.pi)**2 / np.linalg.norm(q+G) / np.linalg.norm(q+Gp) * RPA_susceptibility(q,E,G_id,Gp_id,dark_objects,eta_q)
+        eps_lfe_matrix = eps_lfe_matrix + np.identity(num_G_lfe)
+        eps_lfe = 1/np.diag(np.linalg.inv(eps_lfe_matrix))
+        
+        eps_G_id = np.concatenate((G_id_lfe, G_id_no_lfe)) 
+        eps[q,E] = np.concatenate((eps_lfe, eps_no_lfe))[np.argsort(eps_G_id)] #resorts so eps[G] is in same order as original G_vectors
+    return eps
+
 
 def primgauss_1D_overlaps(cell: pbcgto.cell.Cell, q: np.ndarray, G: np.ndarray) -> np.ndarray:
     """

@@ -706,9 +706,35 @@ def RPA_dielectric(q, dark_objects, eps):
     """
     To Do:
     - Need to bin q+G as we go instead of storing in eps dict: dict for all q and E gets > 1TB if all are calculated first
-    - Implement multiprocessing for this function - should we parallelize over E instead of q? This way we only need to keep track of sums of epsilon over #bins x #E. After each q is completed, run the binning routine to reduce number of stored values from #G -> #bins.
+    - Implement multiprocessing over G. After each q is completed, run the binning routine to reduce number of stored values from #G -> #bins.
 
-    Calculates epsilon_{GG}(q, E) for all energies E at single 1BZ q-vector.
+    Calculates epsilon_{GG}(q, E) for all energies E and G-vectors G at single 1BZ q-vector. Does not include local field effects.
+
+    Inputs:
+        q:              np.ndarray of shape (3,): 1BZ q-vector
+        dark_objects:   dict:
+        eps:            dict[q,E]: epsilon_{GG}(q,E)
+    Outputs:
+        eps:            dict[q,E]: epsilon_{GG}(q,E) 
+    """
+    num_all_occ, num_occ_bands, num_unocc_bands, f_i = include_bands()
+    dft_path = parmt.store + '/DFT/'
+    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,num_all_occ-num_occ_bands:num_all_occ,:]
+    mo_coeff_f = np.load(dft_path + 'mo_coeff_f.npy')[:,num_all_occ:num_all_occ+num_unocc_bands,:]
+    k2 = np.load(parmt.store + '/k-pts_f.npy')
+
+    eta_q = get_3D_overlaps(q, dark_objects, mo_coeff_i, mo_coeff_f, k2) #all 3D overlap integrals eta
+
+    eps = np.zeros(dark_objects['G_vectors'].shape[0])
+
+    for E in np.arange(parmt.dE, parmt.E_max+parmt.dE, parmt.dE): #energies - problem at E = 0 so not inlcuded?
+        for G_id, G in enumerate(dark_objects['G_vectors']):
+            eps[G_id] = 1 - (4*np.pi)**2 / (np.dot(q,q)+np.dot(G,G)) * RPA_susceptibility(q,E,G_id,G_id,dark_objects,eta_q)
+    return eps
+
+def RPA_dielectric_lfe(q, dark_objects, eps):
+    """
+    Calculates epsilon_{GG}(q, E) for all energies E and G-vectors G at single 1BZ q-vector. Includes local field effects by calculating eps_{GGp}(q,E), then inverting and taking diagonal elements. This cannot be done for large q_max: |q+G| < ~5ame advised.
 
     Inputs:
         q:              np.ndarray of shape (3,): 1BZ q-vector
@@ -735,27 +761,16 @@ def RPA_dielectric(q, dark_objects, eps):
             else:
                 G_id_no_lfe.append(G_id)
 
-    num_G_lfe = len(G_id_lfe)
-    num_G_no_lfe = len(G_id_no_lfe)
-    eps_lfe_matrix = np.zeros((num_G_lfe,num_G_lfe))
-    eps_no_lfe = np.zeros(num_G_no_lfe)
+    num_G = dark_objects['G_vectors'].shape[0]
+    eps_matrix = np.zeros((num_G,num_G))
 
     for E in np.arange(parmt.dE, parmt.E_max+parmt.dE, parmt.dE): #energies - problem at E = 0 so not inlcuded?
-        for G_id_i, G_id in enumerate(G_id_no_lfe): #Non-LFE: only calculate diagonal elements Gp=G
-            G = dark_objects['G_vectors'][G_id]
-            eps_no_lfe[G_id_i] = 1 - (4*np.pi)**2 / (np.dot(q,q)+np.dot(G,G)) * RPA_susceptibility(q,E,G_id,G_id,dark_objects,eta_q)
-
-        for G_id_i, G_id in enumerate(G_id_lfe): #LFE
-            G = dark_objects['G_vectors'][G_id]
-            for Gp_id_i, Gp_id in enumerate(G_id_lfe):
-                Gp = dark_objects['G_vectors'][Gp_id]
-                eps_lfe_matrix[G_id_i,Gp_id_i] = -(4*np.pi)**2 / np.linalg.norm(q+G) / np.linalg.norm(q+Gp) * RPA_susceptibility(q,E,G_id,Gp_id,dark_objects,eta_q)
-        eps_lfe_matrix = eps_lfe_matrix + np.identity(num_G_lfe)
-        eps_lfe = 1/np.diag(np.linalg.inv(eps_lfe_matrix))
-        
-        eps_G_id = np.concatenate((G_id_lfe, G_id_no_lfe)) 
-        eps[q,E] = np.concatenate((eps_lfe, eps_no_lfe))[np.argsort(eps_G_id)] #resorts so eps[G] is in same order as original G_vectors
-    return eps
+        for G_id, G in enumerate(dark_objects['G_vectors']): #LFE
+            for Gp_id, Gp in enumerate(dark_objects['G_vectors']):
+                eps_matrix[G_id,Gp_id] = -(4*np.pi)**2 / np.linalg.norm(q+G) / np.linalg.norm(q+Gp) * RPA_susceptibility(q,E,G_id,Gp_id,dark_objects,eta_q)
+        eps_matrix = eps_matrix + np.identity(num_G)
+        eps_lfe = 1/np.diag(np.linalg.inv(eps_matrix))
+    return eps_lfe
 
 def cartesian_to_spherical(cart: np.ndarray) -> np.ndarray:
     """
