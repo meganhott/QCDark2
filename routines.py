@@ -704,6 +704,10 @@ def RPA_susceptibility(q, E, G_id, Gp_id, dark_objects, eta_q):
 
 def RPA_dielectric(q, dark_objects, eps):
     """
+    To Do:
+    - Need to bin q+G as we go instead of storing in eps dict: dict for all q and E gets > 1TB if all are calculated first
+    - Implement multiprocessing for this function - should we parallelize over E instead of q? This way we only need to keep track of sums of epsilon over #bins x #E. After each q is completed, run the binning routine to reduce number of stored values from #G -> #bins.
+
     Calculates epsilon_{GG}(q, E) for all energies E at single 1BZ q-vector.
 
     Inputs:
