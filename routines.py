@@ -616,8 +616,9 @@ def dirac_delta(E, delE):
 def get_3D_overlaps(q, dark_objects: dict, mo_coeff_i, mo_coeff_f, k_f):
     """
     Work in progress
-    - need to finish vectorizing for each G
-    - implement multiprocessing over G's?
+    - shouldn't sum over i,j,k here - need to move those summations to susceptibility function. This function should return all eta[G,i,j,k_pair_id] for given q
+    - look into einsum optimizations
+    -Implement multiprocessing over G?
 
     Calculates all 3D overlaps eta = <jk'|exp(i(q+G)r)|ik> for a given 1BZ q-vector using stored 1D overlaps
 
@@ -630,9 +631,15 @@ def get_3D_overlaps(q, dark_objects: dict, mo_coeff_i, mo_coeff_f, k_f):
     Outputs:
         eta_q:       dict[G_id, k_pair_id, i, j]: 3D overlaps <jk'|exp(i(q+G)r)|ik>
     """
-    k_pairs = dark_objects['unique_q'][tuple(q)] #all [k1_id,k2_id] pairs such that q = k2[k2_id] - k1[k1_id] 
+    k_pairs = np.array(dark_objects['unique_q'][tuple(q)]) #all [k1_id,k2_id] pairs such that q = k2[k2_id] - k1[k1_id] 
+    ao = dark_objects['all_ao']
 
-    eta_q = {}
+    #Create 0 padded ao_norm*ao_coef
+    for ao_i in ao:
+        ao_all_coef = np.zeros((3,dark_objects['primitive_gaussians'].shape[0]))
+        for dim in range(3):
+            ao_all_coef[dim,ao_i.prim_indices[dim]] = ao_i.norm*ao_i.coef
+        ao_i.all_coef = ao_all_coef #(3,N_tot_primgauss)
 
     unique_Ri = []
     R_id = np.zeros_like(dark_objects['R_vectors'])
@@ -643,40 +650,23 @@ def get_3D_overlaps(q, dark_objects: dict, mo_coeff_i, mo_coeff_f, k_f):
         nR = dark_objects['R_vectors'][:,dim,None] - unique_Ri[dim][None,:]
         R_id[:,dim] = np.sum(nR > 0, axis=1) 
 
+    eta_q = np.zeros(dark_objects['G_vectors'].shape[0])
     for G_id,G in enumerate(dark_objects['G_vectors']): #multiprocessing for this step
         #load in relevant q+G 1D overlaps
         qG = q + G
         q_1d_integrals = []
+        Ri_coef_sum = np.zeros_like(R_id)
         for dim in range(3):
             dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
             q_1d_integrals.append(np.load(dir+'{:.5f}.npy'.format(qG[dim])))
 
-        for k_pair_id,k_pair in enumerate(k_pairs):
-            for i in range(mo_coeff_i.shape[1]): #valence bands
-                for j in range(mo_coeff_f.shape[1]): #conduction bands
-                    tup = tuple([G_id, k_pair_id, i, j])
-                    for a, ao_a in enumerate(dark_objects['all_ao']):
-                        for b, ao_b in enumerate(dark_objects['all_ao']):
-                    
-                            #below replaces f function which summed over primgauss indices m,n
-                    
-                            #building matrix of primgauss coefficients
-                            ao_ab_coeff = np.zeros_like(q_1d_integrals[dim][0,:,:])
-                            ao_ab_coeff[np.ix_(ao_a.prim_indices[dim],ao_b.prim_indices[dim])] = np.tensordot(ao_a.norm*ao_a.coef,ao_b.coef*ao_b.coef,0) 
-                            
-                            np.exp(-1j*k_f[k_pair[1],dim]*unique_Ri[dim])*q_1d_integrals[dim]*np.tensordot(q_1d_integrals,ao_ab_coeff,2)
+            coef_sum = np.einsum('ij,kl,mn,iln,jok,jpm->i',np.exp(-1j*np.tensordot(unique_Ri[dim],k_f[k_pairs[:,1],dim],0)), np.array([ao_i.all_coef[dim] for ao_i in ao]), np.array([ao_i.all_coef[dim] for ao_i in ao]), q_1d_integrals, mo_coeff_i[k_pairs[:,0],:,:], np.conjugate(mo_coeff_f[k_pairs[:,1],:,:])) #(i,j,k,l,m,n,o,p)=(Rd,k_pair,a,m,b,n,i,j) #shape: (#Ru,)
+            #possible einsum optimization with optimize=...
 
-                            #next: sum over R vectors and multiply x,y,z
-                            #go through nR and sum over products
-                            """
-                            eta = 0
-                            for a, ao_a in enumerate(dark_objects['all_ao']):
-                                for b, ao_b in enumerate(dark_objects['all_ao']):
-                                    eta += np.conjugate(mo_coeff_f[k_pair[1], j, b])*mo_coeff_i[k_pair[0], i, a] * 
-                                    
-                                    sum([np.exp(-1j*np.dot(k_f[k_pair[1]], R))*f(ao_a, ao_b, R, q_1d_integrals, unique_Ri) for R in dark_objects['R_vectors']])
-                            eta_q[tup] = eta
-                            """
+            Ri_coef_sum[:,dim] = coef_sum[R_id[:,dim]] #all elements for R_id in one dimension
+        
+        #product of x,y,z terms
+        eta_q[G_id] = np.sum(np.prod(Ri_coef_sum, axis=1)) #figure out how to write with einsum
     return eta_q
 
 
