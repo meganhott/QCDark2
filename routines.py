@@ -615,7 +615,9 @@ def dirac_delta(E, delE):
 
 def get_3D_overlaps(q, dark_objects: dict, mo_coeff_i, mo_coeff_f, k_f):
     """
-    Still need to test!
+    Work in progress
+    - need to finish vectorizing for each G
+    - implement multiprocessing over G's?
 
     Calculates all 3D overlaps eta = <jk'|exp(i(q+G)r)|ik> for a given 1BZ q-vector using stored 1D overlaps
 
@@ -628,50 +630,55 @@ def get_3D_overlaps(q, dark_objects: dict, mo_coeff_i, mo_coeff_f, k_f):
     Outputs:
         eta_q:       dict[G_id, k_pair_id, i, j]: 3D overlaps <jk'|exp(i(q+G)r)|ik>
     """
-    def f(ao_a, ao_b, R_vector, q_1d_integrals, unique_Ri):
-        """
-        Subroutine to calculate 3D primitive Gaussian overlap integral.
-
-        Inputs:
-            ao_a:           AO object
-            ao_b:           AO object
-            R_vector:       np.ndarray of shape (3,)
-            q_1d_integrals: list of 3 np.ndarrays of shape (N_unique_Ri, N_primgauss, N_primgauss): 1D integrals 
-            unique_Ri:      list of 3 np.ndarrays of shape (N_unique_Ri)
-        Output:
-            f_sum:          complex
-        """
-        R_id = [np.where(unique_Ri == R_vector[dim])[0][0] for dim in range(3)] #indices of R vector components in 1D integral arrays
-
-        f_sum = 0
-        for m in range(ao_a.Nprim):
-            for n in range(ao_b.Nprim):
-                f_sum += ao_a.norm[m]*ao_a.coef[m]*ao_b.norm[n]*ao_b.coef[n] * np.prod([q_1d_integrals[dim][R_id[dim],m,n] for dim in range(3)])
-        return f_sum
-
     k_pairs = dark_objects['unique_q'][tuple(q)] #all [k1_id,k2_id] pairs such that q = k2[k2_id] - k1[k1_id] 
 
     eta_q = {}
-    for G_id,G in enumerate(dark_objects['G_vectors']):
+
+    unique_Ri = []
+    R_id = np.zeros_like(dark_objects['R_vectors'])
+    for dim in range(3):
+        dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
+        unique_Ri.append(np.load(dir+'Ru.npy'))
+
+        nR = dark_objects['R_vectors'][:,dim,None] - unique_Ri[dim][None,:]
+        R_id[:,dim] = np.sum(nR > 0, axis=1) 
+
+    for G_id,G in enumerate(dark_objects['G_vectors']): #multiprocessing for this step
         #load in relevant q+G 1D overlaps
         qG = q + G
         q_1d_integrals = []
-        unique_Ri = []
         for dim in range(3):
             dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
-            unique_Ri.append(np.load(dir+'Ru.npy'))
             q_1d_integrals.append(np.load(dir+'{:.5f}.npy'.format(qG[dim])))
 
         for k_pair_id,k_pair in enumerate(k_pairs):
             for i in range(mo_coeff_i.shape[1]): #valence bands
                 for j in range(mo_coeff_f.shape[1]): #conduction bands
                     tup = tuple([G_id, k_pair_id, i, j])
-                    eta = 0
                     for a, ao_a in enumerate(dark_objects['all_ao']):
                         for b, ao_b in enumerate(dark_objects['all_ao']):
-                            eta += np.conjugate(mo_coeff_f[k_pair[1], j, b])*mo_coeff_i[k_pair[0], i, a] * sum([np.exp(-1j*np.dot(k_f[k_pair[1]], R))*f(ao_a, ao_b, R, q_1d_integrals, unique_Ri) for R in dark_objects['R_vectors']])
-                    eta_q[tup] = eta
+                    
+                            #below replaces f function which summed over primgauss indices m,n
+                    
+                            #building matrix of primgauss coefficients
+                            ao_ab_coeff = np.zeros_like(q_1d_integrals[dim][0,:,:])
+                            ao_ab_coeff[np.ix_(ao_a.prim_indices[dim],ao_b.prim_indices[dim])] = np.tensordot(ao_a.norm*ao_a.coef,ao_b.coef*ao_b.coef,0) 
+                            
+                            np.exp(-1j*k_f[k_pair[1],dim]*unique_Ri[dim])*q_1d_integrals[dim]*np.tensordot(q_1d_integrals,ao_ab_coeff,2)
+
+                            #next: sum over R vectors and multiply x,y,z
+                            #go through nR and sum over products
+                            """
+                            eta = 0
+                            for a, ao_a in enumerate(dark_objects['all_ao']):
+                                for b, ao_b in enumerate(dark_objects['all_ao']):
+                                    eta += np.conjugate(mo_coeff_f[k_pair[1], j, b])*mo_coeff_i[k_pair[0], i, a] * 
+                                    
+                                    sum([np.exp(-1j*np.dot(k_f[k_pair[1]], R))*f(ao_a, ao_b, R, q_1d_integrals, unique_Ri) for R in dark_objects['R_vectors']])
+                            eta_q[tup] = eta
+                            """
     return eta_q
+
 
 def RPA_susceptibility(q, E, G_id, Gp_id, dark_objects, eta_q):
     #calc_chi from tests.py
