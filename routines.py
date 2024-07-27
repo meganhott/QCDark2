@@ -616,9 +616,8 @@ def dirac_delta(E, delE):
 def get_3D_overlaps(q, dark_objects: dict, mo_coeff_i, mo_coeff_f, k_f):
     """
     Work in progress
-    - shouldn't sum over i,j,k here - need to move those summations to susceptibility function. This function should return all eta[G,i,j,k_pair_id] for given q
-    - look into einsum optimizations
-    -Implement multiprocessing over G?
+    - Look into einsum optimizations
+    - Implement multiprocessing over G?
 
     Calculates all 3D overlaps eta = <jk'|exp(i(q+G)r)|ik> for a given 1BZ q-vector using stored 1D overlaps
 
@@ -650,7 +649,8 @@ def get_3D_overlaps(q, dark_objects: dict, mo_coeff_i, mo_coeff_f, k_f):
         nR = dark_objects['R_vectors'][:,dim,None] - unique_Ri[dim][None,:]
         R_id[:,dim] = np.sum(nR > 0, axis=1) 
 
-    eta_q = np.zeros(dark_objects['G_vectors'].shape[0])
+    eta_q = np.zeros((dark_objects['G_vectors'].shape[0],k_pairs.shape[0],mo_coeff_i.shape[1],mo_coeff_f.shape[1]))
+
     for G_id,G in enumerate(dark_objects['G_vectors']): #multiprocessing for this step
         #load in relevant q+G 1D overlaps
         qG = q + G
@@ -660,19 +660,23 @@ def get_3D_overlaps(q, dark_objects: dict, mo_coeff_i, mo_coeff_f, k_f):
             dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
             q_1d_integrals.append(np.load(dir+'{:.5f}.npy'.format(qG[dim])))
 
-            coef_sum = np.einsum('ij,kl,mn,iln,jok,jpm->i',np.exp(-1j*np.tensordot(unique_Ri[dim],k_f[k_pairs[:,1],dim],0)), np.array([ao_i.all_coef[dim] for ao_i in ao]), np.array([ao_i.all_coef[dim] for ao_i in ao]), q_1d_integrals, mo_coeff_i[k_pairs[:,0],:,:], np.conjugate(mo_coeff_f[k_pairs[:,1],:,:])) #(i,j,k,l,m,n,o,p)=(Rd,k_pair,a,m,b,n,i,j) #shape: (#Ru,)
+            coef_sum = np.einsum('ij,kl,mn,iln,jok,jpm->ijop',np.exp(-1j*np.tensordot(unique_Ri[dim],k_f[k_pairs[:,1],dim],0)), np.array([ao_i.all_coef[dim] for ao_i in ao]), np.array([ao_i.all_coef[dim] for ao_i in ao]), q_1d_integrals, mo_coeff_i[k_pairs[:,0],:,:], np.conjugate(mo_coeff_f[k_pairs[:,1],:,:])) #(i,j,k,l,m,n,o,p)=(Rd,k_pair,a,m,b,n,i,j) -> (i,j,o,p)=(Rd,k_pair,i,j)
             #possible einsum optimization with optimize=...
 
-            Ri_coef_sum[:,dim] = coef_sum[R_id[:,dim]] #all elements for R_id in one dimension
+            Ri_coef_sum[:,dim] = coef_sum[R_id[:,dim],:,:,:] #all elements for R_id in one dimension
         
         #product of x,y,z terms
-        eta_q[G_id] = np.sum(np.prod(Ri_coef_sum, axis=1)) #figure out how to write with einsum
+        eta_q[G_id,:,:,:] = np.sum(np.prod(Ri_coef_sum, axis=1),axis=0) #(G_id,k_pair,i,j)
     return eta_q
 
 
 def RPA_susceptibility(q, E, G_id, Gp_id, dark_objects, eta_q):
     #calc_chi from tests.py
     """
+    To Do:
+    - Have all E as input 
+    - vectorize calculation
+
     Calculates the Kohn-Sham susceptibility chi^0_{GGp}(q,E)
 
     Inputs:
@@ -704,7 +708,7 @@ def RPA_susceptibility(q, E, G_id, Gp_id, dark_objects, eta_q):
                     chi += 1j*(-np.pi)*dirac_delta(E, delE)*chi_num #imaginary part
     return chi
 
-def RPA_dielectric(q, dark_objects, eps):
+def RPA_dielectric(q, dark_objects):
     """
     To Do:
     - Need to bin q+G as we go instead of storing in eps dict: dict for all q and E gets > 1TB if all are calculated first
@@ -715,9 +719,8 @@ def RPA_dielectric(q, dark_objects, eps):
     Inputs:
         q:              np.ndarray of shape (3,): 1BZ q-vector
         dark_objects:   dict:
-        eps:            dict[q,E]: epsilon_{GG}(q,E)
     Outputs:
-        eps:            dict[q,E]: epsilon_{GG}(q,E) 
+        eps:            np.array of shape (N_energies,N_G_vectors): epsilon_{GG}(q,E) 
     """
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
     dft_path = parmt.store + '/DFT/'
@@ -727,23 +730,22 @@ def RPA_dielectric(q, dark_objects, eps):
 
     eta_q = get_3D_overlaps(q, dark_objects, mo_coeff_i, mo_coeff_f, k2) #all 3D overlap integrals eta
 
-    eps = np.zeros(dark_objects['G_vectors'].shape[0])
+    eps = np.zeros(int(parmt.E_max/parmt.dE+1), dark_objects['G_vectors'].shape[0]) #(E,G)
 
-    for E in np.arange(parmt.dE, parmt.E_max+parmt.dE, parmt.dE): #energies - problem at E = 0 so not inlcuded?
-        for G_id, G in enumerate(dark_objects['G_vectors']):
-            eps[G_id] = 1 - (4*np.pi)**2 / (np.dot(q,q)+np.dot(G,G)) * RPA_susceptibility(q,E,G_id,G_id,dark_objects,eta_q)
+    for G_id, G in enumerate(dark_objects['G_vectors']):
+        for nE, E in enumerate(np.arange(0, parmt.E_max+parmt.dE, parmt.dE)):
+            eps[nE,G_id] = 1 - (4*np.pi)**2 / (np.dot(q,q)+np.dot(G,G)) * RPA_susceptibility(q,E,G_id,G_id,dark_objects,eta_q)
     return eps
 
-def RPA_dielectric_lfe(q, dark_objects, eps):
+def RPA_dielectric_lfe(q, dark_objects):
     """
     Calculates epsilon_{GG}(q, E) for all energies E and G-vectors G at single 1BZ q-vector. Includes local field effects by calculating eps_{GGp}(q,E), then inverting and taking diagonal elements. This cannot be done for large q_max: |q+G| < ~5ame advised.
 
     Inputs:
         q:              np.ndarray of shape (3,): 1BZ q-vector
         dark_objects:   dict:
-        eps:            dict[q,E]: epsilon_{GG}(q,E)
     Outputs:
-        eps:            dict[q,E]: epsilon_{GG}(q,E) 
+        eps:            np.array of shape (N_energies,N_G_vectors): epsilon_{GG}(q,E) 
     """
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
     dft_path = parmt.store + '/DFT/'
@@ -753,25 +755,16 @@ def RPA_dielectric_lfe(q, dark_objects, eps):
 
     eta_q = get_3D_overlaps(q, dark_objects, mo_coeff_i, mo_coeff_f, k2) #all 3D overlap integrals eta
 
-    #determine all G vectors with |q + G| < lfe_q_cutoff to include in LFE calculation
-    G_id_no_lfe = []
-    G_id_lfe = []
-    if parmt.lfe_q_cutoff is not None:
-        for G_id,G in enumerate(dark_objects['G_vectors']):
-            if np.linalg.norm(q+G) < parmt.lfe_q_cutoff:
-                G_id_lfe.append(G_id)
-            else:
-                G_id_no_lfe.append(G_id)
-
     num_G = dark_objects['G_vectors'].shape[0]
     eps_matrix = np.zeros((num_G,num_G))
+    eps_lfe = np.zeros(int(parmt.E_max/parmt.dE+1), num_G) #(E,G)
 
-    for E in np.arange(parmt.dE, parmt.E_max+parmt.dE, parmt.dE): #energies - problem at E = 0 so not inlcuded?
+    for nE, E in enumerate(np.arange(0, parmt.E_max+parmt.dE, parmt.dE)):
         for G_id, G in enumerate(dark_objects['G_vectors']): #LFE
             for Gp_id, Gp in enumerate(dark_objects['G_vectors']):
                 eps_matrix[G_id,Gp_id] = -(4*np.pi)**2 / np.linalg.norm(q+G) / np.linalg.norm(q+Gp) * RPA_susceptibility(q,E,G_id,Gp_id,dark_objects,eta_q)
         eps_matrix = eps_matrix + np.identity(num_G)
-        eps_lfe = 1/np.diag(np.linalg.inv(eps_matrix))
+        eps_lfe[nE,:] = 1/np.diag(np.linalg.inv(eps_matrix))
     return eps_lfe
 
 def cartesian_to_spherical(cart: np.ndarray) -> np.ndarray:

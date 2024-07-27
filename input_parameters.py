@@ -29,16 +29,16 @@ effective_core_potential = None                        # All electron basis sets
 precision = 1e-12                                      # precision parameter, fed to pyscf only
 xcfunc = 'pbe'                                         # Exchange-Correlation Functional
 ik_grid = [4,4,4]                                      # k-grid: resolution of grid points in reciprocal space
-fk_grid = [6,6,6]	                              # Grid size for NSCF calculation
+fk_grid = [6,6,6]	                                   # Grid size for NSCF calculation
 scissor_bandgap = 1.1                                  # If None, scissor correction is not applied, generally float in eV
-lfe_q_cutoff = None                                    # If None, does not incorporate local field effects into the calculation of epsilon. If set to a float in units of alpha*(mass of electron), LFEs will be calculated by inverting eps_{GG'} for 0 < q < LFE_q_cutoff 
+include_lfe = False                                    # If False, does not incorporate local field effects into the calculation of epsilon. If True, LFEs will be calculated by inverting eps_{GG'} 
 
 """parameters for dielectric function calculations,
      including q_max, bin widths, number of bands, etc"""
 dq = 0.02                                              # In units of alpha*(mass of electron) 
-q_max = 25                                              # In units of alpha*(mass of electron) 
+q_max = 25                                             # In units of alpha*(mass of electron) 
 N_theta = 9                                            # Number of theta bins
-N_phi = 16                                              # Number of phi bins
+N_phi = 16                                             # Number of phi bins
 dE = 0.1                                               # In eV
 E_max = 50                                             # In eV
 numval = 'all'                                         # number of valence bands to include in the calculation, 
