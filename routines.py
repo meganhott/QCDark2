@@ -656,8 +656,9 @@ def get_3D_overlaps(q, k_pairs, k_f, mo_coeff_i, mo_coeff_f, dark_objects):
         dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
         unique_Ri.append(np.load(dir+'Ru.npy'))
 
-        nR = dark_objects['R_vectors'][:,dim,None] - unique_Ri[dim][None,:]
-        R_id[:,dim] = np.sum(nR > 0, axis=1) 
+        nR = np.round(dark_objects['R_vectors'][:,dim,None] - unique_Ri[dim][None,:], 10)
+        R_id[:,dim] = np.sum(nR > 0, axis=1)
+    R_id = R_id.astype(int) 
 
     eta_q = np.zeros((dark_objects['G_vectors'].shape[0],k_pairs.shape[0],mo_coeff_i.shape[1],mo_coeff_f.shape[1]))
 
@@ -669,7 +670,7 @@ def get_3D_overlaps(q, k_pairs, k_f, mo_coeff_i, mo_coeff_f, dark_objects):
             dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
             q_1d_integrals = np.load(dir+'{:.5f}.npy'.format(qG[dim]))
 
-            coef_sum = np.einsum('ij,kl,mn,iln,jok,jpm->ijop',np.exp(-1j*np.tensordot(unique_Ri[dim],k_f[k_pairs[:,1],dim],0)), np.array([ao_i.all_coef[dim] for ao_i in ao]), np.array([ao_i.all_coef[dim] for ao_i in ao]), q_1d_integrals, mo_coeff_i[k_pairs[:,0],:,:], np.conjugate(mo_coeff_f[k_pairs[:,1],:,:])) #(i,j,k,l,m,n,o,p)=(Rd,k_pair,a,m,b,n,i,j) -> (i,j,o,p)=(Rd,k_pair,i,j)
+            coef_sum = np.einsum('ij,kl,mn,iln,jok,jpm->ijop',np.exp(-1j*np.tensordot(unique_Ri[dim],k_f[k_pairs[:,1],dim],0)), np.array([ao_i.all_coef[dim] for ao_i in ao]), np.array([ao_i.all_coef[dim] for ao_i in ao]), q_1d_integrals, mo_coeff_i[k_pairs[:,0],:,:], np.conjugate(mo_coeff_f[k_pairs[:,1],:,:]), optimize='optimal') #(i,j,k,l,m,n,o,p)=(Rd,k_pair,a,m,b,n,i,j) -> (i,j,o,p)=(Rd,k_pair,i,j)
             #possible einsum optimization with optimize=...
 
             Ri_coef_sum[:,dim] = coef_sum[R_id[:,dim],:,:,:] #all elements for R_id in one dimension
