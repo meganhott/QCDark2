@@ -660,12 +660,12 @@ def get_3D_overlaps(q, k_pairs, k_f, mo_coeff_i, mo_coeff_f, dark_objects):
         R_id[:,dim] = np.sum(nR > 0, axis=1)
     R_id = R_id.astype(int) 
 
-    eta_q = np.zeros((dark_objects['G_vectors'].shape[0],k_pairs.shape[0],mo_coeff_i.shape[1],mo_coeff_f.shape[1]))
+    eta_q = np.zeros((dark_objects['G_vectors'].shape[0],k_pairs.shape[0],mo_coeff_i.shape[1],mo_coeff_f.shape[1]), dtype='complex')
 
     for G_id,G in enumerate(dark_objects['G_vectors']): #multiprocessing for this step
         #load in relevant q+G 1D overlaps
         qG = q + G
-        Ri_coef_sum = np.zeros_like(R_id)
+        Ri_coef_sum = np.zeros((R_id.shape[0],3,k_pairs.shape[0],mo_coeff_i.shape[1],mo_coeff_f.shape[1]), dtype='complex')
         for dim in range(3):
             dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
             q_1d_integrals = np.load(dir+'{:.5f}.npy'.format(qG[dim]))
@@ -673,12 +673,12 @@ def get_3D_overlaps(q, k_pairs, k_f, mo_coeff_i, mo_coeff_f, dark_objects):
             coef_sum = np.einsum('ij,kl,mn,iln,jok,jpm->ijop',np.exp(-1j*np.tensordot(unique_Ri[dim],k_f[k_pairs[:,1],dim],0)), np.array([ao_i.all_coef[dim] for ao_i in ao]), np.array([ao_i.all_coef[dim] for ao_i in ao]), q_1d_integrals, mo_coeff_i[k_pairs[:,0],:,:], np.conjugate(mo_coeff_f[k_pairs[:,1],:,:]), optimize='optimal') #(i,j,k,l,m,n,o,p)=(Rd,k_pair,a,m,b,n,i,j) -> (i,j,o,p)=(Rd,k_pair,i,j)
             #possible einsum optimization with optimize=...
 
-            Ri_coef_sum[:,dim] = coef_sum[R_id[:,dim],:,:,:] #all elements for R_id in one dimension
+            Ri_coef_sum[:,dim,:,:,:] = coef_sum[R_id[:,dim],:,:,:] #all elements for R_id in one dimension
         
         #product of x,y,z terms
         eta_q[G_id,:,:,:] = np.sum(np.prod(Ri_coef_sum, axis=1),axis=0) #(G_id,k_pair,i,j)
 
-        logging.info('All {} 3D overlaps generated for 1BZ q vector {:.5f}. eta_q is {:.3f} MB in memory.'.format(np.prod(eta_q.shape), q, sys.getsizeof(eta_q)/10**6))
+    logging.info('All {} 3D overlaps generated for 1BZ q vector {}. eta_q is {:.3f} MB in memory.'.format(np.prod(eta_q.shape), list(map(lambda q :str(q),q.round(5))), sys.getsizeof(eta_q)/10**6))
     return eta_q
 
 
