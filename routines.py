@@ -656,7 +656,7 @@ def get_3D_overlaps(qG, k_f, mo_coeff_i, mo_coeff_f, ao_coeff, R_id, unique_Ri, 
     phase = np.einsum('ij,ki->ijk',unique_Ri,k_f) #(dim, Ru, k_pair)
 
     #load in relevant q+G 1D overlaps
-    Ri_coef_sum = np.zeros_like(R_id)
+    Ri_coef_sum = []
     for dim in range(3):
         dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
         q_1d_integrals = np.load(dir+'{:.5f}.npy'.format(qG[dim]))
@@ -668,8 +668,8 @@ def get_3D_overlaps(qG, k_f, mo_coeff_i, mo_coeff_f, ao_coeff, R_id, unique_Ri, 
         coef_sum = np.einsum('ij,kl,mn,iln,jok,jpm->ijop', phase, ao_coeff[dim], ao_coeff[dim], q_1d_integrals, mo_coeff_i, np.conjugate(mo_coeff_f), optimize=path) #(i,j,k,l,m,n,o,p) = (Ru, k_pair, a, m, b, n, i, j) -> (i,j,o,q) = (Ru, k_pair, i, j)
         #coef_sum = np.einsum('ijk,ilm,ino,ijmo,kpl,kqn->ijkpq', phase, ao_coeff, ao_coeff, q_1d_integrals, mo_coeff_i, np.conjugate(mo_coeff_f), optimize=path) #(i,j,k,l,m,n,o,p,q) = (dim, Ru, k_pair, a, m, b, n, i, j) -> (i,j,k,p,q) = (dim, Ru, k_pair, i, j)
 
-        Ri_coef_sum[dim] = coef_sum[R_id[dim]]
-
+        Ri_coef_sum.append(coef_sum[R_id[dim]])
+    Ri_coef_sum = np.array(Ri_coef_sum)
     #Ri_coef_sum = coef_sum[np.array([0,1,2])[:,None],R_id]
 
     #product of x,y,z terms
