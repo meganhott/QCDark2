@@ -358,7 +358,15 @@ def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> li
                 all_ao.append(cartmoments.AO(atom_index = atm_indx, exps = exps, coeffs = coeffs[:,j], ijk = ijk, primgauss = primgauss))
                 i_cart += 1
     logging.info("Generated all cartesian contracted gaussians, number of shells = {}.".format(len(all_ao)))
-    return all_ao
+    li = []
+    for ao_i in all_ao:
+        ao_all_coef = np.zeros((3,primgauss.shape[0]))
+        for dim in range(3):
+            ao_all_coef[dim,ao_i.prim_indices[dim]] = ao_i.norm*ao_i.coef
+        li.append(ao_all_coef)
+    li = np.array(li)
+    logging.info("Reconstructed all cartesian contracted gaussians into coefficients of primitive gaussian objects.")
+    return np.transpose(li, axes = (1, 0, 2))
 
 @time_wrapper
 def KS_electronic_structure(cell: pbcgto.cell.Cell) -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
