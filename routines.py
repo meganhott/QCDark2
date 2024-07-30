@@ -631,7 +631,7 @@ def dirac_delta(E_minus_delE):
     return d
 
 @time_wrapper
-def get_3D_overlaps(q, k_pairs, k_f, mo_coeff_i, mo_coeff_f, dark_objects):
+def get_3D_overlaps_test(q, k_pairs, k_f, mo_coeff_i, mo_coeff_f, dark_objects):
     """
     Work in progress
     - Look into einsum optimizations
@@ -649,16 +649,19 @@ def get_3D_overlaps(q, k_pairs, k_f, mo_coeff_i, mo_coeff_f, dark_objects):
     Outputs:
         eta_q:          np.ndarray of shape (N_G, N_kpairs, N_val_bands, N_con_bands): all 3D overlaps <jk'|exp(i(q+G)r)|ik>
     """
-    ao = dark_objects['all_ao']
+    #only need molecular orbital coefficients for relevant k_pairs
+    mo_coeff_i = mo_coeff_i[k_pairs[:,0]] #(k_pair,i,a)
+    mo_coeff_f = mo_coeff_f[k_pairs[:,1]] #(k_pair,j,b)
 
     #Create 0 padded ao_norm*ao_coef
+    ao = dark_objects['all_ao']
     for ao_i in ao:
         ao_all_coef = np.zeros((3,dark_objects['primitive_gaussians'].shape[0]))
         for dim in range(3):
             ao_all_coef[dim,ao_i.prim_indices[dim]] = ao_i.norm*ao_i.coef
         ao_i.all_coef = ao_all_coef #(3,N_tot_primgauss)
 
-    unique_Ri = []
+    unique_Ri = [] #only need to find unique Ri once since it doesn't depend on q - move to own function?
     R_id = np.zeros_like(dark_objects['R_vectors'])
     for dim in range(3):
         dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
@@ -666,25 +669,32 @@ def get_3D_overlaps(q, k_pairs, k_f, mo_coeff_i, mo_coeff_f, dark_objects):
 
         nR = np.round(dark_objects['R_vectors'][:,dim,None] - unique_Ri[dim][None,:], 10)
         R_id[:,dim] = np.sum(nR > 0, axis=1)
-    R_id = R_id.astype(int) 
+    R_id = np.transpose(R_id).astype(int) #(dim, R_vec) 
+    unique_Ri = np.array(unique_Ri) #(dim, Ru)
 
     eta_q = np.zeros((dark_objects['G_vectors'].shape[0],k_pairs.shape[0],mo_coeff_i.shape[1],mo_coeff_f.shape[1]), dtype='complex')
+    k_f = k_f[k_pairs[:,1]] #only need k_f relevant to q
+    phase = np.einsum('ij,ki->ijk',unique_Ri,k_f) #(dim, Ru, k_pair)
+    ao_all_coef = np.array([ao_i.all_coef[dim] for ao_i in ao]) #(a (AO),m (primgauss))
 
     for G_id,G in enumerate(dark_objects['G_vectors']): #multiprocessing for this step
         #load in relevant q+G 1D overlaps
         qG = q + G
-        Ri_coef_sum = np.zeros((R_id.shape[0],3,k_pairs.shape[0],mo_coeff_i.shape[1],mo_coeff_f.shape[1]), dtype='complex')
+        Ri_coef_sum = np.zeros((3,R_id.shape[0],k_pairs.shape[0],mo_coeff_i.shape[1],mo_coeff_f.shape[1]), dtype='complex') #(dim, R_vec, k_pair, i, j)
+        q_1d_integrals = []
         for dim in range(3):
             dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
-            q_1d_integrals = np.load(dir+'{:.5f}.npy'.format(qG[dim]))
+            q_1d_integrals.append(np.load(dir+'{:.5f}.npy'.format(qG[dim])))
+        q_1d_integrals = np.array(q_1d_integrals) #(dim, Ru, m, n)
 
-            coef_sum = np.einsum('ij,kl,mn,iln,jok,jpm->ijop',np.exp(-1j*np.tensordot(unique_Ri[dim],k_f[k_pairs[:,1],dim],0)), np.array([ao_i.all_coef[dim] for ao_i in ao]), np.array([ao_i.all_coef[dim] for ao_i in ao]), q_1d_integrals, mo_coeff_i[k_pairs[:,0],:,:], np.conjugate(mo_coeff_f[k_pairs[:,1],:,:]), optimize='optimal') #(i,j,k,l,m,n,o,p)=(Rd,k_pair,a,m,b,n,i,j) -> (i,j,o,p)=(Rd,k_pair,i,j)
-            #possible einsum optimization with optimize=...
+        #find optimal path for first G vector?
+        coef_sum = np.einsum('ijk,lm,no,ijmo,kpl,kqn->ijkpq', phase, ao_all_coef, ao_all_coef, q_1d_integrals, mo_coeff_i, np.conjugate(mo_coeff_f), optimize='optimal') #(i,j,k,l,m,n,o,p,q) = (dim, Ru, k_pair, a, m, b, n, i, j) -> (i,j,k,p,q) = (dim, Ru, k_pair, i, j)
 
-            Ri_coef_sum[:,dim,:,:,:] = coef_sum[R_id[:,dim],:,:,:] #all elements for R_id in one dimension
-        
+        #Ri_coef_sum = coef_sum[R_id] #(dim, R_vec, k_pair, i, j)
+        Ri_coef_sum = coef_sum[np.array([0,1,2])[:,None],R_id]
+
         #product of x,y,z terms
-        eta_q[G_id,:,:,:] = np.sum(np.prod(Ri_coef_sum, axis=1),axis=0) #(G_id,k_pair,i,j)
+        eta_q[G_id,:,:,:] = np.sum(np.prod(Ri_coef_sum, axis=0),axis=0) #(G_id,k_pair,i,j)
 
     logging.info('All {} 3D overlaps generated for 1BZ q vector {}. eta_q is {:.3f} MB in memory.'.format(np.prod(eta_q.shape), list(map(lambda q :str(q),q.round(5))), sys.getsizeof(eta_q)/10**6))
     return eta_q
