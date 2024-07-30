@@ -606,6 +606,9 @@ def get_band_indices():
 
 def dirac_delta(E_minus_delE):
     """
+    To Do:
+    - Simplify
+
     Triangle approximation of dirac delta function used to calculate imaginary part of dielectric function. The width is determined by parmt.dE.
 
     Inputs:
@@ -631,18 +634,16 @@ def dirac_delta(E_minus_delE):
     return d
 
 @time_wrapper
-def get_3D_overlaps(qG, k_pairs, k_f, mo_coeff_i, mo_coeff_f, ao_coeff, R_id, unique_Ri):
+def get_3D_overlaps(qG, k_f, mo_coeff_i, mo_coeff_f, ao_coeff, R_id, unique_Ri, path):
     """
     Work in progress
     To Do:
     - Look into einsum optimizations
-    - Actually shouldn't vectorize over dim since we could have different number of unique R in each dimension
 
     Calculates all 3D overlaps eta = <jk'|exp(i(q+G)r)|ik> for a given 1BZ q-vector and given G-vector using stored 1D overlaps
 
     Inputs:
         qG:             np.ndarray of shape (3,): q + G for one q vector in 1BZ and one G vector
-        k_pairs:        np.ndarray of shape (N_kpairs, 2): all (k1, k2) pairs such that k2 - k1 = q
         k_f:            np.ndarray of shape (N_kpairs, 3):
         mo_coeff_i:     np.ndarray of shape (N_kpairs, N_val_bands, N_AO)
         mo_coeff_f:     np.ndarray of shape (N_kpairs, N_con_bands, N_AO)
@@ -655,21 +656,40 @@ def get_3D_overlaps(qG, k_pairs, k_f, mo_coeff_i, mo_coeff_f, ao_coeff, R_id, un
     phase = np.einsum('ij,ki->ijk',unique_Ri,k_f) #(dim, Ru, k_pair)
 
     #load in relevant q+G 1D overlaps
-    q_1d_integrals = []
+    Ri_coef_sum = np.zeros_like(R_id)
     for dim in range(3):
         dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
-        q_1d_integrals.append(np.load(dir+'{:.5f}.npy'.format(qG[dim])))
-    q_1d_integrals = np.array(q_1d_integrals) #(dim, Ru, m, n)
+        q_1d_integrals = np.load(dir+'{:.5f}.npy'.format(qG[dim]))
+        q_1d_integrals = np.array(q_1d_integrals) #(Ru, m, n)
 
-    coef_sum = np.einsum('ijk,ilm,ino,ijmo,kpl,kqn->ijkpq', phase, ao_coeff, ao_coeff, q_1d_integrals, mo_coeff_i, np.conjugate(mo_coeff_f), optimize='optimal') #(i,j,k,l,m,n,o,p,q) = (dim, Ru, k_pair, a, m, b, n, i, j) -> (i,j,k,p,q) = (dim, Ru, k_pair, i, j)
+        #phase = np.einsum('ij,ki->ijk',unique_Ri,k_f) #(dim, Ru, k_pair)
+        phase = np.tensordot(unique_Ri[dim],k_f[:,dim], axis=0) #(Ru, k_pair)
 
-    Ri_coef_sum = coef_sum[np.array([0,1,2])[:,None],R_id]
+        coef_sum = np.einsum('ij,kl,mn,iln,jok,jpm->ijop', phase, ao_coeff[dim], ao_coeff[dim], q_1d_integrals, mo_coeff_i, np.conjugate(mo_coeff_f), optimize=path) #(i,j,k,l,m,n,o,p) = (Ru, k_pair, a, m, b, n, i, j) -> (i,j,o,q) = (Ru, k_pair, i, j)
+        #coef_sum = np.einsum('ijk,ilm,ino,ijmo,kpl,kqn->ijkpq', phase, ao_coeff, ao_coeff, q_1d_integrals, mo_coeff_i, np.conjugate(mo_coeff_f), optimize=path) #(i,j,k,l,m,n,o,p,q) = (dim, Ru, k_pair, a, m, b, n, i, j) -> (i,j,k,p,q) = (dim, Ru, k_pair, i, j)
+
+        Ri_coef_sum[dim] = coef_sum[R_id[dim]]
+
+    #Ri_coef_sum = coef_sum[np.array([0,1,2])[:,None],R_id]
 
     #product of x,y,z terms
     eta_qG = np.sum(np.prod(Ri_coef_sum, axis=0),axis=0) #(k_pair,i,j)
 
     #logging.info('All {} 3D overlaps generated for q+G vector {}. eta_qG is {:.3f} MB in memory.'.format(np.prod(eta_qG.shape), list(map(lambda qG :str(qG),qG.round(5))), sys.getsizeof(eta_qG)/10**6))
-    return eta_qG
+    return eta_qG, path
+
+def find_3D_overlap_path(N_Ru, N_kpair, ao_coeff, N_val, N_con):
+    """
+    Inputs:
+    N_Ru: number of unique R in one direction
+    N_kpair: number of k pairs for one q vector
+    ao_coeff: (3, N_AO, N_primgauss)
+    N_val: number of valence bands (i)
+    N_con: number of conduction bands (j)
+    """
+    path = np.einsum_path('ij,kl,mn,iln,jok,jpm->ijop', np.zeros((N_Ru,N_kpair)), ao_coeff[0], ao_coeff[0], np.zeros((N_Ru,ao_coeff.shape[2],ao_coeff.shape[2])), np.zeros((N_kpair,N_val,ao_coeff.shape[1])), np.zeros((N_kpair,N_con,ao_coeff.shape[1])), optimize='optimal')[0] #(i,j,k,l,m,n,o,p) = (Ru, k_pair, a, m, b, n, i, j) -> (i,j,o,q) = (Ru, k_pair, i, j)
+
+    return path
 
 
 def RPA_susceptibility(E, G_id, Gp_id, k_pairs, mo_en_i, mo_en_f, eta_q):
@@ -781,6 +801,9 @@ def initialize_RPA_dielectric(dark_objects):
 
     R_id, unique_Ri = load_unique_R(R_vectors)
 
+    #find optimal einsum path
+    path = find_3D_overlap_path(unique_Ri.shape[1], np.array(unique_q[0]).shape[0], ao_all_coeff, mo_coeff_i.shape[1], mo_coeff_f.shape[1])
+
     #initialize bins
     
     if parmt.include_lfe:
@@ -802,7 +825,7 @@ def initialize_RPA_dielectric(dark_objects):
 
         #Compute epsilon for all G_q
         for G in G_q:
-            eta_qG = get_3D_overlaps(q+G, k_pairs, k_f_q, mo_coeff_i_q, mo_coeff_f_q, ao_all_coeff, R_id, unique_Ri) #all 3D overlap integrals #(k_pair,i,j)
+            eta_qG = get_3D_overlaps(q+G, k_f_q, mo_coeff_i_q, mo_coeff_f_q, ao_all_coeff, R_id, unique_Ri, path) #all 3D overlap integrals #(k_pair,i,j)
 
             #still need to tweak RPA_dielectric
             eps = RPA_eps(np.array(q), G_vectors, k_pairs, mo_en_i, mo_en_f, eta_qG) #(nE,G_id)
