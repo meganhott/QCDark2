@@ -529,7 +529,7 @@ def store_primgauss_1D(dim: int, qG: np.ndarray, results: np.ndarray, Ru: np.nda
     dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
     makedir(dir)
     np.save(dir + 'Ru', Ru)
-    results = np.transpose(results, axes = (3, 0, 1, 2))
+    results = np.transpose(results, axes = (2, 1, 0, 3))
     for q, res in zip(qG, results):
         np.save(dir + '{:.5f}'.format(q), res)
     return None
@@ -547,6 +547,7 @@ def primgauss_1D_overlaps(dark_objects: dict):
     atom_locs = dark_objects['atom_locs']
     q, G = np.load(parmt.store + '/unique_q.npy'), dark_objects['G_vectors']
     Rv = dark_objects['R_vectors']
+    aos = dark_objects['all_ao']
     logging.info("Generating overlaps of 1D primitve gaussians.")
     makedir(parmt.store + '/primgauss_1d_integrals/')
     with mp.get_context('fork').Pool(mp.cpu_count()) as p:
@@ -559,6 +560,8 @@ def primgauss_1D_overlaps(dark_objects: dict):
             logging.info('\tDimension = {}:\n\t\tNumber of unique q = {};\n\t\tNumber of unique R = {}.'.format(d, qG.size, Ru.size))
             res = p.map(partial(cartmoments.primgauss_1D_overlaps_uR, primindices = primindices, q = qG, atom_locs = atom_locs[:,d]), Ru)
             res = np.array(res)
+            res = np.tensordot(aos[d], res, axes = (1, 1))
+            res = np.tensordot(res, aos[d], axes = (2, 1))
             store_primgauss_1D(d, qG, res, Ru)
     logging.info("Generated overlaps of 1D primitive gaussians.")
     return 
@@ -653,10 +656,8 @@ def get_3D_overlaps(qG, k_f, mo_coeff_i, mo_coeff_f, ao_coeff, R_id, unique_Ri, 
     Outputs:
         eta_qG:         np.ndarray of shape (N_kpairs, N_val_bands, N_con_bands): all 3D overlaps <jk'|exp(i(q+G)r)|ik>
     """
-    phase = np.einsum('ij,ki->ijk',unique_Ri,k_f) #(dim, Ru, k_pair)
-
     #load in relevant q+G 1D overlaps
-    Ri_coef_sum = np.zeros(R_id.shape + mo_coeff_i.shape[:2] + (mo_coeff_f.shape[1]), dtype = np.complex128)
+    Ri_coef_sum = np.zeros((R_id.shape[0], R_id.shape[1], mo_coeff_i.shape[0], mo_coeff_i.shape[1], mo_coeff_f.shape[1]), dtype = np.complex128)
     for dim in range(3):
         dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
         q_1d_integrals = np.load(dir+'{:.5f}.npy'.format(qG[dim]))
@@ -665,7 +666,7 @@ def get_3D_overlaps(qG, k_f, mo_coeff_i, mo_coeff_f, ao_coeff, R_id, unique_Ri, 
         #phase = np.einsum('ij,ki->ijk',unique_Ri,k_f) #(dim, Ru, k_pair)
         phase = np.tensordot(unique_Ri[dim],k_f[:,dim], axis=0) #(Ru, k_pair)
 
-        coef_sum = np.einsum('ij,kl,mn,iln,jok,jpm->ijop', phase, ao_coeff[dim], ao_coeff[dim], q_1d_integrals, mo_coeff_i, np.conjugate(mo_coeff_f), optimize=path) #(i,j,k,l,m,n,o,p) = (Ru, k_pair, a, m, b, n, i, j) -> (i,j,o,q) = (Ru, k_pair, i, j)
+        coef_sum = np.einsum('ij,ikm,jok,jpm->ijop', phase, q_1d_integrals, mo_coeff_i, np.conjugate(mo_coeff_f), optimize=path) #(i,j,k,l,m,n,o,p) = (Ru, k_pair, a, m, b, n, i, j) -> (i,j,o,q) = (Ru, k_pair, i, j)
         #coef_sum = np.einsum('ijk,ilm,ino,ijmo,kpl,kqn->ijkpq', phase, ao_coeff, ao_coeff, q_1d_integrals, mo_coeff_i, np.conjugate(mo_coeff_f), optimize=path) #(i,j,k,l,m,n,o,p,q) = (dim, Ru, k_pair, a, m, b, n, i, j) -> (i,j,k,p,q) = (dim, Ru, k_pair, i, j)
 
         Ri_coef_sum[dim] += coef_sum[R_id[dim]]
@@ -843,7 +844,6 @@ def load_unique_R(R_vectors):
         nR = np.round(R_vectors[:,dim,None] - unique_Ri[dim][None,:], 10)
         R_id[:,dim] = np.sum(nR > 0, axis=1)
     R_id = np.transpose(R_id).astype(int) #(dim, R_vec) 
-    unique_Ri = np.array(unique_Ri) #(dim, Ru)
     return R_id, unique_Ri
 
 
