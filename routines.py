@@ -631,7 +631,7 @@ def dirac_delta(E_minus_delE):
     return d
 
 @time_wrapper
-def get_3D_overlaps_test(q, k_pairs, k_f, mo_coeff_i, mo_coeff_f, dark_objects):
+def get_3D_overlaps(q, k_pairs, k_f, mo_coeff_i, mo_coeff_f, dark_objects):
     """
     Work in progress
     - Look into einsum optimizations
