@@ -656,7 +656,7 @@ def get_3D_overlaps(qG, k_f, mo_coeff_i, mo_coeff_f, ao_coeff, R_id, unique_Ri, 
     phase = np.einsum('ij,ki->ijk',unique_Ri,k_f) #(dim, Ru, k_pair)
 
     #load in relevant q+G 1D overlaps
-    Ri_coef_sum = np.zeros(phase.shape + (mo_coeff_i.shape[1]) + (mo_coeff_f.shape[1]), dtype = np.complex128)
+    Ri_coef_sum = np.zeros(R_id.shape + (phase.shape[2]) + (mo_coeff_i.shape[1]) + (mo_coeff_f.shape[1]), dtype = np.complex128)
     for dim in range(3):
         dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
         q_1d_integrals = np.load(dir+'{:.5f}.npy'.format(qG[dim]))
