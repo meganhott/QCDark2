@@ -5,7 +5,7 @@ from routines import time_wrapper
 
 num_G = 100
 
-def get_3D_overlaps_einsum(qG, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, optimizer):
+def get_3D_overlaps_einsum(qG, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, opt):
     """
     Work in progress
     To Do:
@@ -29,53 +29,38 @@ def get_3D_overlaps_einsum(qG, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, opt
         dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
         q_1d_integrals = np.load(dir+'{:.5f}.npy'.format(qG[dim]))
         phase = np.exp(-1j*np.tensordot(unique_Ri[dim],k_f[:,dim], axes=0)) #(Ru, k_pair)
-        coef_sum = np.einsum('Rk,Rab->Rkab', phase, q_1d_integrals, optimize=optimizer) 
+        coef_sum = np.einsum('Rk,Rab->Rkab', phase, q_1d_integrals, optimize=opt[0]) 
         Ri_coef_sum[dim] = coef_sum[R_id[dim]]
     eta_qG = np.sum(np.prod(Ri_coef_sum, axis=0),axis=0) #(k_pair,a,b)
     # Now we should do molecular orbital coefficients.
-    eta_qG = np.einsum('kab,kia,kjb->kij', eta_qG, mo_coeff_i, mo_coeff_f.conj(),optimize=optimizer)
+    eta_qG = np.einsum('kab,kia,kjb->kij', eta_qG, mo_coeff_i, mo_coeff_f.conj(),optimize=opt[1])
     #logging.info('All {} 3D overlaps generated for q+G vector {}. eta_qG is {:.3f} MB in memory.'.format(np.prod(eta_qG.shape), list(map(lambda qG :str(qG),qG.round(5))), sys.getsizeof(eta_qG)/10**6))
     return eta_qG
 
-def get_3D_overlaps_tensordot(qG, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri):
-    """
-    Work in progress
-    To Do:
-    - Optimize!
-    - Look into ao_coefficients (Megan pointed out that we should multiply them after the product.)
-
-    Calculates all 3D overlaps eta = <jk'|exp(i(q+G)r)|ik> for a given 1BZ q-vector and given G-vector using stored 1D overlaps
-
-    Inputs:
-        qG:             np.ndarray of shape (3,): q + G for one q vector in 1BZ and one G vector
-        k_f:            np.ndarray of shape (N_kpairs, 3):
-        mo_coeff_i:     np.ndarray of shape (N_kpairs, N_val_bands, N_AO)
-        mo_coeff_f:     np.ndarray of shape (N_kpairs, N_con_bands, N_AO)
-        R_id:           np.ndarray of shape (3, N_R_vectors)
-        unique_Ri:      np.ndarray of shape (3, N_R_unique
-    Outputs:
-        eta_qG:         np.ndarray of shape (N_kpairs, N_val_bands, N_con_bands): all 3D overlaps <jk'|exp(i(q+G)r)|ik>
-    """
+def get_3D_overlaps_tensordot(qG, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, opt):
     Ri_coef_sum = np.zeros((R_id.shape[0], R_id.shape[1], mo_coeff_i.shape[0], mo_coeff_i.shape[2], mo_coeff_f.shape[2]), dtype = np.complex128) #(3,R_vec,k_pairs,a,b)
     for dim in range(3):
         dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
         q_1d_integrals = np.load(dir+'{:.5f}.npy'.format(qG[dim]))
         phase = np.exp(-1j*np.tensordot(unique_Ri[dim],k_f[:,dim], axes=0)) #(Ru, k_pair)
-        coef_sum = np.einsum('Rk,Rab->Rkab', phase, q_1d_integrals, optimize=optimizer) 
+        coef_sum = np.empty(Ri_coef_sum.shape[1:],dtype='complex')
+        for i in range(unique_Ri[dim].shape[0]):
+            coef_sum[i] = np.tensordot(phase[i], q_1d_integrals[i], axes=0) #outer product (k),(ab) -> (kab)
         Ri_coef_sum[dim] = coef_sum[R_id[dim]]
     eta_qG = np.sum(np.prod(Ri_coef_sum, axis=0),axis=0) #(k_pair,a,b)
     # Now we should do molecular orbital coefficients.
-    eta_qG = np.einsum('kab,kia,kjb->kij', eta_qG, mo_coeff_i, mo_coeff_f.conj(),optimize=optimizer)
-    #logging.info('All {} 3D overlaps generated for q+G vector {}. eta_qG is {:.3f} MB in memory.'.format(np.prod(eta_qG.shape), list(map(lambda qG :str(qG),qG.round(5))), sys.getsizeof(eta_qG)/10**6))
-    return eta_qG
+    eta_qG1 = np.empty((k_f.shape[0],mo_coeff_i.shape[1],mo_coeff_f.shape[1]))
+    for k in range(k_f.shape[0]):
+        eta_qG1[k] = np.tensordot(np.tensordot(mo_coeff_i[k],eta_qG[k], axes=(1,0)), mo_coeff_f.conj()[k], axes=(1,1)) #Inner products over a and b
+    return eta_qG1
     
 @time_wrapper
-def all_3D_overlaps(get_3D_overlaps):
+def all_3D_overlaps(f):
     for G in G_vectors:
         eta_qG = f(np.array(q)+G, k2[k_pairs[:,1]], mo_coeff_i[k_pairs[:,0]], mo_coeff_f[k_pairs[:,1]], R_id, unique_Ri)
 
 
-for f in [get_3D_overlaps_einsum, get_3D_overlaps_tensordot]:
+for f in zip([get_3D_overlaps_einsum, get_3D_overlaps_tensordot], [('optimal','optimal'),None]):
     all_3D_overlaps(f)
 
 
