@@ -7,4 +7,3 @@
 /test
 /run_on_slurm.sh
 /configure_pyscf.py
-/overlaps_test.py
