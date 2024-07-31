@@ -49,7 +49,7 @@ def get_3D_overlaps_tensordot(qG, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, 
         Ri_coef_sum[dim] = coef_sum[R_id[dim]]
     eta_qG = np.sum(np.prod(Ri_coef_sum, axis=0),axis=0) #(k_pair,a,b)
     # Now we should do molecular orbital coefficients.
-    eta_qG1 = np.empty((k_f.shape[0],mo_coeff_i.shape[1],mo_coeff_f.shape[1]))
+    eta_qG1 = np.empty((k_f.shape[0],mo_coeff_i.shape[1],mo_coeff_f.shape[1]), dtype = np.complex128)
     for k in range(k_f.shape[0]):
         eta_qG1[k] = np.tensordot(np.tensordot(mo_coeff_i[k],eta_qG[k], axes=(1,0)), mo_coeff_f.conj()[k], axes=(1,1)) #Inner products over a and b
     return eta_qG1
@@ -57,12 +57,7 @@ def get_3D_overlaps_tensordot(qG, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, 
 @time_wrapper
 def all_3D_overlaps(f):
     for G in G_vectors:
-        eta_qG = f(np.array(q)+G, k2[k_pairs[:,1]], mo_coeff_i[k_pairs[:,0]], mo_coeff_f[k_pairs[:,1]], R_id, unique_Ri)
-
-
-for f in zip([get_3D_overlaps_einsum, get_3D_overlaps_tensordot], [('optimal','optimal'),None]):
-    all_3D_overlaps(f)
-
+        eta_qG = f[0](np.array(q)+G, k2[k_pairs[:,1]], mo_coeff_i[k_pairs[:,0]], mo_coeff_f[k_pairs[:,1]], R_id, unique_Ri, f[1])
 
 
 cell, dark_objects = initialize_cell()
@@ -87,6 +82,9 @@ mo_en_f = np.load(dft_path + 'mo_en_f.npy')[:,iconbot:icontop+1]
 k2 = np.load(parmt.store + '/k-pts_f.npy')
 
 R_id, unique_Ri = routines.load_unique_R(dark_objects['R_vectors'])
+
+for f in zip([get_3D_overlaps_einsum, get_3D_overlaps_tensordot], [('optimal','optimal'),None]):
+    all_3D_overlaps(f)
 
 """
 for G in G_vectors:
