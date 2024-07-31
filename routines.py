@@ -641,7 +641,7 @@ def dirac_delta(E_minus_delE):
     return d
 
 @time_wrapper
-def get_3D_overlaps(qG, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, path):
+def get_3D_overlaps(qG, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri):
     """
     Work in progress
     To Do:
@@ -664,14 +664,14 @@ def get_3D_overlaps(qG, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, path):
     for dim in range(3):
         dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
         q_1d_integrals = np.load(dir+'{:.5f}.npy'.format(qG[dim]))
-        phase = np.exp(-1j*np.tensordot(unique_Ri[dim],k_f[:,dim], axis=0)) #(Ru, k_pair)
+        phase = np.exp(-1j*np.tensordot(unique_Ri[dim],k_f[:,dim], axes=0)) #(Ru, k_pair)
         coef_sum = np.einsum('Rk,Rab->Rkab', phase, q_1d_integrals) 
         Ri_coef_sum[dim] = coef_sum[R_id[dim]]
     eta_qG = np.sum(np.prod(Ri_coef_sum, axis=0),axis=0) #(k_pair,a,b)
     # Now we should do molecular orbital coefficients.
     eta_qG = np.einsum('kab,kia,kjb->kij', eta_qG, mo_coeff_i, mo_coeff_f.conj())
     #logging.info('All {} 3D overlaps generated for q+G vector {}. eta_qG is {:.3f} MB in memory.'.format(np.prod(eta_qG.shape), list(map(lambda qG :str(qG),qG.round(5))), sys.getsizeof(eta_qG)/10**6))
-    return eta_qG, path
+    return eta_qG
 
 def find_3D_overlap_path(N_Ru, N_kpair, ao_coeff, N_val, N_con):
     """
