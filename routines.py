@@ -783,10 +783,10 @@ def initialize_RPA_dielectric(dark_objects):
 
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
     dft_path = parmt.store + '/DFT/'
-    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,ivalbot:ivaltop,:]
-    mo_coeff_f = np.load(dft_path + 'mo_coeff_f.npy')[:,iconbot:icontop,:]
-    mo_en_i = np.load(dft_path + 'mo_en_i.npy')[:,ivalbot:ivaltop]
-    mo_en_f = np.load(dft_path + 'mo_en_f.npy')[:,iconbot:icontop]
+    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,ivalbot:ivaltop+1,:]
+    mo_coeff_f = np.load(dft_path + 'mo_coeff_f.npy')[:,iconbot:icontop+1,:]
+    mo_en_i = np.load(dft_path + 'mo_en_i.npy')[:,ivalbot:ivaltop+1]
+    mo_en_f = np.load(dft_path + 'mo_en_f.npy')[:,iconbot:icontop+1]
     k_f = np.load(parmt.store + '/k-pts_f.npy')
 
     unique_q = dark_objects['unique_q']
