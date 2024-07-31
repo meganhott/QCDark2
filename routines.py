@@ -538,8 +538,12 @@ def store_primgauss_1D(dim: int, qG: np.ndarray, results: np.ndarray, Ru: np.nda
 def primgauss_1D_overlaps(dark_objects: dict):
     """
     Store all 1D primitive gaussians in files. 
-    NOTE: Currently returns one numpy array for all overlaps. This is not good and will not work for anisotropic systems.
-    NOTE: Implement file stores with name parmt.store + '/1d_overlaps/{}_{}.npy'.format(d, q) 
+    parmt.store
+        primgauss_1d_integrals
+            dim_i
+                q+G.npy
+    Each stored array has shape (N_Ru_i, N_AO, N_AO) since primgauss indices have been summed over.
+
     Inputs:
         dark_objects:   dict: equivalent to a class object, except not self-referential.
     """
@@ -656,16 +660,16 @@ def get_3D_overlaps(qG, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, path):
     Outputs:
         eta_qG:         np.ndarray of shape (N_kpairs, N_val_bands, N_con_bands): all 3D overlaps <jk'|exp(i(q+G)r)|ik>
     """
-    Ri_coef_sum = np.zeros((R_id.shape[0], R_id.shape[1], mo_coeff_i.shape[0], mo_coeff_i.shape[1], mo_coeff_f.shape[1]), dtype = np.complex128)
+    Ri_coef_sum = np.zeros((R_id.shape[0], R_id.shape[1], mo_coeff_i.shape[0], mo_coeff_i.shape[2], mo_coeff_f.shape[2]), dtype = np.complex128) #(3,R_vec,k_pairs,a,b)
     for dim in range(3):
         dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
         q_1d_integrals = np.load(dir+'{:.5f}.npy'.format(qG[dim]))
-        phase = np.tensordot(unique_Ri[dim],k_f[:,dim], axis=0) #(Ru, k_pair)
+        phase = np.exp(-1j*np.tensordot(unique_Ri[dim],k_f[:,dim], axis=0)) #(Ru, k_pair)
         coef_sum = np.einsum('Rk,Rab->Rkab', phase, q_1d_integrals) 
         Ri_coef_sum[dim] = coef_sum[R_id[dim]]
-    eta_qG = np.sum(np.prod(Ri_coef_sum, axis=0),axis=0) #(k_pair,i,j)
+    eta_qG = np.sum(np.prod(Ri_coef_sum, axis=0),axis=0) #(k_pair,a,b)
     # Now we should do molecular orbital coefficients.
-    eta_qG = np.einsum('kab,ia,jb->kij', eta_qG, mo_coeff_i, mo_coeff_f.conj())
+    eta_qG = np.einsum('kab,kia,kjb->kij', eta_qG, mo_coeff_i, mo_coeff_f.conj())
     #logging.info('All {} 3D overlaps generated for q+G vector {}. eta_qG is {:.3f} MB in memory.'.format(np.prod(eta_qG.shape), list(map(lambda qG :str(qG),qG.round(5))), sys.getsizeof(eta_qG)/10**6))
     return eta_qG, path
 
