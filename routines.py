@@ -548,6 +548,7 @@ def primgauss_1D_overlaps(dark_objects: dict):
     q, G = np.load(parmt.store + '/unique_q.npy'), dark_objects['G_vectors']
     Rv = dark_objects['R_vectors']
     aos = dark_objects['all_ao']
+    cr = aos**(1./3.)
     logging.info("Generating overlaps of 1D primitve gaussians.")
     makedir(parmt.store + '/primgauss_1d_integrals/')
     with mp.get_context('fork').Pool(mp.cpu_count()) as p:
@@ -560,8 +561,8 @@ def primgauss_1D_overlaps(dark_objects: dict):
             logging.info('\tDimension = {}:\n\t\tNumber of unique q = {};\n\t\tNumber of unique R = {}.'.format(d, qG.size, Ru.size))
             res = p.map(partial(cartmoments.primgauss_1D_overlaps_uR, primindices = primindices, q = qG, atom_locs = atom_locs[:,d]), Ru)
             res = np.array(res)
-            res = np.tensordot(aos[d], res, axes = (1, 1))
-            res = np.tensordot(res, aos[d], axes = (2, 1))
+            res = np.tensordot(cr, res, axes = (1, 1))
+            res = np.tensordot(res, cr, axes = (2, 1))
             store_primgauss_1D(d, qG, res, Ru)
     logging.info("Generated overlaps of 1D primitive gaussians.")
     return 
@@ -637,11 +638,12 @@ def dirac_delta(E_minus_delE):
     return d
 
 @time_wrapper
-def get_3D_overlaps(qG, k_f, mo_coeff_i, mo_coeff_f, ao_coeff, R_id, unique_Ri, path):
+def get_3D_overlaps(qG, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, path):
     """
     Work in progress
     To Do:
-    - Look into einsum optimizations
+    - Optimize!
+    - Look into ao_coefficients (Megan pointed out that we should multiply them after the product.)
 
     Calculates all 3D overlaps eta = <jk'|exp(i(q+G)r)|ik> for a given 1BZ q-vector and given G-vector using stored 1D overlaps
 
@@ -650,31 +652,21 @@ def get_3D_overlaps(qG, k_f, mo_coeff_i, mo_coeff_f, ao_coeff, R_id, unique_Ri, 
         k_f:            np.ndarray of shape (N_kpairs, 3):
         mo_coeff_i:     np.ndarray of shape (N_kpairs, N_val_bands, N_AO)
         mo_coeff_f:     np.ndarray of shape (N_kpairs, N_con_bands, N_AO)
-        ao_coeff:   np.ndarray of shape (3, N_AO, N_primgauss): atomic orbital coefficients in each dimension
         R_id:           np.ndarray of shape (3, N_R_vectors)
         unique_Ri:      np.ndarray of shape (3, N_R_unique
     Outputs:
         eta_qG:         np.ndarray of shape (N_kpairs, N_val_bands, N_con_bands): all 3D overlaps <jk'|exp(i(q+G)r)|ik>
     """
-    #load in relevant q+G 1D overlaps
     Ri_coef_sum = np.zeros((R_id.shape[0], R_id.shape[1], mo_coeff_i.shape[0], mo_coeff_i.shape[1], mo_coeff_f.shape[1]), dtype = np.complex128)
     for dim in range(3):
         dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
         q_1d_integrals = np.load(dir+'{:.5f}.npy'.format(qG[dim]))
-        q_1d_integrals = np.array(q_1d_integrals) #(Ru, m, n)
-
-        #phase = np.einsum('ij,ki->ijk',unique_Ri,k_f) #(dim, Ru, k_pair)
         phase = np.tensordot(unique_Ri[dim],k_f[:,dim], axis=0) #(Ru, k_pair)
-
-        coef_sum = np.einsum('ij,ikm,jok,jpm->ijop', phase, q_1d_integrals, mo_coeff_i, np.conjugate(mo_coeff_f), optimize=path) #(i,j,k,l,m,n,o,p) = (Ru, k_pair, a, m, b, n, i, j) -> (i,j,o,q) = (Ru, k_pair, i, j)
-        #coef_sum = np.einsum('ijk,ilm,ino,ijmo,kpl,kqn->ijkpq', phase, ao_coeff, ao_coeff, q_1d_integrals, mo_coeff_i, np.conjugate(mo_coeff_f), optimize=path) #(i,j,k,l,m,n,o,p,q) = (dim, Ru, k_pair, a, m, b, n, i, j) -> (i,j,k,p,q) = (dim, Ru, k_pair, i, j)
-
-        Ri_coef_sum[dim] += coef_sum[R_id[dim]]
-    #Ri_coef_sum = coef_sum[np.array([0,1,2])[:,None],R_id]
-
-    #product of x,y,z terms
+        coef_sum = np.einsum('Rk,Rab->Rkab', phase, q_1d_integrals) 
+        Ri_coef_sum[dim] = coef_sum[R_id[dim]]
     eta_qG = np.sum(np.prod(Ri_coef_sum, axis=0),axis=0) #(k_pair,i,j)
-
+    # Now we should do molecular orbital coefficients.
+    eta_qG = np.einsum('kab,ia,jb->kij', eta_qG, mo_coeff_i, mo_coeff_f.conj())
     #logging.info('All {} 3D overlaps generated for q+G vector {}. eta_qG is {:.3f} MB in memory.'.format(np.prod(eta_qG.shape), list(map(lambda qG :str(qG),qG.round(5))), sys.getsizeof(eta_qG)/10**6))
     return eta_qG, path
 
