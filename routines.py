@@ -305,7 +305,7 @@ def get_all_unique_vectors_in_array(array: np.ndarray, round_to: int = None) -> 
     return unq
 
 @time_wrapper
-def construct_R_vectors(cell: pbcgto.cell.Cell) -> tuple[np.ndarray, np.ndarray]:
+def construct_R_vectors(cell: pbcgto.cell.Cell) -> np.ndarray:
     """
     Function to construct all R vectors {R_i} relevant to the cell. We use pyscf build in methods and sort the
     R vectors from there.
