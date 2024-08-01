@@ -28,9 +28,9 @@ def initialize_cell() -> tuple[routines.pbcgto.cell.Cell, dict]:
     return cell, dark_objects
 
 def electronic_structure(cell: routines.pbcgto.cell.Cell, dark_objects: dict) -> dict:
-    #kmf = routines.KS_electronic_structure(cell)
-    #routines.KS_non_self_consistent_field(kmf)
-    #routines.convert_to_eV_and_scissor(cell)
+    kmf = routines.KS_electronic_structure(cell)
+    routines.KS_non_self_consistent_field(kmf)
+    routines.convert_to_eV_and_scissor(cell)
     dark_objects['unique_q'] = routines.get_1BZ_q_points(cell)
     return dark_objects
 
