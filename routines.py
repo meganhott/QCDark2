@@ -640,7 +640,6 @@ def dirac_delta(E_minus_delE):
     
     return d
 
-@time_wrapper
 def get_3D_overlaps(q, G, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri):
     """
     Work in progress
@@ -704,7 +703,6 @@ def RPA_susceptibility(E, eta_qG, eta_qGp, mo_en_i, mo_en_f):
     chi = np.einsum('ijkl->i',chi) #sum over k_pairs, i, j
     return chi
 
-@time_wrapper
 def RPA_dielectric(G, q, mo_en_i, mo_en_f, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri):
     """
     To Do:
@@ -764,6 +762,7 @@ def RPA_dielectric_lfe(q, G_vectors, k_pairs, mo_en_i, mo_en_f, eta_q):
     eps_lfe = 1/np.diag(np.linalg.inv(eps_matrix)) #need to fix: np.diag does not work with non-2d matrix
     return eps_lfe
 
+@time_wrapper
 def initialize_RPA_dielectric(dark_objects):
     """
     Loads DFT parameters, selects epsilon routine (LFE vs non-LFE), and calculates binned RPA dielectric function, epsilon(q,E).
@@ -787,9 +786,9 @@ def initialize_RPA_dielectric(dark_objects):
     #initialize bins
     
     if parmt.include_lfe:
-        RPA_eps = RPA_dielectric
-    else: #currently only implemented for non-LFE
         RPA_eps = RPA_dielectric_lfe
+    else: #currently only implemented for non-LFE
+        RPA_eps = RPA_dielectric
 
     for q in unique_q.keys():
         k_pairs = np.array(unique_q[q])
