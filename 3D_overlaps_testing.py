@@ -56,14 +56,13 @@ def get_3D_overlaps_tensordot(qG, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, 
 
 def get_3D_overlaps_numerical(qG, ki, kf, mo_coeff_i, mo_coeff_f):
     coords, weights = routines.pbcdft.gen_grid.gen_becke_grids(cell)
-    phse = np.exp(1j*np.sum(qG[None,:]*coords, axis = 1))
-    ao1 = routines.pbcgto.eval_gto.eval_gto(cell, 'GTOval_cart', coords, kpts = ki)
-    ao2 = routines.pbcgto.eval_gto.eval_gto(cell, 'GTOval_cart', coords, kpts = kf)
-    li = []
-    for i in range(len(ki)):
-        ao_ovlp = np.einsum('w,wa,w,wb->ab', weights, ao1[i].conj(), phse, ao2[i])
-        li.append(np.einsum('ai,ij,bj->ab', mo_coeff_i[i].conj(), ao_ovlp, mo_coeff_f[i]))
-    return np.array(li)
+    operator = np.exp(1.j * np.einsum('wx, x -> w', coords, qG))
+    print(operator)
+    ao1 = routines.pbcdft.numint.eval_ao(cell, coords, kpt = ki)
+    ao2 = routines.pbcdft.numint.eval_ao(cell, coords, kpt = kf)
+    ao_ovlp = np.einsum('w, wi, w, wj -> ij', weights, ao1.conj(), operator, ao2)
+    print(ao_ovlp.shape)
+    return np.einsum('ai,ij,jb->ab', mo_coeff_i.T.conj(), ao_ovlp, mo_coeff_f)
 
 @time_wrapper
 def all_3D_overlaps(f):
@@ -94,9 +93,11 @@ k2 = np.load(parmt.store + '/k-pts_f.npy')[k_pairs[:,1]]
 k1 = np.load(parmt.store + '/k-pts_i.npy')[k_pairs[:,0]]
 R_id, unique_Ri = routines.load_unique_R(dark_objects['R_vectors'])
 qG = np.array(q)
-num_ovlp = get_3D_overlaps_numerical(qG, k1, k2, mo_coeff_i, mo_coeff_f)
-td_ovlp = get_3D_overlaps_tensordot(qG, k2, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, None)
 
+qq = np.zeros((3,))
+coeff_0 = np.load(dft_path + 'mo_coeff_i.npy')[0]
+k1 = np.zeros((3,))
+num_ovlp = get_3D_overlaps_numerical(qq, k1, k1, coeff_0, coeff_0)
 """
 for f in zip([get_3D_overlaps_einsum, get_3D_overlaps_tensordot], [('optimal','optimal'),None]):
     all_3D_overlaps(f)
