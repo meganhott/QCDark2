@@ -633,3 +633,18 @@ def get_3D_overlaps_test(q, k_pairs, k_f, mo_coeff_i, mo_coeff_f, dark_objects):
 
     logging.info('All {} 3D overlaps generated for 1BZ q vector {}. eta_q is {:.3f} MB in memory.'.format(np.prod(eta_q.shape), list(map(lambda q :str(q),q.round(5))), sys.getsizeof(eta_q)/10**6))
     return eta_q
+
+def find_3D_overlap_path(N_Ru, N_kpair, ao_coeff, N_val, N_con):
+    """
+    Not necessary in routines any more, keeping it here just in case
+
+    Inputs:
+    N_Ru: number of unique R in one direction
+    N_kpair: number of k pairs for one q vector
+    ao_coeff: (3, N_AO, N_primgauss)
+    N_val: number of valence bands (i)
+    N_con: number of conduction bands (j)
+    """
+    path = np.einsum_path('ij,kl,mn,iln,jok,jpm->ijop', np.zeros((N_Ru,N_kpair)), ao_coeff[0], ao_coeff[0], np.zeros((N_Ru,ao_coeff.shape[2],ao_coeff.shape[2])), np.zeros((N_kpair,N_val,ao_coeff.shape[1])), np.zeros((N_kpair,N_con,ao_coeff.shape[1])), optimize='optimal')[0] #(i,j,k,l,m,n,o,p) = (Ru, k_pair, a, m, b, n, i, j) -> (i,j,o,q) = (Ru, k_pair, i, j)
+
+    return path
