@@ -85,19 +85,22 @@ routines.get_band_indices()
 
 ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
 dft_path = parmt.store + '/DFT/'
-mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,ivalbot:ivaltop+1,:][k_pairs[:,0]]
-mo_coeff_f = np.load(dft_path + 'mo_coeff_f.npy')[:,iconbot:icontop+1,:][k_pairs[:,1]]
-mo_en_i = np.load(dft_path + 'mo_en_i.npy')[:,ivalbot:ivaltop+1]
-mo_en_f = np.load(dft_path + 'mo_en_f.npy')[:,iconbot:icontop+1]
+mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[k_pairs[:,0]]
+mo_coeff_f = np.load(dft_path + 'mo_coeff_f.npy')[k_pairs[:,1]]
+mo_en_i = np.load(dft_path + 'mo_en_i.npy')
+mo_en_f = np.load(dft_path + 'mo_en_f.npy')
 k2 = np.load(parmt.store + '/k-pts_f.npy')[k_pairs[:,1]]
 k1 = np.load(parmt.store + '/k-pts_i.npy')[k_pairs[:,0]]
 R_id, unique_Ri = routines.load_unique_R(dark_objects['R_vectors'])
+
 qG = np.array(q)
 
-qq = np.zeros((3,))
-coeff_0 = np.load(dft_path + 'mo_coeff_i.npy')[0]
-k1 = np.zeros((3,))
-num_ovlp = get_3D_overlaps_numerical(qq, k1, k1, coeff_0, coeff_0)
+num_ovlp = []
+for i in range(len(k_pairs)):
+    num_ovlp.append(get_3D_overlaps_numerical(qG, k1[i], k2[i], mo_coeff_i[i], mo_coeff_f[i]))
+
+td_ovlp = get_3D_overlaps_tensordot(qG, k2, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, None)
+
 """
 for f in zip([get_3D_overlaps_einsum, get_3D_overlaps_tensordot], [('optimal','optimal'),None]):
     all_3D_overlaps(f)
