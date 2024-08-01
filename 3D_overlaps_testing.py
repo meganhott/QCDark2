@@ -61,8 +61,8 @@ def get_3D_overlaps_numerical(qG, ki, kf, mo_coeff_i, mo_coeff_f):
     ao2 = routines.pbcgto.eval_gto.eval_gto(cell, 'GTOval_cart', coords, kpts = kf)
     li = []
     for i in range(len(ki)):
-        ao_ovlp = np.einsum('w,wa,w,wb->ab', weights, ao1[i].conj(), phse, ao2[i])
-        li.append(np.einsum('ai,ij,bj->ab', mo_coeff_i[i].conj(), ao_ovlp, mo_coeff_f[i]))
+        ao_ovlp = np.einsum('w,wa,w,wb->ab', weights, ao1[i], phse, ao2[i].conj())
+        li.append(np.einsum('ai,ij,bj->ab', mo_coeff_i[i], ao_ovlp, mo_coeff_f[i].conj()))
     return np.array(li)
 
 @time_wrapper
