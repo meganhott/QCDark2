@@ -53,7 +53,18 @@ def get_3D_overlaps_tensordot(qG, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, 
     for k in range(k_f.shape[0]):
         eta_qG1[k] = np.tensordot(np.tensordot(mo_coeff_i[k],eta_qG[k], axes=(1,0)), mo_coeff_f.conj()[k], axes=(1,1)) #Inner products over a and b
     return eta_qG1
-    
+
+def get_3D_overlaps_numerical(qG, ki, kf, mo_coeff_i, mo_coeff_f):
+    coords, weights = routines.pbcdft.gen_grid.gen_becke_grids(cell)
+    phse = np.exp(1j*np.sum(qG[None,:]*coords, axis = 1))
+    ao1 = routines.pbcgto.eval_gto.eval_gto(cell, 'GTOval_cart', coords, kpts = ki)
+    ao2 = routines.pbcgto.eval_gto.eval_gto(cell, 'GTOval_cart', coords, kpts = kf)
+    li = []
+    for i in range(len(ki)):
+        ao_ovlp = np.einsum('w,wa,w,wb->ab', weights, ao1[i].conj(), phse, ao2[i])
+        li.append(np.einsum('ai,ij,bj->ab', mo_coeff_i[i].conj(), ao_ovlp, mo_coeff_f[i]))
+    return np.array(li)
+
 @time_wrapper
 def all_3D_overlaps(f):
     for G in G_vectors:
@@ -75,17 +86,21 @@ routines.get_band_indices()
 
 ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
 dft_path = parmt.store + '/DFT/'
-mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,ivalbot:ivaltop+1,:]
-mo_coeff_f = np.load(dft_path + 'mo_coeff_f.npy')[:,iconbot:icontop+1,:]
+mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,ivalbot:ivaltop+1,:][k_pairs[:,0]]
+mo_coeff_f = np.load(dft_path + 'mo_coeff_f.npy')[:,iconbot:icontop+1,:][k_pairs[:,1]]
 mo_en_i = np.load(dft_path + 'mo_en_i.npy')[:,ivalbot:ivaltop+1]
 mo_en_f = np.load(dft_path + 'mo_en_f.npy')[:,iconbot:icontop+1]
-k2 = np.load(parmt.store + '/k-pts_f.npy')
-
+k2 = np.load(parmt.store + '/k-pts_f.npy')[k_pairs[:,1]]
+k1 = np.load(parmt.store + '/k-pts_i.npy')[k_pairs[:,0]]
 R_id, unique_Ri = routines.load_unique_R(dark_objects['R_vectors'])
+qG = np.array(q)
+num_ovlp = get_3D_overlaps_numerical(qG, k1, k2, mo_coeff_i, mo_coeff_f)
+td_ovlp = get_3D_overlaps_tensordot(qG, k2, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, None)
 
+"""
 for f in zip([get_3D_overlaps_einsum, get_3D_overlaps_tensordot], [('optimal','optimal'),None]):
     all_3D_overlaps(f)
-
+"""
 """
 for G in G_vectors:
     eta_qG = routines.get_3D_overlaps(np.array(q)+G, k2[k_pairs[:,1]], mo_coeff_i[k_pairs[:,0]], mo_coeff_f[k_pairs[:,1]], R_id, unique_Ri)
