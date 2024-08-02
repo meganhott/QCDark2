@@ -60,9 +60,9 @@ def get_3D_overlaps_numerical(qG, ki, kf, mo_coeff_i, mo_coeff_f):
     print(operator)
     ao1 = routines.pbcdft.numint.eval_ao(cell, coords, kpt = ki)
     ao2 = routines.pbcdft.numint.eval_ao(cell, coords, kpt = kf)
-    ao_ovlp = np.einsum('w, wi, w, wj -> ij', weights, ao1.conj(), operator, ao2)
+    ao_ovlp = np.einsum('w, wi, w, wj -> ij', weights, ao2.conj(), operator, ao1)
     print(ao_ovlp.shape)
-    return np.einsum('ai,ij,jb->ab', mo_coeff_i.T.conj(), ao_ovlp, mo_coeff_f)
+    return np.einsum('ai,ij,jb->ab', mo_coeff_f.T.conj(), ao_ovlp, mo_coeff_i)
 
 @time_wrapper
 def all_3D_overlaps(f):

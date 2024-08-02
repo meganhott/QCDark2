@@ -358,6 +358,8 @@ def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> li
                 all_ao.append(cartmoments.AO(atom_index = atm_indx, exps = exps, coeffs = coeffs[:,j], ijk = ijk, primgauss = primgauss))
                 i_cart += 1
     logging.info("Generated all cartesian contracted gaussians, number of shells = {}.".format(len(all_ao)))
+    return all_ao
+    """
     li = []
     for ao_i in all_ao:
         ao_all_coef = np.zeros((3,primgauss.shape[0]))
@@ -367,6 +369,7 @@ def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> li
     li = np.array(li)
     logging.info("Reconstructed all cartesian contracted gaussians into coefficients of primitive gaussian objects.")
     return np.transpose(li, axes = (1, 0, 2))
+    """
 
 @time_wrapper
 def KS_electronic_structure(cell: pbcgto.cell.Cell) -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
@@ -529,7 +532,7 @@ def store_primgauss_1D(dim: int, qG: np.ndarray, results: np.ndarray, Ru: np.nda
     dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
     makedir(dir)
     np.save(dir + 'Ru', Ru)
-    results = np.transpose(results, axes = (2, 1, 0, 3))
+    results = np.transpose(results, axes = (3, 0, 1, 2))
     for q, res in zip(qG, results):
         np.save(dir + '{:.5f}'.format(q), res)
     return None
@@ -551,7 +554,7 @@ def primgauss_1D_overlaps(dark_objects: dict):
     atom_locs = dark_objects['atom_locs']
     q, G = np.load(parmt.store + '/unique_q.npy'), dark_objects['G_vectors']
     Rv = dark_objects['R_vectors']
-    cr = np.sign(dark_objects['all_ao'])*np.power(np.abs(dark_objects['all_ao']), 1./3.)
+    #cr = np.sign(dark_objects['all_ao'])*np.power(np.abs(dark_objects['all_ao']), 1./3.)
     logging.info("Generating overlaps of 1D primitve gaussians.")
     makedir(parmt.store + '/primgauss_1d_integrals/')
     with mp.get_context('fork').Pool(mp.cpu_count()) as p:
@@ -564,8 +567,9 @@ def primgauss_1D_overlaps(dark_objects: dict):
             logging.info('\tDimension = {}:\n\t\tNumber of unique q = {};\n\t\tNumber of unique R = {}.'.format(d, qG.size, Ru.size))
             res = p.map(partial(cartmoments.primgauss_1D_overlaps_uR, primindices = primindices, q = qG, atom_locs = atom_locs[:,d]), Ru)
             res = np.array(res)
-            res = np.tensordot(cr[d], res, axes = (1, 1))
-            res = np.tensordot(res, cr[d], axes = (2, 1))
+            print(res.shape)
+            #res = np.tensordot(cr[d], res, axes = (1, 1))
+            #res = np.tensordot(res, cr[d], axes = (2, 1))
             store_primgauss_1D(d, qG, res, Ru)
     logging.info("Generated overlaps of 1D primitive gaussians.")
     return 
