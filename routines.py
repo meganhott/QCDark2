@@ -656,14 +656,14 @@ def get_3D_overlaps(q, G, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri):
     Inputs:
         qG:             np.ndarray of shape (3,): q + G for one q vector in 1BZ and one G vector
         k_f:            np.ndarray of shape (N_kpairs, 3):
-        mo_coeff_i:     np.ndarray of shape (N_kpairs, N_val_bands, N_AO)
-        mo_coeff_f:     np.ndarray of shape (N_kpairs, N_con_bands, N_AO)
+        mo_coeff_i:     np.ndarray of shape (N_kpairs, N_AO, N_valbands)
+        mo_coeff_f:     np.ndarray of shape (N_kpairs, N_AO, N_conbands)
         R_id:           np.ndarray of shape (3, N_R_vectors)
         unique_Ri:      np.ndarray of shape (3, N_R_unique
     Outputs:
         eta_qG:         np.ndarray of shape (N_kpairs, N_val_bands, N_con_bands): all 3D overlaps <jk'|exp(i(q+G)r)|ik>
     """
-    Ri_coef_sum = np.zeros((R_id.shape[0], R_id.shape[1], mo_coeff_i.shape[0], mo_coeff_i.shape[2], mo_coeff_f.shape[2]), dtype = np.complex128) #(3,R_vec,k_pairs,a,b)
+    Ri_coef_sum = np.zeros((R_id.shape[0], R_id.shape[1], mo_coeff_i.shape[0], mo_coeff_i.shape[1], mo_coeff_f.shape[1]), dtype = np.complex128) #(3,R_vec,k_pairs,a,b)
     for dim in range(3):
         dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
         q_1d_integrals = np.load(dir+'{:.5f}.npy'.format((q+G)[dim]))
@@ -672,7 +672,7 @@ def get_3D_overlaps(q, G, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri):
         Ri_coef_sum[dim] = coef_sum[R_id[dim]]
     eta_qG = np.sum(np.prod(Ri_coef_sum, axis=0),axis=0) #(k_pair,a,b)
     # Now we should do molecular orbital coefficients.
-    eta_qG = np.einsum('kab,kia,kjb->kij', eta_qG, mo_coeff_i, mo_coeff_f.conj())
+    eta_qG = np.einsum('kab,kai,kbj->kij', eta_qG, mo_coeff_i, mo_coeff_f.conj())
     #logging.info('All {} 3D overlaps generated for q+G vector {}. eta_qG is {:.3f} MB in memory.'.format(np.prod(eta_qG.shape), list(map(lambda qG :str(qG),qG.round(5))), sys.getsizeof(eta_qG)/10**6))
     return eta_qG
 
@@ -721,8 +721,8 @@ def RPA_dielectric(G, q, mo_en_i, mo_en_f, k_f, mo_coeff_i, mo_coeff_f, R_id, un
         mo_en_i:    np.ndarray of shape (N_kpairs, N_valbands): initial molecular orbital energies
         mo_en_f:    np.ndarray of shape (N_kpairs, N_conbands): final molecular orbital energies
         k_f:        np.ndarray of shape (N_kpairs, 3)
-        mo_coeff_i: np.ndarray of shape (N_kpairs, N_valbands, N_AO)
-        mo_coeff_f: np.ndarray of shape (N_kpairs, N_conbands, N_AO)
+        mo_coeff_i: np.ndarray of shape (N_kpairs, N_AO, N_valbands)
+        mo_coeff_f: np.ndarray of shape (N_kpairs, N_AO, N_conbands)
         R_id:       np.ndarray of shape (3, N_R_vectors)
         R_unique:   list of unique R scalars in each dimension
     Outputs:
@@ -774,8 +774,8 @@ def initialize_RPA_dielectric(dark_objects):
 
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
     dft_path = parmt.store + '/DFT/'
-    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,ivalbot:ivaltop+1,:]
-    mo_coeff_f = np.load(dft_path + 'mo_coeff_f.npy')[:,iconbot:icontop+1,:]
+    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,:,ivalbot:ivaltop+1]
+    mo_coeff_f = np.load(dft_path + 'mo_coeff_f.npy')[:,:,iconbot:icontop+1]
     mo_en_i = np.load(dft_path + 'mo_en_i.npy')[:,ivalbot:ivaltop+1]
     mo_en_f = np.load(dft_path + 'mo_en_f.npy')[:,iconbot:icontop+1]
     k_f = np.load(parmt.store + '/k-pts_f.npy')
@@ -804,8 +804,8 @@ def initialize_RPA_dielectric(dark_objects):
         #generate parameters for q
         mo_en_i_q = mo_en_i[k_pairs[:,0]] #(k_pair,i)
         mo_en_f_q = mo_en_f[k_pairs[:,1]] #(k_pair,j)
-        mo_coeff_i_q = mo_coeff_i[k_pairs[:,0]] #(k_pair,i,a)
-        mo_coeff_f_q = mo_coeff_f[k_pairs[:,1]] #(k_pair,j,b)
+        mo_coeff_i_q = mo_coeff_i[k_pairs[:,0]] #(k_pair,a,i)
+        mo_coeff_f_q = mo_coeff_f[k_pairs[:,1]] #(k_pair,b,j)
         k_f_q = k_f[k_pairs[:,1]]
 
         #Compute epsilon for all G_q
