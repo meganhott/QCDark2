@@ -571,6 +571,7 @@ def primgauss_1D_overlaps(dark_objects: dict):
     logging.info("Generated overlaps of 1D primitive gaussians.")
     return 
 
+@time_wrapper
 def primgauss_1D_overlaps_0(dark_objects: dict):
     """
     Store all 1D primitive gaussians in files. 

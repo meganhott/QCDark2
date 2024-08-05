@@ -65,9 +65,10 @@ def get_3D_overlaps_numerical(qG, ki, kf, mo_coeff_i, mo_coeff_f):
     #return np.einsum('ai,ij,jb->ab', mo_coeff_f.T.conj(), ao_ovlp, mo_coeff_i)
     return ao_ovlp
 
+@time_wrapper
 def get_3D_overlaps_alternate(qG, k2, aos, R_id, unique_Ri):
     new_ovlp = np.zeros((8, 38, 38), dtype = np.complex128)
-    for k in range(8):
+    for k in range(len(k2)):
         for i in range(38):
             for j in range(38):
                 aoi, aoj = aos[i], aos[j]
@@ -78,7 +79,8 @@ def get_3D_overlaps_alternate(qG, k2, aos, R_id, unique_Ri):
                     phs = np.exp(-1.j*k2[k,d]*unique_Ri[d])
                     vals = phs[:,None,None]*vals
                     tot *= vals[R_id[d]]
-                tot *= aoj.coef[None,:,None]*aoi.coef[None,None,:]
+                tot = tot.sum(axis = 0)
+                tot *= aoj.coef[:,None]*aoi.coef[None,:]*aoj.norm[:,None]*aoi.norm[None,:]
                 new_ovlp[k, i,j] = np.sum(tot)
     return new_ovlp
 
