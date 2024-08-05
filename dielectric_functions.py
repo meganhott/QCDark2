@@ -14,12 +14,13 @@ def initialize_cell() -> tuple[routines.pbcgto.cell.Cell, dict]:
     cell = routines.build_cell_from_input()                                    # Build cell object
     primgauss = routines.gen_all_1D_prim_gauss(cell)                           # Get all primitive gaussian objects
     primindices = routines.gen_prim_gauss_indices(primgauss)                   # Get all main indices for primitive gaussian objects.
-    all_ao = routines.gen_all_atomic_orbitals(cell, primgauss)                 # Get all atomic orbitals
+    aos, all_ao = routines.gen_all_atomic_orbitals(cell, primgauss)                 # Get all atomic orbitals
     G_vectors = routines.gen_G_vectors(cell)                                   # Get all relevant G vectors
     R_vectors = routines.construct_R_vectors(cell)
     dark_objects = {
         'primitive_gaussians': primgauss,
         'all_ao': all_ao,
+        'aos': aos,
         'G_vectors': G_vectors,
         'primindices': primindices[0],
         'atom_locs': primindices[1],
