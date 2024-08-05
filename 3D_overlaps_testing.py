@@ -5,59 +5,9 @@ from routines import time_wrapper
 
 num_G = 100
 
-def get_3D_overlaps_einsum(qG, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, opt):
-    """
-    Work in progress
-    To Do:
-    - Optimize!
-    - Look into ao_coefficients (Megan pointed out that we should multiply them after the product.)
-
-    Calculates all 3D overlaps eta = <jk'|exp(i(q+G)r)|ik> for a given 1BZ q-vector and given G-vector using stored 1D overlaps
-
-    Inputs:
-        qG:             np.ndarray of shape (3,): q + G for one q vector in 1BZ and one G vector
-        k_f:            np.ndarray of shape (N_kpairs, 3):
-        mo_coeff_i:     np.ndarray of shape (N_kpairs, N_val_bands, N_AO)
-        mo_coeff_f:     np.ndarray of shape (N_kpairs, N_con_bands, N_AO)
-        R_id:           np.ndarray of shape (3, N_R_vectors)
-        unique_Ri:      np.ndarray of shape (3, N_R_unique
-    Outputs:
-        eta_qG:         np.ndarray of shape (N_kpairs, N_val_bands, N_con_bands): all 3D overlaps <jk'|exp(i(q+G)r)|ik>
-    """
-    Ri_coef_sum = np.zeros((R_id.shape[0], R_id.shape[1], mo_coeff_i.shape[0], mo_coeff_i.shape[2], mo_coeff_f.shape[2]), dtype = np.complex128) #(3,R_vec,k_pairs,a,b)
-    for dim in range(3):
-        dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
-        q_1d_integrals = np.load(dir+'{:.5f}.npy'.format(qG[dim]))
-        phase = np.exp(-1j*np.tensordot(unique_Ri[dim],k_f[:,dim], axes=0)) #(Ru, k_pair)
-        coef_sum = np.einsum('Rk,Rab->Rkab', phase, q_1d_integrals, optimize=opt[0]) 
-        Ri_coef_sum[dim] = coef_sum[R_id[dim]]
-    eta_qG = np.sum(np.prod(Ri_coef_sum, axis=0),axis=0) #(k_pair,a,b)
-    # Now we should do molecular orbital coefficients.
-    #eta_qG = np.einsum('kab,kia,kjb->kij', eta_qG, mo_coeff_i, mo_coeff_f.conj(),optimize=opt[1])
-    #logging.info('All {} 3D overlaps generated for q+G vector {}. eta_qG is {:.3f} MB in memory.'.format(np.prod(eta_qG.shape), list(map(lambda qG :str(qG),qG.round(5))), sys.getsizeof(eta_qG)/10**6))
-    return eta_qG
-
-def get_3D_overlaps_tensordot(qG, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, opt):
-    Ri_coef_sum = np.zeros((R_id.shape[0], R_id.shape[1], mo_coeff_i.shape[0], mo_coeff_i.shape[2], mo_coeff_f.shape[2]), dtype = np.complex128) #(3,R_vec,k_pairs,a,b)
-    for dim in range(3):
-        dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
-        q_1d_integrals = np.load(dir+'{:.5f}.npy'.format(qG[dim]))
-        phase = np.exp(-1j*np.tensordot(unique_Ri[dim],k_f[:,dim], axes=0)) #(Ru, k_pair)
-        coef_sum = np.empty(Ri_coef_sum.shape[1:],dtype='complex')
-        for i in range(unique_Ri[dim].shape[0]):
-            coef_sum[i] = np.tensordot(phase[i], q_1d_integrals[i], axes=0) #outer product (k),(ab) -> (kab)
-        Ri_coef_sum[dim] = coef_sum[R_id[dim]]
-    eta_qG = np.sum(np.prod(Ri_coef_sum, axis=0),axis=0) #(k_pair,a,b)
-    # Now we should do molecular orbital coefficients.
-    #eta_qG1 = np.empty((k_f.shape[0],mo_coeff_i.shape[1],mo_coeff_f.shape[1]), dtype = np.complex128)
-    #for k in range(k_f.shape[0]):
-    #    eta_qG1[k] = np.tensordot(np.tensordot(mo_coeff_i[k],eta_qG[k], axes=(1,0)), mo_coeff_f.conj()[k], axes=(1,1)) #Inner products over a and b
-    return eta_qG
-
 def get_3D_overlaps_numerical(qG, ki, kf, mo_coeff_i, mo_coeff_f):
     coords, weights = routines.pbcdft.gen_grid.gen_becke_grids(cell)
     operator = np.exp(1.j * np.einsum('wx, x -> w', coords, qG))
-    print(operator)
     ao1 = routines.pbcdft.numint.eval_ao(cell, coords, kpt = ki)
     ao2 = routines.pbcdft.numint.eval_ao(cell, coords, kpt = kf)
     ao_ovlp = np.einsum('w, wi, w, wj -> ij', weights, ao2.conj(), operator, ao1)
@@ -65,7 +15,6 @@ def get_3D_overlaps_numerical(qG, ki, kf, mo_coeff_i, mo_coeff_f):
     #return np.einsum('ai,ij,jb->ab', mo_coeff_f.T.conj(), ao_ovlp, mo_coeff_i)
     return ao_ovlp
 
-@time_wrapper
 def get_3D_overlaps_alternate(qG, k2, aos, R_id, unique_Ri):
     new_ovlp = np.zeros((8, 38, 38), dtype = np.complex128)
     for k in range(len(k2)):
@@ -83,6 +32,26 @@ def get_3D_overlaps_alternate(qG, k2, aos, R_id, unique_Ri):
                 tot *= aoj.coef[:,None]*aoi.coef[None,:]*aoj.norm[:,None]*aoi.norm[None,:]
                 new_ovlp[k, i,j] = np.sum(tot)
     return new_ovlp
+
+def get_3D_overlaps_alt(qG, k2, aos, R_id, unique_Ri):
+    ints = []
+    for d in range(3):
+        ints.append(np.load('test_resources/primgauss_1d_integrals_0/dim_{}/{:.5f}.npy'.format(d, qG[d]))[None,R_id[d],:,:]*np.exp(-1.j*k2[:,None,d]*unique_Ri[d][None,:])[:,R_id[d],None,None])
+    n = len(aos)
+    ovlp = np.zeros((k2.shape[0], n, n), dtype = np.complex128)
+    for i in range(n):
+        aoi = aos[i]
+        for j in range(n):
+            aoj = aos[j]
+            tot = np.ones((k2.shape[0], R_id.shape[1], len(aoj.coef), len(aoi.coef)), dtype = np.complex128)
+            for d in range(3):
+                tot *= ints[d][:,:,aoj.prim_indices[d]][:,:,:,aoi.prim_indices[d]]
+            tot = tot.sum(axis = 1)
+            tot *= aoj.coef[None,:,None]*aoi.coef[None,None,:]*aoj.norm[None,:,None]*aoi.norm[None,None,:]
+            tot = tot.sum(axis = 1)
+            tot = tot.sum(axis = 1)
+            ovlp[:,i,j] = tot
+    return ovlp
 
 @time_wrapper
 def all_3D_overlaps(f):
@@ -115,14 +84,15 @@ R_id, unique_Ri = routines.load_unique_R(dark_objects['R_vectors'])
 
 qG = np.array(q)
 
-num_ovlp = []
-for i in range(len(k_pairs)):
-    num_ovlp.append(get_3D_overlaps_numerical(qG, k1[i], k2[i], mo_coeff_i[i], mo_coeff_f[i]))
+#num_ovlp = []
+#for i in range(len(k_pairs)):
+#    num_ovlp.append(get_3D_overlaps_numerical(qG, k1[i], k2[i], mo_coeff_i[i], mo_coeff_f[i]))
 
-td_ovlp = get_3D_overlaps_tensordot(qG, k2, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, None)
-es_ovlp = get_3D_overlaps_einsum(qG, k2, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, ('optimal', 'optimal'))
+#td_ovlp = get_3D_overlaps_tensordot(qG, k2, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, None)
+#es_ovlp = get_3D_overlaps_einsum(qG, k2, mo_coeff_i, mo_coeff_f, R_id, unique_Ri, ('optimal', 'optimal'))
 aos = dark_objects['aos']
-alt_ovlp = get_3D_overlaps_alternate(qG, k2, aos, R_id, unique_Ri)
+alt_ovlp1 = get_3D_overlaps_alternate(qG, k2, aos, R_id, unique_Ri)
+alt_ovlp2 = get_3D_overlaps_alt(qG, k2, aos, R_id, unique_Ri)
 """
 for f in zip([get_3D_overlaps_einsum, get_3D_overlaps_tensordot], [('optimal','optimal'),None]):
     all_3D_overlaps(f)

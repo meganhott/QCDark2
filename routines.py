@@ -548,42 +548,6 @@ def primgauss_1D_overlaps(dark_objects: dict):
     Inputs:
         dark_objects:   dict: equivalent to a class object, except not self-referential.
     """
-    primindices = dark_objects['primindices']
-    atom_locs = dark_objects['atom_locs']
-    q, G = np.load(parmt.store + '/unique_q.npy'), dark_objects['G_vectors']
-    Rv = dark_objects['R_vectors']
-    cr = np.sign(dark_objects['all_ao'])*np.power(np.abs(dark_objects['all_ao']), 1./3.)
-    logging.info("Generating overlaps of 1D primitve gaussians.")
-    makedir(parmt.store + '/primgauss_1d_integrals/')
-    with mp.get_context('fork').Pool(mp.cpu_count()) as p:
-        for d in range(3):
-            qu, Gu = get_all_unique_nums_in_array(q[:,d], round_to=10), get_all_unique_nums_in_array(G[:,d], round_to=10)
-            qG = (qu[:, None] + Gu[None, :]).reshape((-1))
-            qG = get_all_unique_nums_in_array(qG, round_to=10)
-            qG = qG[np.abs(qG) <= parmt.q_max]
-            Ru = get_all_unique_nums_in_array(Rv[:,d], round_to=10)
-            logging.info('\tDimension = {}:\n\t\tNumber of unique q = {};\n\t\tNumber of unique R = {}.'.format(d, qG.size, Ru.size))
-            res = p.map(partial(cartmoments.primgauss_1D_overlaps_uR, primindices = primindices, q = qG, atom_locs = atom_locs[:,d]), Ru)
-            res = np.array(res)
-            res = np.tensordot(cr[d], res, axes = (1, 1))
-            res = np.tensordot(res, cr[d], axes = (2, 1))
-            store_primgauss_1D(d, qG, res, Ru)
-    logging.info("Generated overlaps of 1D primitive gaussians.")
-    return 
-
-@time_wrapper
-def primgauss_1D_overlaps_0(dark_objects: dict):
-    """
-    Store all 1D primitive gaussians in files. 
-    parmt.store
-        primgauss_1d_integrals
-            dim_i
-                q+G.npy
-    Each stored array has shape (N_Ru_i, N_AO, N_AO) since primgauss indices have been summed over.
-
-    Inputs:
-        dark_objects:   dict: equivalent to a class object, except not self-referential.
-    """
     def store_primgauss_1D_0(dim: int, qG: np.ndarray, results: np.ndarray, Ru: np.ndarray):
         dir = parmt.store + '/primgauss_1d_integrals_0/dim_{}/'.format(dim)
         makedir(dir)
