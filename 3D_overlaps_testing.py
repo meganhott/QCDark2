@@ -5,15 +5,17 @@ from routines import time_wrapper
 import matplotlib.pyplot as plt
 from numba import jit, njit
 
-def get_3D_overlaps_numerical(qG, ki, kf, mo_coeff_i, mo_coeff_f):
-    coords, weights = routines.pbcdft.gen_grid.gen_becke_grids(cell)
+@time_wrapper
+def get_3D_overlaps_numerical(qG, ao1, ao2):
+    coords = np.load(parmt.store + '/coords.npy')
+    coords, weights = coords[:,:3], coords[:,3]
     operator = np.exp(1.j * np.einsum('wx, x -> w', coords, qG))
-    ao1 = routines.pbcdft.numint.eval_ao(cell, coords, kpt = ki)
-    ao2 = routines.pbcdft.numint.eval_ao(cell, coords, kpt = kf)
-    ao_ovlp = np.einsum('w, wi, w, wj -> ij', weights, ao2.conj(), operator, ao1)
+    ao_ovlp = []
+    for k in range(len(ao2)):
+        ao_ovlp.append(np.einsum('w, wi, w, wj -> ij', weights, ao2[k].conj(), operator, ao1[k]))
     #print(ao_ovlp.shape)
     #return np.einsum('ai,ij,jb->ab', mo_coeff_f.T.conj(), ao_ovlp, mo_coeff_i)
-    return ao_ovlp
+    return np.array(ao_ovlp)
 
 @time_wrapper
 def get_3D_overlaps_alternate(qG, k2, aos, R_id, unique_Ri):
@@ -173,11 +175,18 @@ k1 = np.load(parmt.store + '/k-pts_i.npy')[k_pairs[:,0]]
 R_id, unique_Ri = routines.load_unique_R(dark_objects['R_vectors'])
 
 qG = np.array(q)
-
 ovlp_alt = get_3D_overlaps_alternate(qG, k2, dark_objects['aos'], R_id, unique_Ri)
-
 ovlp = get_3D_overlaps(qG, k2, dark_objects['aos'], R_id, unique_Ri)
 
+coords, weights = routines.pbcdft.gen_grid.gen_becke_grids(cell)
+np.save(parmt.store + '/coords', np.transpose(np.append(coords.T, weights[None,:], axis = 0)))
+ao1, ao2 = [], []
+for k in range(8):
+    ao1.append(routines.pbcdft.numint.eval_ao(cell, coords, kpt = k1[k]))
+    ao2.append(routines.pbcdft.numint.eval_ao(cell, coords, kpt = k2[k]))
+ao1, ao2 = np.array(ao1), np.array(ao2)
+num_ovlp = get_3D_overlaps_numerical(qG, ao1, ao2)
+"""
 integrals = load_1D_integrals(qG)
 ovlp_njit = get_3D_overlaps2_njit(integrals, k2, dark_objects['ao_coeff'], dark_objects['ao_bool'], R_id, unique_Ri)
 #ovlp_njit = get_3D_overlaps2_njit(integrals, k2, dark_objects['ao_coeff'], dark_objects['ao_bool'], R_id, unique_Ri)
@@ -215,7 +224,7 @@ ax[1,3].imshow(num_ovlp[0].imag, cmap = 'PiYG_r', vmin = -1, vmax = 1)
 ax[1,3].set_title('Numerical, Imag')
 plt.tight_layout()
 plt.show()
-
+"""
 """
 for f in zip([get_3D_overlaps_einsum, get_3D_overlaps_tensordot], [('optimal','optimal'),None]):
     all_3D_overlaps(f)
