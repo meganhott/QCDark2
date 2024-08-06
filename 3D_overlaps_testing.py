@@ -40,12 +40,13 @@ def get_3D_overlaps_alternate(qG, k2, aos, R_id, unique_Ri):
 @time_wrapper
 def get_3D_overlaps(qG, k2, aos, R_id, unique_Ri):
     """
-    - Keep ints in terms of unique_R instead of R_vectors
-    - Use @/numpy array operations instead of broadcasting
+    - Keep ints in terms of unique_R instead of R_vectors - significant (~20x) speedup (60s to 3.3s)
+    - Use @/numpy array operations instead of broadcasting - small (~2%) speedup (~0.05s)
+    - Broadcasting method is still fastest for ints/phase
     """
     ints = []
     for d in range(3):
-        ints.append(np.load('test_resources/primgauss_1d_integrals_0/dim_{}/{:.5f}.npy'.format(d, qG[d]))[:,None,:,:] * np.exp(-1.j*unique_Ri[d][:,None]*k2[None,:,d])[:,:,None,None]) #(R,k,m,n)
+        ints.append(np.load('test_resources/primgauss_1d_integrals_0/dim_{}/{:.5f}.npy'.format(d, qG[d]))[:,None,:,:] * np.exp(-1.j*unique_Ri[d][:,None]*k2[None,:,d])[:,:,None,None])
     n = len(aos)
     ovlp = np.zeros((k2.shape[0], n, n), dtype = np.complex128)
     for i in range(n):
@@ -57,9 +58,7 @@ def get_3D_overlaps(qG, k2, aos, R_id, unique_Ri):
                 ints_ij = ints[d][:,:,aoj.prim_indices[d]][:,:,:,aoi.prim_indices[d]]
                 tot *= ints_ij[R_id[d]]
             tot = tot.sum(axis = 0) #sum over R
-            tot *= aoj.coef[None,:,None]*aoi.coef[None,None,:]*aoj.norm[None,:,None]*aoi.norm[None,None,:]
-            tot = tot.sum(axis = 1) #sum over m
-            tot = tot.sum(axis = 1) #sum over n
+            tot = (tot @ (aoi.coef*aoi.norm)) @ (aoj.coef*aoj.norm) #multiply by coefficients and sum over m,n
             ovlp[:,i,j] = tot
     return ovlp
 
