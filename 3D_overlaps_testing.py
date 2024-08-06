@@ -16,6 +16,28 @@ def get_3D_overlaps_numerical(qG, ki, kf, mo_coeff_i, mo_coeff_f):
     return ao_ovlp
 
 @time_wrapper
+def get_3D_overlaps_alternate(qG, k2, aos, R_id, unique_Ri):
+    """
+    Original fast version
+    """
+    new_ovlp = np.zeros((8, 38, 38), dtype = np.complex128)
+    for k in range(len(k2)):
+        for i in range(38):
+            for j in range(38):
+                aoi, aoj = aos[i], aos[j]
+                tot = np.ones((R_id.shape[1], len(aoj.coef), len(aoi.coef)), dtype = np.complex128)
+                for d in range(3):
+                    integral = np.load('test_resources/primgauss_1d_integrals_0/dim_{}/{:.5f}.npy'.format(d, qG[d]))
+                    vals = integral[:, aoj.prim_indices[d]][:,:,aoi.prim_indices[d]]
+                    phs = np.exp(-1.j*k2[k,d]*unique_Ri[d])
+                    vals = phs[:,None,None]*vals
+                    tot *= vals[R_id[d]]
+                tot = tot.sum(axis = 0)
+                tot *= aoj.coef[:,None]*aoi.coef[None,:]*aoj.norm[:,None]*aoi.norm[None,:]
+                new_ovlp[k, i,j] = np.sum(tot)
+    return new_ovlp
+
+@time_wrapper
 def get_3D_overlaps(qG, k2, aos, R_id, unique_Ri):
     ints = []
     for d in range(3):
@@ -148,6 +170,7 @@ R_id, unique_Ri = routines.load_unique_R(dark_objects['R_vectors'])
 
 qG = np.array(q)
 
+ovlp_alt = get_3D_overlaps_alternate(qG, k2, dark_objects['aos'], R_id, unique_Ri)
 
 integrals = load_1D_integrals(qG)
 ovlp_njit = get_3D_overlaps2_njit(integrals, k2, dark_objects['ao_coeff'], dark_objects['ao_bool'], R_id, unique_Ri)
