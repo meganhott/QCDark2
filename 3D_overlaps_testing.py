@@ -47,20 +47,20 @@ def get_3D_overlaps(qG, k2, aos, R_id, unique_Ri):
     - Broadcasting method is still fastest for ints/phase
     """
     ints = []
-    for d in range(3):
-        ints.append(np.load('test_resources/primgauss_1d_integrals_0/dim_{}/{:.5f}.npy'.format(d, qG[d]))[:,None,:,:] * np.exp(-1.j*unique_Ri[d][:,None]*k2[None,:,d])[:,:,None,None])
+    for d in range(3): #435us total
+        ints.append(np.load('test_resources/primgauss_1d_integrals_0/dim_{}/{:.5f}.npy'.format(d, qG[d]))[:,None,:,:] * np.exp(-1.j*unique_Ri[d][:,None]*k2[None,:,d])[:,:,None,None]) #145us
     n = len(aos)
-    ovlp = np.zeros((k2.shape[0], n, n), dtype = np.complex128)
-    for i in range(n):
+    ovlp = np.empty((k2.shape[0], n, n), dtype = np.complex128) #0.25us
+    for i in range(n): #16s total - overestimate since some AO only have one primgauss
         aoi = aos[i]
-        for j in range(n):
+        for j in range(n): #11.2ms per (i,j)
             aoj = aos[j]
-            tot = np.ones((R_id.shape[1], k2.shape[0], len(aoj.coef), len(aoi.coef)), dtype = np.complex128)
+            tot = np.ones((R_id.shape[1], k2.shape[0], len(aoj.coef), len(aoi.coef)), dtype = np.complex128) #614us
             for d in range(3):
-                ints_ij = ints[d][:,:,aoj.prim_indices[d]][:,:,:,aoi.prim_indices[d]]
-                tot *= ints_ij[R_id[d]]
-            tot = tot.sum(axis = 0) #sum over R
-            tot = (tot @ (aoi.coef*aoi.norm)) @ (aoj.coef*aoj.norm) #multiply by coefficients and sum over m,n
+                ints_ij = ints[d][:,:,aoj.prim_indices[d]][:,:,:,aoi.prim_indices[d]] #123us
+                tot *= ints_ij[R_id[d]] #2.75ms
+            tot = tot.sum(axis = 0) #sum over R #642us
+            tot = (tot @ (aoi.coef*aoi.norm)) @ (aoj.coef*aoj.norm) #multiply by coefficients and sum over m,n #1.58ms
             ovlp[:,i,j] = tot
     return ovlp
 
