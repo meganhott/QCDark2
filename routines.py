@@ -885,7 +885,7 @@ def bin_q(q, G_vectors, bin_centers, tot_bin_eps, tot_bin_weights):
     r_l = (np.round(qG_sh[:,0]/parmt.dq) - 0.5)*parmt.dq
     r_g = (np.round(qG_sh[:,0]/parmt.dq) + 0.5)*parmt.dq
     w_r_l = 1 - (qG_sh - r_l)/parmt.dq
-    w_r_g = 1 - (r_g qG_sh)/parmt.dq
+    w_r_g = 1 - (r_g - qG_sh)/parmt.dq
 
     #determine closest solid angles 
 
