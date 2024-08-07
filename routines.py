@@ -359,7 +359,27 @@ def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> li
                 i_cart += 1
     logging.info("Generated all cartesian contracted gaussians, number of shells = {}.".format(len(all_ao)))
     return all_ao
-    
+
+@time_wrapper
+def get_basis_blocks(aos: list[cartmoments.AO]) -> dict:
+    """
+    Get a dictionary object of all blocks of AO in terms of their prim_indices.
+    Inputs:
+        aos:    list[cartesian_moments.AO]
+    Returns:
+        blocks: dict object containing other dictionaries
+                blocks[tuple][index of AO object]: np.ndarray containing coef*norm
+    """
+    blocks = {}
+    for i, ao in enumerate(aos):
+        pg = tuple(tuple(pi) for pi in ao.prim_indices)
+        if pg in blocks:
+            blocks[pg][i] = ao.coef
+        else:
+            blocks[pg] = {i: ao.coef}
+    logging.info('Generated all blocks in 1D primitive gaussians, number of blocks = {}.'.format(len(blocks)))
+    return blocks
+
 @time_wrapper
 def KS_electronic_structure(cell: pbcgto.cell.Cell) -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
     """
