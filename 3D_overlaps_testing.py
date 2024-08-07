@@ -15,7 +15,6 @@ def get_3D_overlaps_numerical(qG, ao1, ao2):
     #return np.einsum('ai,ij,jb->ab', mo_coeff_f.T.conj(), ao_ovlp, mo_coeff_i)
     return np.array(ao_ovlp)
 
-
 @time_wrapper
 def get_3D_overlaps(qG, k2, aos, R_id, unique_Ri):
     """
@@ -39,6 +38,28 @@ def get_3D_overlaps(qG, k2, aos, R_id, unique_Ri):
             tot = tot.sum(axis = 0) #sum over R #642us
             tot = (tot @ (aoi.coef)) @ (aoj.coef) #multiply by coefficients and sum over m,n #1.58ms
             ovlp[:,i,j] = tot
+    return ovlp
+
+@time_wrapper
+def get_3D_overlaps_blocks(qG, k2, blocks, R_id, unique_Ri, n):
+    ints = []
+    for d in range(3): #435us total
+        ints.append(np.load('test_resources/primgauss_1d_integrals_0/dim_{}/{:.5f}.npy'.format(d, qG[d]))[:,None,:,:] * np.exp(-1.j*unique_Ri[d][:,None]*k2[None,:,d])[:,:,None,None])
+    ovlp = np.empty((k2.shape[0], n, n), dtype = np.complex128) 
+    for p1 in blocks:
+        d1 = blocks[p1]
+        p1 = np.array(p1)
+        for p2 in blocks:
+            d2 = blocks[p2]
+            p2 = np.array(p2)
+            tot = np.ones((R_id.shape[1], k2.shape[0], p2.shape[1], p1.shape[1]), dtype = np.complex128)
+            for d in range(3):
+                ints_ij = ints[d][:,:,p2[d]][:,:,:,p1[d]]
+                tot *= ints_ij[R_id[d]]
+            tot = tot.sum(axis = 0)
+            for i in d1:
+                for j in d2:
+                    ovlp[:,i,j] = (tot@d1[i])@d2[j]
     return ovlp
 
 @time_wrapper
@@ -151,9 +172,14 @@ k2 = np.load(parmt.store + '/k-pts_f.npy')[k_pairs[:,1]]
 k1 = np.load(parmt.store + '/k-pts_i.npy')[k_pairs[:,0]]
 R_id, unique_Ri = routines.load_unique_R(dark_objects['R_vectors'])
 
+blocks = dark_objects['blocks']
+aos = dark_objects['aos']
+n = len(aos)
+
 qG = np.array(q)
 #ovlp_alt = get_3D_overlaps_alternate(qG, k2, dark_objects['aos'], R_id, unique_Ri)
 ovlp = get_3D_overlaps(qG, k2, dark_objects['aos'], R_id, unique_Ri)
+ovlp_blk = get_3D_overlaps_blocks(qG, k2, dark_objects['blocks'], R_id, unique_Ri, n)
 
 coords, weights = routines.pbcdft.gen_grid.gen_becke_grids(cell)
 np.save(parmt.store + '/coords', np.transpose(np.append(coords.T, weights[None,:], axis = 0)))
@@ -165,79 +191,4 @@ ao1, ao2 = np.array(ao1), np.array(ao2)
 num_ovlp = get_3D_overlaps_numerical(qG, ao1, ao2)
 
 movlp1 = np.einsum('kia,kij,kjb->kab', mo_coeff_f.conj(), ovlp, mo_coeff_i)
-movlp2 = np.einsum('kia,kij,kjb->kab', mo_coeff_f.conj(), num_ovlp, mo_coeff_i)
-
-"""
-integrals = load_1D_integrals(qG)
-ovlp_njit = get_3D_overlaps2_njit(integrals, k2, dark_objects['ao_coeff'], dark_objects['ao_bool'], R_id, unique_Ri)
-#ovlp_njit = get_3D_overlaps2_njit(integrals, k2, dark_objects['ao_coeff'], dark_objects['ao_bool'], R_id, unique_Ri)
-
-ao_coeff = [ao.coef*ao.norm for ao in dark_objects['aos']]
-ao_prim_indices = [ao.prim_indices for ao in dark_objects['aos']]
-ovlp_jit = get_3D_overlaps_jit(integrals,k2,ao_prim_indices,ao_coeff,R_id,unique_Ri)
-#ovlp_jit = get_3D_overlaps_jit(integrals,k2,ao_prim_indices,ao_coeff,R_id,unique_Ri)
-
-num_ovlp = []
-for i in range(1): #range(len(k_pairs)):
-    num_ovlp.append(get_3D_overlaps_numerical(qG, k1[i], k2[i], mo_coeff_i[i], mo_coeff_f[i]))
-
-fig = plt.figure(figsize = (12,6))
-ax = fig.subplots(ncols = 4, nrows = 2)
-
-ax[0,0].imshow(ovlp[0].real, cmap = 'PiYG_r', vmin = -1, vmax = 1)
-ax[0,0].set_title('Overlaps, Real')
-ax[1,0].imshow(ovlp[0].imag, cmap = 'PiYG_r', vmin = -1, vmax = 1)
-ax[1,0].set_title('Overlaps, Imag')
-
-ax[0,1].imshow(ovlp_jit[0].real, cmap = 'PiYG_r', vmin = -1, vmax = 1)
-ax[0,1].set_title(r'jit, Real')
-ax[1,1].imshow(ovlp_jit[0].imag, cmap = 'PiYG_r', vmin = -1, vmax = 1)
-ax[1,1].set_title(r'jit, Imag') 
-
-ax[0,2].imshow(ovlp_njit[0].real, cmap = 'PiYG_r', vmin = -1, vmax = 1)
-ax[0,2].set_title('Overlaps 2 njit, Real')
-ax[1,2].imshow(ovlp_njit[0].imag, cmap = 'PiYG_r', vmin = -1, vmax = 1)
-ax[1,2].set_title('Overlaps 2 njit, Imag')
-
-ax[0,3].imshow(num_ovlp[0].real, cmap = 'PiYG_r', vmin = -1, vmax = 1)
-ax[0,3].set_title('Numerical, Real')
-ax[1,3].imshow(num_ovlp[0].imag, cmap = 'PiYG_r', vmin = -1, vmax = 1)
-ax[1,3].set_title('Numerical, Imag')
-plt.tight_layout()
-plt.show()
-"""
-"""
-for f in zip([get_3D_overlaps_einsum, get_3D_overlaps_tensordot], [('optimal','optimal'),None]):
-    all_3D_overlaps(f)
-"""
-"""
-for G in G_vectors:
-    eta_qG = routines.get_3D_overlaps(np.array(q)+G, k2[k_pairs[:,1]], mo_coeff_i[k_pairs[:,0]], mo_coeff_f[k_pairs[:,1]], R_id, unique_Ri)
-"""
-plt.rc('text', usetex = True)
-plt.rc('font', family = 'serif')
-
-plt.close()
-fig = plt.figure(figsize = (9,6.1))
-ax = fig.subplots(ncols = 3, nrows = 2)
-fig.suptitle(r'$\mathbf{} = ({:.4f}, {:.4f}, {:.4f})$'.format(r'{q}', qG[0], qG[1], qG[2]))
-
-ax[0,0].imshow(movlp2[0].real, cmap = 'PiYG', vmin = -1, vmax = 1)
-ax[0,0].set_title('Numerical, Real')
-ax[0,1].imshow(movlp2[0].imag, cmap = 'PiYG', vmin = -1, vmax = 1)
-ax[0,1].set_title('Numerical, Imag')
-ax[0,2].imshow(np.abs(movlp2[0]), cmap = 'PiYG', vmin = -1, vmax = 1)
-ax[0,2].set_title('Numerical, Abs')
-
-ax[1,0].imshow(movlp1[0].real, cmap = 'PiYG', vmin = -1, vmax = 1)
-ax[1,0].set_title('Analytical, Real')
-ax[1,1].imshow(movlp1[0].imag, cmap = 'PiYG', vmin = -1, vmax = 1)
-ax[1,1].set_title('Analytical, Imag')
-ax[1,2].imshow(np.abs(movlp1[0]), cmap = 'PiYG', vmin = -1, vmax = 1)
-ax[1,2].set_title('Analytical, Abs')
-
-plt.tight_layout()
-plt.show()
-plt.close()
-#print(eta_qG.shape)
-#np.save('/gpfs/scratch/mhott/eta_q.npy',eta_q)
+movlp2 = np.einsum('kia,kij,kjb->kab', mo_coeff_f.conj(), ovlp_blk, mo_coeff_i)
