@@ -10,34 +10,11 @@ def get_3D_overlaps_numerical(qG, ao1, ao2):
     coords = np.load(parmt.store + '/coords.npy')
     coords, weights = coords[:,:3], coords[:,3]
     operator = np.exp(1.j * np.einsum('wx, x -> w', coords, qG))
-    ao_ovlp = []
-    for k in range(len(ao2)):
-        ao_ovlp.append(np.einsum('w, wi, w, wj -> ij', weights, ao2[k].conj(), operator, ao1[k]))
+    ao_ovlp = np.einsum('w, kwi, w, kwj -> kij', weights, ao2.conj(), operator, ao1, optimize = 'optimal')
     #print(ao_ovlp.shape)
     #return np.einsum('ai,ij,jb->ab', mo_coeff_f.T.conj(), ao_ovlp, mo_coeff_i)
     return np.array(ao_ovlp)
 
-@time_wrapper
-def get_3D_overlaps_alternate(qG, k2, aos, R_id, unique_Ri):
-    """
-    Original fast version
-    """
-    new_ovlp = np.zeros((8, 38, 38), dtype = np.complex128)
-    for k in range(len(k2)):
-        for i in range(38):
-            for j in range(38):
-                aoi, aoj = aos[i], aos[j]
-                tot = np.ones((R_id.shape[1], len(aoj.coef), len(aoi.coef)), dtype = np.complex128)
-                for d in range(3):
-                    integral = np.load('test_resources/primgauss_1d_integrals_0/dim_{}/{:.5f}.npy'.format(d, qG[d]))
-                    vals = integral[:, aoj.prim_indices[d]][:,:,aoi.prim_indices[d]]
-                    phs = np.exp(-1.j*k2[k,d]*unique_Ri[d])
-                    vals = phs[:,None,None]*vals
-                    tot *= vals[R_id[d]]
-                tot = tot.sum(axis = 0)
-                tot *= aoj.coef[:,None]*aoi.coef[None,:]*aoj.norm[:,None]*aoi.norm[None,:]
-                new_ovlp[k, i,j] = np.sum(tot)
-    return new_ovlp
 
 @time_wrapper
 def get_3D_overlaps(qG, k2, aos, R_id, unique_Ri):
@@ -181,7 +158,7 @@ ovlp = get_3D_overlaps(qG, k2, dark_objects['aos'], R_id, unique_Ri)
 coords, weights = routines.pbcdft.gen_grid.gen_becke_grids(cell)
 np.save(parmt.store + '/coords', np.transpose(np.append(coords.T, weights[None,:], axis = 0)))
 ao1, ao2 = [], []
-for k in range(8):
+for k in range(len(k_pairs)):
     ao1.append(routines.pbcdft.numint.eval_ao(cell, coords, kpt = k1[k]))
     ao2.append(routines.pbcdft.numint.eval_ao(cell, coords, kpt = k2[k]))
 ao1, ao2 = np.array(ao1), np.array(ao2)
