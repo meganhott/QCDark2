@@ -175,7 +175,7 @@ k1 = np.load(parmt.store + '/k-pts_i.npy')[k_pairs[:,0]]
 R_id, unique_Ri = routines.load_unique_R(dark_objects['R_vectors'])
 
 qG = np.array(q)
-ovlp_alt = get_3D_overlaps_alternate(qG, k2, dark_objects['aos'], R_id, unique_Ri)
+#ovlp_alt = get_3D_overlaps_alternate(qG, k2, dark_objects['aos'], R_id, unique_Ri)
 ovlp = get_3D_overlaps(qG, k2, dark_objects['aos'], R_id, unique_Ri)
 
 coords, weights = routines.pbcdft.gen_grid.gen_becke_grids(cell)
@@ -186,6 +186,10 @@ for k in range(8):
     ao2.append(routines.pbcdft.numint.eval_ao(cell, coords, kpt = k2[k]))
 ao1, ao2 = np.array(ao1), np.array(ao2)
 num_ovlp = get_3D_overlaps_numerical(qG, ao1, ao2)
+
+movlp1 = np.einsum('kia,kij,kjb->kab', mo_coeff_f.conj(), ovlp, mo_coeff_i)
+movlp2 = np.einsum('kia,kij,kjb->kab', mo_coeff_f.conj(), num_ovlp, mo_coeff_i)
+
 """
 integrals = load_1D_integrals(qG)
 ovlp_njit = get_3D_overlaps2_njit(integrals, k2, dark_objects['ao_coeff'], dark_objects['ao_bool'], R_id, unique_Ri)
@@ -233,6 +237,30 @@ for f in zip([get_3D_overlaps_einsum, get_3D_overlaps_tensordot], [('optimal','o
 for G in G_vectors:
     eta_qG = routines.get_3D_overlaps(np.array(q)+G, k2[k_pairs[:,1]], mo_coeff_i[k_pairs[:,0]], mo_coeff_f[k_pairs[:,1]], R_id, unique_Ri)
 """
+plt.rc('text', usetex = True)
+plt.rc('font', family = 'serif')
 
+plt.close()
+fig = plt.figure(figsize = (9,6.1))
+ax = fig.subplots(ncols = 3, nrows = 2)
+fig.suptitle(r'$\mathbf{} = ({:.4f}, {:.4f}, {:.4f})$'.format(r'{q}', qG[0], qG[1], qG[2]))
+
+ax[0,0].imshow(movlp2[0].real, cmap = 'PiYG', vmin = -1, vmax = 1)
+ax[0,0].set_title('Numerical, Real')
+ax[0,1].imshow(movlp2[0].imag, cmap = 'PiYG', vmin = -1, vmax = 1)
+ax[0,1].set_title('Numerical, Imag')
+ax[0,2].imshow(np.abs(movlp2[0]), cmap = 'PiYG', vmin = -1, vmax = 1)
+ax[0,2].set_title('Numerical, Abs')
+
+ax[1,0].imshow(movlp1[0].real, cmap = 'PiYG', vmin = -1, vmax = 1)
+ax[1,0].set_title('Analytical, Real')
+ax[1,1].imshow(movlp1[0].imag, cmap = 'PiYG', vmin = -1, vmax = 1)
+ax[1,1].set_title('Analytical, Imag')
+ax[1,2].imshow(np.abs(movlp1[0]), cmap = 'PiYG', vmin = -1, vmax = 1)
+ax[1,2].set_title('Analytical, Abs')
+
+plt.tight_layout()
+plt.show()
+plt.close()
 #print(eta_qG.shape)
 #np.save('/gpfs/scratch/mhott/eta_q.npy',eta_q)

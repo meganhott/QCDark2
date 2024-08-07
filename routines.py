@@ -358,26 +358,28 @@ def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> li
                 all_ao.append(cartmoments.AO(atom_index = atm_indx, exps = exps, coeffs = coeffs[:,j], ijk = ijk, primgauss = primgauss))
                 i_cart += 1
     logging.info("Generated all cartesian contracted gaussians, number of shells = {}.".format(len(all_ao)))
+    return all_ao
+
+@time_wrapper
+def get_basis_blocks(aos: list[cartmoments.AO]) -> dict:
     """
-    li = []
-    for ao_i in all_ao:
-        ao_all_coef = np.zeros((3,primgauss.shape[0]))
-        for dim in range(3):
-            ao_all_coef[dim,ao_i.prim_indices[dim]] = ao_i.norm*ao_i.coef
-        li.append(ao_all_coef)
-    li = np.array(li)
-    logging.info("Reconstructed all cartesian contracted gaussians into coefficients of primitive gaussian objects.")
-    return all_ao, np.transpose(li, axes = (1, 0, 2))
+    Get a dictionary object of all blocks of AO in terms of their prim_indices.
+    Inputs:
+        aos:    list[cartesian_moments.AO]
+    Returns:
+        blocks: dict object containing other dictionaries
+                blocks[tuple][index of AO object]: np.ndarray containing coef*norm
     """
-    ao_bool = np.zeros((3,len(all_ao),primgauss.shape[0]))
-    ao_coeff = np.zeros((len(all_ao),primgauss.shape[0]))
-    for i,ao_i in enumerate(all_ao):
-        for dim in range(3):
-            ao_bool[dim, i, ao_i.prim_indices[dim]] = 1
-            ao_coeff[i,ao_i.prim_indices[dim]] = ao_i.coef*ao_i.norm
-    logging.info("Reconstructed all cartesian contracted gaussians into coefficients of primitive gaussian objects.")
-    return all_ao, ao_coeff, ao_bool #ao_coeff, ao_bool for testing
-    
+    blocks = {}
+    for i, ao in enumerate(aos):
+        pg = tuple(tuple(pi) for pi in ao.prim_indices)
+        if pg in blocks:
+            blocks[pg][i] = ao.coef
+        else:
+            blocks[pg] = {i: ao.coef}
+    logging.info('Generated all blocks in 1D primitive gaussians, number of blocks = {}.'.format(len(blocks)))
+    return blocks
+
 @time_wrapper
 def KS_electronic_structure(cell: pbcgto.cell.Cell) -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
     """
