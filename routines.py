@@ -864,18 +864,42 @@ def cartesian_to_spherical(cart: np.ndarray) -> np.ndarray:
             phi[i] = -np.pi
     return np.transpose([r, theta, phi])
 
-def bin_q(q, G_vectors, bin_centers):
+def bin_q(q, G_vectors, bin_centers, tot_bin_eps, tot_bin_weights):
     """
     Bin centers currently generated in tests
+
+    To Do:
+    - Dealing with phi=0/2pi
+    - weights: w_tot = w_r*w_phi*w_theta
+    
+    Inputs:
+        bin_centers: (N_bins,3): (r,theta,phi)
     """
     #convert q+G to spherical coords
     qG_sh = cartesian_to_spherical(q + G_vectors)
+
     #determine closest r bin centers
     np.round(qG_sh[:,0]/parmt.dq)
     r_l = (np.round(qG_sh[:,0]/parmt.dq) - 0.5)*parmt.dq
     r_g = (np.round(qG_sh[:,0]/parmt.dq) + 0.5)*parmt.dq
+    w_r_l = 1 - (qG_sh - r_l)/parmt.dq
+    w_r_g = 1 - (r_g qG_sh)/parmt.dq
 
     #determine closest solid angles 
 
     #match to bins
     #record list of all bins q+G contributes to with weights
+    return(tot_bin_eps, tot_bin_weights)
+
+def get_binned_epsilon(tot_bin_eps, tot_bin_weights):
+    """
+    After all epsilon(q+G), return epsilon(bins)
+
+    Inputs:
+        tot_bin_eps: (N_energies, N_bins)
+        tot_bin_weights: (N_bins)
+    Outputs:
+        binned_eps: (N_energies, N_bins)
+    """
+    binned_eps = tot_bin_eps/tot_bin_weights
+    return(binned_eps)
