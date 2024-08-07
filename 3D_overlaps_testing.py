@@ -60,7 +60,7 @@ def get_3D_overlaps(qG, k2, aos, R_id, unique_Ri):
                 ints_ij = ints[d][:,:,aoj.prim_indices[d]][:,:,:,aoi.prim_indices[d]] #123us
                 tot *= ints_ij[R_id[d]] #2.75ms
             tot = tot.sum(axis = 0) #sum over R #642us
-            tot = (tot @ (aoi.coef*aoi.norm)) @ (aoj.coef*aoj.norm) #multiply by coefficients and sum over m,n #1.58ms
+            tot = (tot @ (aoi.coef)) @ (aoj.coef) #multiply by coefficients and sum over m,n #1.58ms
             ovlp[:,i,j] = tot
     return ovlp
 
