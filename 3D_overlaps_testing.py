@@ -49,12 +49,15 @@ def get_3D_overlaps_blocks(qG, k2, blocks, R_id, unique_Ri, n):
     for p1 in blocks:
         d1 = blocks[p1]
         p1 = np.array(p1)
+        ints_i = []
+        for d in range(3):
+            ints_i.append(ints[d][:,:,:,p1[d]])
         for p2 in blocks:
             d2 = blocks[p2]
             p2 = np.array(p2)
             tot = np.ones((R_id.shape[1], k2.shape[0], p2.shape[1], p1.shape[1]), dtype = np.complex128)
             for d in range(3):
-                ints_ij = ints[d][:,:,p2[d]][:,:,:,p1[d]]
+                ints_ij = ints_i[d][:,:,p2[d]]
                 tot *= ints_ij[R_id[d]]
             tot = tot.sum(axis = 0)
             for i in d1:
