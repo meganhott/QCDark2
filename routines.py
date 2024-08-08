@@ -866,31 +866,60 @@ def cartesian_to_spherical(cart: np.ndarray) -> np.ndarray:
             phi[i] = -np.pi
     return np.transpose([r, theta, phi])
 
-def bin_q(q, G_vectors, bin_centers, tot_bin_eps, tot_bin_weights):
+def bin_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     """
     Bin centers currently generated in tests
 
     To Do:
-    - Dealing with phi=0/2pi
+    - Dealing with phi=0/2pi - test edge cases
     - weights: w_tot = w_r*w_phi*w_theta
+    - make bins dict for faster lookup?
+    - optimize creation of all bins 
     
     Inputs:
         bin_centers: (N_bins,3): (r,theta,phi)
     """
     #convert q+G to spherical coords
-    qG_sh = cartesian_to_spherical(q + G_vectors)
+    qG_sph = cartesian_to_spherical(q + G_vectors)
 
     #determine closest r bin centers
-    np.round(qG_sh[:,0]/parmt.dq)
-    r_l = (np.round(qG_sh[:,0]/parmt.dq) - 0.5)*parmt.dq
-    r_g = (np.round(qG_sh[:,0]/parmt.dq) + 0.5)*parmt.dq
-    w_r_l = 1 - (qG_sh - r_l)/parmt.dq
-    w_r_g = 1 - (r_g - qG_sh)/parmt.dq
+    r_l = (np.round(qG_sph[:,0]/parmt.dq) - 0.5)*parmt.dq
+    r_g = (np.round(qG_sph[:,0]/parmt.dq) + 0.5)*parmt.dq
+    w_r_l = 1 - (qG_sph[:,0] - r_l)/parmt.dq
+    w_r_g = 1 - (r_g - qG_sph[:,0])/parmt.dq
 
-    #determine closest solid angles 
+    #determine closest theta
+    d_theta = np.pi/parmt.N_theta
+    theta_l = np.floor(qG_sph[:,1]/d_theta)*d_theta
+    theta_g = np.ceil(qG_sph[:,1]/d_theta)*d_theta
+    #for theta_g > np.pi and theta_l < 0, give extra weight to theta = pi or 0
+    theta_l[theta_l < 0] = 0
+    theta_g[theta_g > np.pi] = np.pi
+
+    w_theta_l = 1 - np.abs(qG_sph[:,1] - theta_l)/d_theta
+    w_theta_g = 1 - np.abs(theta_g - qG_sph[:,1])/d_theta
+    
+
+    #determine closest phi
+    d_phi = 2*np.pi/parmt.N_phi
+    phi_l = np.floor(qG_sph[:,2]/d_phi)*d_phi
+    phi_g = np.ceil(qG_sph[:,2]/d_phi)*d_phi
+    #change phi_l<-pi and phi_g>pi, =pi 
+    phi_l[phi_l < -np.pi] = np.pi - d_phi
+    phi_g[phi_g == np.pi] = -np.pi
+    phi_g[phi_g > np.pi] = -np.pi + d_phi
+
+    w_phi_l = 1 - (qG_sph[:,2] - phi_l)/d_phi
+    w_phi_g = 1 - (phi_g - qG_sph[:,2])/d_phi
+
+    #each q+G contributes to 8 bins
+    #Rewrite so no loop over G: make (N_G,8,3) array
+    for i in range(G_vectors.shape[0]):
+        all_closest_bins = np.stack((np.repeat(np.stack(r_l[i],r_g[i]),4), np.tile(np.repeat(np.stack(phi_l[i],phi_g[i]),2),2), np.tile(np.stack(phi_l[i],phi_g[i]),4)), axis=1)
+        #do same with weights, then multiply w_r*w_theta*w_phi
 
     #match to bins
-    #record list of all bins q+G contributes to with weights
+    
     return(tot_bin_eps, tot_bin_weights)
 
 def get_binned_epsilon(tot_bin_eps, tot_bin_weights):
