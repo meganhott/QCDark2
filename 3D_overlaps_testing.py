@@ -24,7 +24,7 @@ def get_3D_overlaps(qG, k2, aos, R_id, unique_Ri):
     """
     ints = []
     for d in range(3): #435us total
-        ints.append(np.load('test_resources/primgauss_1d_integrals_0/dim_{}/{:.5f}.npy'.format(d, qG[d]))[:,None,:,:] * np.exp(-1.j*unique_Ri[d][:,None]*k2[None,:,d])[:,:,None,None]) #145us
+        ints.append(np.load('test_resources/primgauss_1d_integrals/dim_{}/{:.5f}.npy'.format(d, qG[d]))[:,None,:,:] * np.exp(-1.j*unique_Ri[d][:,None]*k2[None,:,d])[:,:,None,None]) #145us
     n = len(aos)
     ovlp = np.empty((k2.shape[0], n, n), dtype = np.complex128) #0.25us
     for i in range(n): #16s total - overestimate since some AO only have one primgauss
@@ -44,7 +44,7 @@ def get_3D_overlaps(qG, k2, aos, R_id, unique_Ri):
 def get_3D_overlaps_blocks(qG, k2, blocks, R_id, unique_Ri, n):
     ints = []
     for d in range(3): #435us total
-        ints.append(np.load('test_resources/primgauss_1d_integrals_0/dim_{}/{:.5f}.npy'.format(d, qG[d]))[:,None,:,:] * np.exp(-1.j*unique_Ri[d][:,None]*k2[None,:,d])[:,:,None,None])
+        ints.append(np.load('test_resources/primgauss_1d_integrals/dim_{}/{:.5f}.npy'.format(d, qG[d]))[:,None,:,:] * np.exp(-1.j*unique_Ri[d][:,None]*k2[None,:,d])[:,:,None,None])
     ovlp = np.empty((k2.shape[0], n, n), dtype = np.complex128) 
     for p1 in blocks:
         d1 = blocks[p1]
@@ -100,7 +100,7 @@ def get_3D_overlaps2(qG, k2, ao_coeff, ao_bool, R_id, unique_Ri):
     """
     primgauss_integrals = np.empty((3,R_id.shape[1],k2.shape[0],ao_coeff.shape[1],ao_coeff.shape[1]), dtype='complex') #(3,Rvec,k,m,n)
     for d in range(3):
-        integrals = np.load('test_resources/primgauss_1d_integrals_0/dim_{}/{:.5f}.npy'.format(d, qG[d])) #(R,m,n)
+        integrals = np.load('test_resources/primgauss_1d_integrals/dim_{}/{:.5f}.npy'.format(d, qG[d])) #(R,m,n)
         phs = np.exp(-1.j*np.tensordot(unique_Ri[d], k2[:,d], axes=0)) #(R,k)
         x = np.einsum('Rk,Rmn->Rkmn', phs, integrals)
         primgauss_integrals[d] = np.einsum('Rkmn,am,bn->Rkambn', x[R_id[d]], ao_bool[d], ao_bool[d]) #sets unused integrals to 0 for each AO
@@ -111,7 +111,7 @@ def get_3D_overlaps2(qG, k2, ao_coeff, ao_bool, R_id, unique_Ri):
 def load_1D_integrals(qG):
     integrals = []
     for d in range(3):
-        integrals.append(np.load('test_resources/primgauss_1d_integrals_0/dim_{}/{:.5f}.npy'.format(d, qG[d]))) #(R,m,n)
+        integrals.append(np.load('test_resources/primgauss_1d_integrals/dim_{}/{:.5f}.npy'.format(d, qG[d]))) #(R,m,n)
     return integrals
 
 @time_wrapper
@@ -193,5 +193,5 @@ for k in range(len(k_pairs)):
 ao1, ao2 = np.array(ao1), np.array(ao2)
 num_ovlp = get_3D_overlaps_numerical(qG, ao1, ao2)
 
-movlp1 = np.einsum('kia,kij,kjb->kab', mo_coeff_f.conj(), ovlp, mo_coeff_i)
-movlp2 = np.einsum('kia,kij,kjb->kab', mo_coeff_f.conj(), ovlp_blk, mo_coeff_i)
+movlp1 = np.einsum('kia,kij,kjb->kab', mo_coeff_f.conj()[:,:,iconbot:icontop], ovlp, mo_coeff_i[:,:,ivalbot:ivaltop])
+movlp2 = np.einsum('kia,kij,kjb->kab', mo_coeff_f.conj()[:,:,iconbot:icontop], ovlp_blk, mo_coeff_i[:,:,ivalbot:ivaltop])

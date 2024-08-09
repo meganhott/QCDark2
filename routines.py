@@ -561,7 +561,7 @@ def primgauss_1D_overlaps(dark_objects: dict):
         dark_objects:   dict: equivalent to a class object, except not self-referential.
     """
     def store_primgauss_1D_0(dim: int, qG: np.ndarray, results: np.ndarray, Ru: np.ndarray):
-        dir = parmt.store + '/primgauss_1d_integrals_0/dim_{}/'.format(dim)
+        dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
         makedir(dir)
         np.save(dir + 'Ru', Ru)
         results = np.transpose(results, axes = (3,0,1,2))
@@ -573,7 +573,7 @@ def primgauss_1D_overlaps(dark_objects: dict):
     q, G = np.load(parmt.store + '/unique_q.npy'), dark_objects['G_vectors']
     Rv = dark_objects['R_vectors']
     logging.info("Generating overlaps of 1D primitve gaussians.")
-    makedir(parmt.store + '/primgauss_1d_integrals_0/')
+    makedir(parmt.store + '/primgauss_1d_integrals/')
     with mp.get_context('fork').Pool(mp.cpu_count()) as p:
         for d in range(3):
             qu, Gu = get_all_unique_nums_in_array(q[:,d], round_to=10), get_all_unique_nums_in_array(G[:,d], round_to=10)
