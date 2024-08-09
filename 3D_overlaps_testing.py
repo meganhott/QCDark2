@@ -166,6 +166,7 @@ G_vectors = dark_objects['G_vectors'][:num_G,:]
 routines.get_band_indices()
 
 ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
+
 dft_path = parmt.store + '/DFT/'
 mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[k_pairs[:,0]]
 mo_coeff_f = np.load(dft_path + 'mo_coeff_f.npy')[k_pairs[:,1]]
@@ -193,5 +194,5 @@ for k in range(len(k_pairs)):
 ao1, ao2 = np.array(ao1), np.array(ao2)
 num_ovlp = get_3D_overlaps_numerical(qG, ao1, ao2)
 
-movlp1 = np.einsum('kia,kij,kjb->kab', mo_coeff_f.conj()[:,:,iconbot:icontop], ovlp, mo_coeff_i[:,:,ivalbot:ivaltop])
-movlp2 = np.einsum('kia,kij,kjb->kab', mo_coeff_f.conj()[:,:,iconbot:icontop], ovlp_blk, mo_coeff_i[:,:,ivalbot:ivaltop])
+movlp1 = np.einsum('kia,kij,kjb->kab', mo_coeff_f.conj()[:,:,iconbot:icontop+1], ovlp, mo_coeff_i[:,:,ivalbot:ivaltop+1])
+movlp2 = np.einsum('kia,kij,kjb->kab', mo_coeff_f.conj()[:,:,iconbot:icontop+1], ovlp_blk, mo_coeff_i[:,:,ivalbot:ivaltop+1])

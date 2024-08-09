@@ -3,6 +3,7 @@ import input_parameters as parmt
 import numpy as np
 import multiprocessing as mp
 from functools import partial
+from RPA_dielectric_testing_helper import *
 
 num_G = 1000
 
@@ -53,6 +54,23 @@ def initialize_RPA_dielectric_test(dark_objects):
         eps = np.array(eps) #(G, E)
         #Implement binning with eps, G_q as input
         routines.logging.info('epsilon_GG(q, E) calculated for {0} G vectors and {1} energies for 1BZ q vector {2}. eps is {3:.3f} MB in memory.'.format(eps.shape[0], eps.shape[1], tuple(q), routines.sys.getsizeof(eps)/10**6))
+
+
+
+
+def dielectric_function_no_lfe(dark_objects: dict):
+
+    pass
+
+def dielectric_function_lfe(dark_objects: dict):
+    pass
+
+def RPA_dielectric_function(dark_objects: dict):
+    if parmt.include_lfe:
+        dielectric_function_lfe(dark_objects)
+    else:
+        dielectric_function_no_lfe(dark_objects)
+    return
 
 cell, dark_objects = initialize_cell()
 dark_objects['unique_q'] = routines.get_1BZ_q_points(cell)

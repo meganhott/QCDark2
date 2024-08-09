@@ -840,7 +840,7 @@ def load_unique_R(R_vectors):
 
         nR = np.round(R_vectors[:,dim,None] - unique_Ri[dim][None,:], 10)
         R_id[:,dim] = np.sum(nR > 0, axis=1)
-    R_id = np.transpose(R_id).astype(int) #(dim, R_vec) 
+    R_id = np.transpose(R_id).astype(np.int16) #(dim, R_vec) 
     return R_id, unique_Ri
 
 
