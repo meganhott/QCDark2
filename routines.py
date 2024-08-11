@@ -20,6 +20,7 @@ import multiprocessing as mp
 from functools import partial
 import shutil
 import input_parameters as parmt
+import binning as bin
 ##==== Constants in the whole calculation ============
 c = 299792458.                                                                  # c in m/s
 me = 0.51099895000e6                                                            # eV/c^2
@@ -802,6 +803,9 @@ def initialize_RPA_dielectric(dark_objects):
     R_id, unique_Ri = load_unique_R(R_vectors)
 
     #initialize bins
+    bin_centers = bin.gen_bin_centers()
+    tot_bin_eps = np.zeros((bin_centers.shape[0], int(parmt.E_max/parmt.dE)+1))
+    tot_bin_weights = np.zeros(bin_centers.shape[0])
     
     if parmt.include_lfe:
         RPA_eps = RPA_dielectric_lfe
@@ -826,7 +830,10 @@ def initialize_RPA_dielectric(dark_objects):
         with mp.get_context('fork').Pool(mp.cpu_count()) as p:  #parallelization over G
             eps = p.map(partial(RPA_eps, q=q, mo_en_i=mo_en_i_q, mo_en_f=mo_en_f_q, k_f=k_f_q, mo_coeff_i=mo_coeff_i_q, mo_coeff_f=mo_coeff_f_q, R_id=R_id, unique_Ri=unique_Ri), G_q)
         eps = np.array(eps) #(G, E)
-        #Implement binning with eps, G_q as input
+
+        #bin eps calculated for all G
+        tot_bin_eps, tot_bin_weights = bin.bin_eps_q(q, G_q, eps, bin_centers, tot_bin_eps, tot_bin_weights)
+
 
 def load_unique_R(R_vectors):
     """
@@ -842,85 +849,6 @@ def load_unique_R(R_vectors):
         R_id[:,dim] = np.sum(nR > 0, axis=1)
     R_id = np.transpose(R_id).astype(np.int16) #(dim, R_vec) 
     return R_id, unique_Ri
-
-
-def cartesian_to_spherical(cart: np.ndarray) -> np.ndarray:
-    """
-    Converts all vectors given in cartesian coordinates to corresponding vectors in spherical polar coordinates,
-    and remove non-unique vectors.
-    Inputs:
-        cart:   np.ndarray of shape (N, 3)
-                cart[i] = [x, y, z]
-    Outputs:
-        sph:    np.ndarray of shape (N, 3)
-                sph[i] = [r, theta, phi]
-                0 <= theta <= pi, -pi <= phi < pi 
-    """
-    r = np.sqrt(cart[:,0]**2 + cart[:,1]**2 + cart[:,2]**2)
-    theta = np.arccos(cart[:,2]/r)
-    phi = np.arctan2(cart[:,1],cart[:,0])
-    for i,th in enumerate(theta):
-        if th == 0 or round(th, 9) == round(np.pi, 9):
-            phi[i] = 0
-        if round(phi[i],9) == round(np.pi, 9): 
-            phi[i] = -np.pi
-    return np.transpose([r, theta, phi])
-
-def bin_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
-    """
-    Bin centers currently generated in tests
-
-    To Do:
-    - Dealing with phi=0/2pi - test edge cases
-    - weights: w_tot = w_r*w_phi*w_theta
-    - make bins dict for faster lookup?
-    - optimize creation of all bins 
-    
-    Inputs:
-        bin_centers: (N_bins,3): (r,theta,phi)
-    """
-    #convert q+G to spherical coords
-    qG_sph = cartesian_to_spherical(q + G_vectors)
-
-    #determine closest r bin centers
-    r_l = (np.round(qG_sph[:,0]/parmt.dq) - 0.5)*parmt.dq
-    r_g = (np.round(qG_sph[:,0]/parmt.dq) + 0.5)*parmt.dq
-    w_r_l = 1 - (qG_sph[:,0] - r_l)/parmt.dq
-    w_r_g = 1 - (r_g - qG_sph[:,0])/parmt.dq
-
-    #determine closest theta
-    d_theta = np.pi/parmt.N_theta
-    theta_l = np.floor(qG_sph[:,1]/d_theta)*d_theta
-    theta_g = np.ceil(qG_sph[:,1]/d_theta)*d_theta
-    #for theta_g > np.pi and theta_l < 0, give extra weight to theta = pi or 0
-    theta_l[theta_l < 0] = 0
-    theta_g[theta_g > np.pi] = np.pi
-
-    w_theta_l = 1 - np.abs(qG_sph[:,1] - theta_l)/d_theta
-    w_theta_g = 1 - np.abs(theta_g - qG_sph[:,1])/d_theta
-    
-
-    #determine closest phi
-    d_phi = 2*np.pi/parmt.N_phi
-    phi_l = np.floor(qG_sph[:,2]/d_phi)*d_phi
-    phi_g = np.ceil(qG_sph[:,2]/d_phi)*d_phi
-    #change phi_l<-pi and phi_g>pi, =pi 
-    phi_l[phi_l < -np.pi] = np.pi - d_phi
-    phi_g[phi_g == np.pi] = -np.pi
-    phi_g[phi_g > np.pi] = -np.pi + d_phi
-
-    w_phi_l = 1 - (qG_sph[:,2] - phi_l)/d_phi
-    w_phi_g = 1 - (phi_g - qG_sph[:,2])/d_phi
-
-    #each q+G contributes to 8 bins
-    #Rewrite so no loop over G: make (N_G,8,3) array
-    for i in range(G_vectors.shape[0]):
-        all_closest_bins = np.stack((np.repeat(np.stack(r_l[i],r_g[i]),4), np.tile(np.repeat(np.stack(phi_l[i],phi_g[i]),2),2), np.tile(np.stack(phi_l[i],phi_g[i]),4)), axis=1)
-        #do same with weights, then multiply w_r*w_theta*w_phi
-
-    #match to bins
-    
-    return(tot_bin_eps, tot_bin_weights)
 
 def get_binned_epsilon(tot_bin_eps, tot_bin_weights):
     """
