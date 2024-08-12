@@ -85,16 +85,17 @@ def construct_all_solid_angles(N_theta: int = 7, N_phi: int = 8) -> np.ndarray:
                 solid_angles.append([theta, phi])
     return np.array(solid_angles)
 
-def gen_bin_centers(cartesian=True) -> np.ndarray:
+def gen_bin_centers(cartesian=False) -> np.ndarray:
     Omega = construct_all_solid_angles(parmt.N_theta, parmt.N_phi)
     qr = np.arange(parmt.dq*0.5, parmt.q_max + parmt.dq*0.5, parmt.dq)
     qra = []
     for q in qr:
         for O in Omega:
             qra.append([q, O[0], O[1]])
+    qra = np.array(qra)
     if cartesian: #Convert from spherical to cartesian
-        qra = spherical_to_cartesian(np.array(qra))
-    return np.array(qra)
+        qra = spherical_to_cartesian(qra)
+    return np.round(qra, 10)
 
 def get_1BZ_q_vectors(q:np.ndarray, mod='G'):
     """
