@@ -3,9 +3,24 @@ import input_parameters as parmt
 import multiprocessing as mp
 from functools import partial
 import logging
-from routines import time_wrapper
+import time
+#from routines import time_wrapper
 
 n = 10 #rounding precision
+
+def time_wrapper(func):
+    """
+    Wrapper for printing execution time to logger.
+    """
+    def wrap(*args, **kwargs):
+        logging.info('Entering function {}'.format(func.__name__))
+        start = time.time()
+        val = func(*args, **kwargs)
+        end = time.time()
+        logging.info('Exiting function {}. Time taken = {:.2f} s.\n'.format(func.__name__, end - start))
+        return val
+
+    return wrap
 
 def spherical_to_cartesian(sph: np.ndarray, unique=False) -> np.ndarray:
     """
@@ -132,6 +147,10 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     """
     #convert q+G to spherical coords
     qG_sph = cartesian_to_spherical(q + G_vectors)
+
+    #find bin index and weights simultaneously
+    r_n = np.round((qG_sph[:,0]/parmt.dq - 0.5), n)
+    #// and % to get lower bin and weight, +1/1- to get upper bin and weight
 
     #determine closest r bin centers
     r_l = (np.floor(np.round((qG_sph[:,0]/parmt.dq - 0.5), n)) + 0.5)*parmt.dq
