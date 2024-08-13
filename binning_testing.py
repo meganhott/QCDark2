@@ -1,7 +1,7 @@
 from binning import *
 from dielectric_functions import *
 
-num_G = 3
+num_G = -1
 
 cell, dark_objects = initialize_cell()
 dark_objects['unique_q'] = routines.get_1BZ_q_points(cell)
@@ -16,6 +16,6 @@ eps_q = np.ones((G_q.shape[0], int(parmt.E_max/parmt.dE)+1))
 
 tot_bin_eps, tot_bin_weights = bin_eps_q(q, G_q, eps_q, bin_centers, tot_bin_eps, tot_bin_weights)
 
-print(bin_centers[np.where(tot_bin_weights != 0)[0]])
+#print(bin_centers[np.where(tot_bin_weights != 0)[0]])
 
 

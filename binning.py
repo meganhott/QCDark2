@@ -129,13 +129,13 @@ def gen_bin_centers(cartesian=False) -> np.ndarray:
 def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     """
     To Do:
-    - Need to speed up
-        - Should we make bin_centers into dict? Then I don't think we can use multiprocessing to add eps and w to each bin if dict = {(r,phi,theta): (tot_bin_eps, tot_bin_weight)}. We could instead just store the position of each bin center in a dict: dict = {(r,phi,theta): position in array(int)} and add all new eps and weights at the end. Or, since bin centers are generated procedurally, we can calculate which position in bin_centers we need to write to. 
     - Test phi=0/2pi edge cases
-    - How should we deal with r_l < 0 and r_g > q_max? Currently they just don't match to any bins
+    - How should we deal with r_l < 0 and r_g > q_max? Currently they just don't match to any bins - check if this is still an issue
     
     Notes:
     - We need to calculate phi weights before correcting for edge cases. For example, if we need to correct phi_bin=pi to phi_bin=-pi for some phi, then weighting after the correction will cause huge weight since phi_bin - phi ~ 2pi. On the other hand, we need to calculate theta weights after correcting for edge cases near 0 and pi
+    - Flattening bins and weights makes find_bins much faster, particularly when making the mask (750us for (G,8) -> 14us for (G*8) flattened)!
+    - Takes 27s for all G vectors on my laptop (12 cores), can get down to a few seconds with more cores?
 
     Inputs:
         bin_centers: (N_bins,3): (r,theta,phi)
@@ -145,58 +145,55 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     Outputs:
         updated tot_bin_eps and tot_bin_weights
     """
+    def find_bin_id(coord_id):
+        """
+        Input: (G, 8, [r_id,theta_id,phi_id])
+        Output: (G, 8) = bin_id
+        """
+        theta_id = coord_id[:,:,1]
+        theta_factor = (theta_id > 0)*1 + ((theta_id - 1) > 0)*(theta_id - 1)*parmt.N_phi - (theta_id == (parmt.N_theta - 1))*(parmt.N_phi - 1) #need this since only one bin for theta = 0,pi
+        phi_factor = (1 - (theta_id == 0))*(1 - (theta_id == (parmt.N_theta-1)))*coord_id[:,:,2]
+        return coord_id[:,:,0]*(parmt.N_phi*(parmt.N_theta-2)+2) + theta_factor + phi_factor
+    
     #convert q+G to spherical coords
     qG_sph = cartesian_to_spherical(q + G_vectors)
 
     #find bin index and weights simultaneously
-    r_n = np.round((qG_sph[:,0]/parmt.dq - 0.5), n)
-    #// and % to get lower bin and weight, +1/1- to get upper bin and weight
+    r_n = np.round(qG_sph[:,0]/parmt.dq - 0.5, n)
+    r_l = np.floor(r_n).astype(int)
+    r_g = np.ceil(r_n).astype(int)
+    w_r_l = 1 - r_n % 1
+    w_r_g = 1 - w_r_l #if r_l=r_g, only one weight=1, otherwise we're double-counting
 
-    #determine closest r bin centers
-    r_l = (np.floor(np.round((qG_sph[:,0]/parmt.dq - 0.5), n)) + 0.5)*parmt.dq
-    r_g = (np.ceil(np.round((qG_sph[:,0]/parmt.dq - 0.5), n)) + 0.5)*parmt.dq
-
-    w_r_l = 1 - (qG_sph[:,0] - r_l)/parmt.dq
-    w_r_g = 1 - (r_g - qG_sph[:,0])/parmt.dq
+    d_phi = 2*np.pi/parmt.N_phi
+    phi_n = np.round((qG_sph[:,2] + np.pi)/d_phi, n)
+    phi_l = np.floor(phi_n).astype(int)
+    phi_g = np.ceil(phi_n).astype(int)
+    w_phi_l = 1 - phi_n % 1
+    w_phi_g = 1 - w_phi_l
+    phi_g[phi_g == parmt.N_phi] = 0 #maps pi to -pi
 
     #determine closest cos(theta)
-    bin_theta = np.unique(bin_centers[:,1]) #unique theta in bins
-    theta_l = bin_theta[np.sum((np.round(qG_sph[:,1][:,None] - bin_theta, n) >= 0), axis=1) - 1]
-    theta_g = bin_theta[np.sum((np.round(qG_sph[:,1][:,None] - bin_theta, n) > 0), axis=1)]
+    bin_costheta = np.cos(np.unique(bin_centers[:,1])) #unique cos(theta) in bins
+    qG_cos = np.cos(qG_sph[:,1])
+    theta_l = np.sum(np.round(qG_cos[:,None] - bin_costheta, n) <= 0, axis=1) - 1
+    theta_g = parmt.N_theta - np.sum(np.round(qG_cos[:,None] - bin_costheta, n) >= 0, axis=1)
 
     #weight according to cos(theta)
-    bin_diff = np.cos(theta_l) - np.cos(theta_g)
-    w_theta_l = 1 - (np.cos(theta_l) - np.cos(qG_sph[:,1]))/bin_diff
-    w_theta_g = 1 - (np.cos(qG_sph[:,1]) - np.cos(theta_g))/bin_diff
+    bin_diff = bin_costheta[theta_l] - bin_costheta[theta_g]
+    w_theta_l = 1 - (bin_costheta[theta_l] - qG_cos)/bin_diff
+    w_theta_g = 1 - (qG_cos - bin_costheta[theta_g])/bin_diff
 
-    #fix weights for theta_l = 0 and theta_g = pi
-    w_theta_l[np.isnan(w_theta_l)] = 1
-    w_theta_g[np.isnan(w_theta_g)] = 1
+    #fix weights for theta_l = theta_g
+    w_theta_l[np.round(bin_diff, n) == 0] = 1
+    w_theta_g[np.round(bin_diff, n) == 0] = 1
+
+    all_closest_bins_id = np.hstack(find_bin_id(np.stack([np.repeat(np.stack([r_l,r_g], axis=1), 4, axis=1), np.tile(np.repeat(np.stack([theta_l,theta_g], axis=1), 2, axis=1), 2), np.tile(np.stack([phi_l,phi_g], axis=1), 4)], axis=2))) #(G,8,3) -> (G*8) (each group of 8 elements corresponds to one G vector)
     
-    #determine closest phi
-    d_phi = 2*np.pi/parmt.N_phi
-    phi_l = np.floor(qG_sph[:,2]/d_phi)*d_phi
-    phi_g = np.ceil(qG_sph[:,2]/d_phi)*d_phi
-
-    w_phi_l = 1 - (qG_sph[:,2] - phi_l)/d_phi
-    w_phi_g = 1 - (phi_g - qG_sph[:,2])/d_phi
-
-    #change phi_l<-pi and phi_g>pi, =pi 
-    phi_l[phi_l < -np.pi] = np.pi - d_phi
-    phi_g[phi_g == np.pi] = -np.pi
-    phi_g[phi_g > np.pi] = -np.pi + d_phi
-
-    all_closest_bins = np.round(np.stack([np.repeat(np.stack([r_l,r_g], axis=1), 4, axis=1), np.tile(np.repeat(np.stack([theta_l,theta_g], axis=1), 2, axis=1), 2), np.tile(np.stack([phi_l,phi_g], axis=1), 4)], axis=2), n) #(G,8,3)
-    
-    all_weights = np.prod(np.stack([np.repeat(np.stack([w_r_l,w_r_g], axis=1), 4, axis=1), np.tile(np.repeat(np.stack([w_theta_l,w_theta_g], axis=1), 2, axis=1), 2), np.tile(np.stack([w_phi_l,w_phi_g], axis=1), 4)], axis=2), axis=2) #(G,8)
-
-    #match to bins
-    #trade-off: 
-    # dict: fast lookup but have to loop to add to existing values
-    # array: slow lookup but can add everything at once and use multiprocessing
+    all_weights = np.hstack(np.prod(np.stack([np.repeat(np.stack([w_r_l,w_r_g], axis=1), 4, axis=1), np.tile(np.repeat(np.stack([w_theta_l,w_theta_g], axis=1), 2, axis=1), 2), np.tile(np.stack([w_phi_l,w_phi_g], axis=1), 4)], axis=2), axis=2)) #(G*8)
 
     with mp.get_context('fork').Pool(mp.cpu_count()) as p: #parallelization over bins
-        res = p.map(partial(find_bin, eps_q=eps_q, all_closest_bins=all_closest_bins, all_weights=all_weights), bin_centers)
+        res = p.map(partial(match_bin, eps_q=eps_q, all_closest_bins_id=all_closest_bins_id, all_weights=all_weights), range(bin_centers.shape[0]))
     new_bin_weights = np.array([i[0] for i in res])
     new_bin_eps = np.array([i[1] for i in res])
 
@@ -205,18 +202,20 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
 
     return tot_bin_eps, tot_bin_weights
 
-def find_bin(bin_center, eps_q, all_closest_bins, all_weights):
+def match_bin(bin_center_id, eps_q, all_closest_bins_id, all_weights):
     """
-    bin_center: (3,)
+    bin_center_id: int
     eps_q: (G,E)
-    bins: (G,8,3)
-    weights: (G,8)
+    all_closest_bins_id: (G*8,)
+    all_weights: (G*8,)
     """
-    ind = np.array(np.where(((all_closest_bins[:,:,0] == bin_center[0]).astype(int) + (all_closest_bins[:,:,1] == bin_center[1]).astype(int) + (all_closest_bins[:,:,2] == bin_center[2]).astype(int)) == 3))
+    bin_mask = (all_closest_bins_id == bin_center_id)
+    ind = np.where(bin_mask)[0] #G*8 indices for weights
+    ind_G = ind//8 #G indices for eps
 
-    eps_bin = eps_q[ind[0]]
-    w_bin = all_weights[ind[0],ind[1]]
+    w_bin = all_weights[ind]
+    eps_bin = eps_q[ind_G]
 
-    w = np.sum(w_bin)
-    eps_E = np.sum(w_bin[:,None]*eps_bin, axis=0)
+    w = np.sum(w_bin) #total weight
+    eps_E = np.sum(w_bin[:,None]*eps_bin, axis=0) #total w*eps
     return w, eps_E
