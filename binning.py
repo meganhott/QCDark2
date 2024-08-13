@@ -135,7 +135,8 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     Notes:
     - We need to calculate phi weights before correcting for edge cases. For example, if we need to correct phi_bin=pi to phi_bin=-pi for some phi, then weighting after the correction will cause huge weight since phi_bin - phi ~ 2pi. On the other hand, we need to calculate theta weights after correcting for edge cases near 0 and pi
     - Flattening bins and weights makes find_bins much faster, particularly when making the mask (750us for (G,8) -> 14us for (G*8) flattened)!
-    - Takes 27s for all G vectors on my laptop (12 cores), can get down to a few seconds with more cores?
+    - Takes 27s for all G vectors on my laptop (12 cores)
+    - Multiprocessing does not seem to be working well, it's actually faster to run in a for loop. May have to chunk into multiple processes (e.g. each process gets 1000 bin_centers to loop through) and run those in parallel for any speedup
 
     Inputs:
         bin_centers: (N_bins,3): (r,theta,phi)
@@ -191,11 +192,18 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     all_closest_bins_id = np.hstack(find_bin_id(np.stack([np.repeat(np.stack([r_l,r_g], axis=1), 4, axis=1), np.tile(np.repeat(np.stack([theta_l,theta_g], axis=1), 2, axis=1), 2), np.tile(np.stack([phi_l,phi_g], axis=1), 4)], axis=2))) #(G,8,3) -> (G*8) (each group of 8 elements corresponds to one G vector)
     
     all_weights = np.hstack(np.prod(np.stack([np.repeat(np.stack([w_r_l,w_r_g], axis=1), 4, axis=1), np.tile(np.repeat(np.stack([w_theta_l,w_theta_g], axis=1), 2, axis=1), 2), np.tile(np.stack([w_phi_l,w_phi_g], axis=1), 4)], axis=2), axis=2)) #(G*8)
-
+    
     with mp.get_context('fork').Pool(mp.cpu_count()) as p: #parallelization over bins
         res = p.map(partial(match_bin, eps_q=eps_q, all_closest_bins_id=all_closest_bins_id, all_weights=all_weights), range(bin_centers.shape[0]))
     new_bin_weights = np.array([i[0] for i in res])
     new_bin_eps = np.array([i[1] for i in res])
+    
+    """
+    new_bin_weights = np.empty(bin_centers.shape[0])
+    new_bin_eps = np.empty((bin_centers.shape[0], int(parmt.E_max/parmt.dE)+1), dtype='complex')
+    for i in range(bin_centers.shape[0]):
+        new_bin_weights[i], new_bin_eps[i] = match_bin(i, eps_q, all_closest_bins_id, all_weights)
+    """
 
     tot_bin_weights += np.array(new_bin_weights)
     tot_bin_eps += np.array(new_bin_eps)
