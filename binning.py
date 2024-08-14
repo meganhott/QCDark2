@@ -128,16 +128,13 @@ def gen_bin_centers(cartesian=False) -> np.ndarray:
 @time_wrapper
 def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     """
-    To Do:
-    - Test phi=0/2pi edge cases
-    - How should we deal with r_l < 0 and r_g > q_max? Currently they just don't match to any bins - check if this is still an issue
-    
     Notes:
     - We need to calculate phi weights before correcting for edge cases. For example, if we need to correct phi_bin=pi to phi_bin=-pi for some phi, then weighting after the correction will cause huge weight since phi_bin - phi ~ 2pi. On the other hand, we need to calculate theta weights after correcting for edge cases near 0 and pi
     - Flattening bins and weights makes find_bins much faster, particularly when making the mask (750us for (G,8) -> 14us for (G*8) flattened)!
     - Takes 27s for all G vectors on my laptop (12 cores)
     - Multiprocessing does not seem to be working well, it's actually faster to run in a for loop (20s). May have to chunk into multiple processes (e.g. each process gets 1000 bin_centers to loop through) and run those in parallel for any speedup
     - Chunking is even slower than normal multiprocessing (~50s)
+    - Way faster to loop through all_closest_bins: now ~1.8s. We can't implement multiprocessing for this method since we have multiple contributions being written to each bin.
 
     Inputs:
         bin_centers: (N_bins,3): (r,theta,phi)
@@ -193,77 +190,16 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     all_closest_bins_id = np.hstack(find_bin_id(np.stack([np.repeat(np.stack([r_l,r_g], axis=1), 4, axis=1), np.tile(np.repeat(np.stack([theta_l,theta_g], axis=1), 2, axis=1), 2), np.tile(np.stack([phi_l,phi_g], axis=1), 4)], axis=2))) #(G,8,3) -> (G*8) (each group of 8 elements corresponds to one G vector)
     
     all_weights = np.hstack(np.prod(np.stack([np.repeat(np.stack([w_r_l,w_r_g], axis=1), 4, axis=1), np.tile(np.repeat(np.stack([w_theta_l,w_theta_g], axis=1), 2, axis=1), 2), np.tile(np.stack([w_phi_l,w_phi_g], axis=1), 4)], axis=2), axis=2)) #(G*8)
-
-    #multiprocessing without chunks
-    """
-    with mp.get_context('fork').Pool(mp.cpu_count()) as p: #parallelization over bins
-        res = p.map(partial(match_bin, eps_q=eps_q, all_closest_bins_id=all_closest_bins_id, all_weights=all_weights), range(bin_centers.shape[0]))
-    new_bin_weights = np.array([i[0] for i in res])
-    new_bin_eps = np.array([i[1] for i in res])
-    """
-    
-    #multiprocessing with chunks
-    """
-    #determine chunks of bin_centers for multiprocessing
-    num_cpu = mp.cpu_count()
-    num_bins = int(np.ceil(bin_centers.shape[0]/num_cpu))
-    mp_chunk_edges = [num_bins*i for i in range(num_cpu)] + [num_bins*num_cpu - bin_centers.shape[0]%num_cpu] #gives first n-1 cpus equal number of bins and last cpu the remainder
-    mp_chunks = [(mp_chunk_edges[i],mp_chunk_edges[i+1]) for i in range(len(mp_chunk_edges)-1)]
-
-    with mp.get_context('fork').Pool(mp.cpu_count()) as p: #parallelization over bins
-        res = p.map(partial(match_bin, eps_q=eps_q, all_closest_bins_id=all_closest_bins_id, all_weights=all_weights), mp_chunks)
-    new_bin_weights = np.concatenate([i[0] for i in res])
-    new_bin_eps = np.concatenate([i[1] for i in res])
-    """
-    #In serial
-    new_bin_weights = np.empty(bin_centers.shape[0])
-    new_bin_eps = np.empty((bin_centers.shape[0], int(parmt.E_max/parmt.dE)+1), dtype='complex')
-    for i in range(bin_centers.shape[0]):
-        new_bin_weights[i], new_bin_eps[i] = match_bin(i, eps_q, all_closest_bins_id, all_weights)
-
-    tot_bin_weights += np.array(new_bin_weights)
-    tot_bin_eps += np.array(new_bin_eps)
+ 
+    for i, bin_id in enumerate(all_closest_bins_id):
+        try:
+            w = all_weights[i]
+            tot_bin_weights[bin_id] += w
+            tot_bin_eps[bin_id] += w*eps_q[i//8] # i//8 is G-vector index
+        except:
+            """
+            If |q+G| > q_max - dq/2, only the closest bins corresponding to r_l should contribute since the r_g bins are not included in bin_centers. This raises an error since the bin_id will be too large.
+            """  
+            pass
 
     return tot_bin_eps, tot_bin_weights
-
-def match_bin(bin_center_id, eps_q, all_closest_bins_id, all_weights):
-    """
-    bin_center_id: int
-    eps_q: (G,E)
-    all_closest_bins_id: (G*8,)
-    all_weights: (G*8,)
-    """
-    bin_mask = (all_closest_bins_id == bin_center_id)
-    ind = np.where(bin_mask)[0] #G*8 indices for weights
-    ind_G = ind//8 #G indices for eps
-
-    w_bin = all_weights[ind]
-    eps_bin = eps_q[ind_G]
-
-    w = np.sum(w_bin) #total weight
-    eps_E = np.sum(w_bin[:,None]*eps_bin, axis=0) #total w*eps
-    return w, eps_E
-
-#multiprocessing test
-'''
-def match_bin(bin_center_ids, eps_q, all_closest_bins_id, all_weights):
-    """
-    bin_center_ids: (int, int): (start_bin, stop_bin)
-    eps_q: (G,E)
-    all_closest_bins_id: (G*8,)
-    all_weights: (G*8,)
-    """
-    w = np.empty(bin_center_ids[1]-bin_center_ids[0])
-    eps_E = np.empty((bin_center_ids[1]-bin_center_ids[0], int(parmt.E_max/parmt.dE)+1), dtype='complex')
-    for i, bin_center_id in enumerate(range(bin_center_ids[0],bin_center_ids[1])):
-        bin_mask = (all_closest_bins_id == bin_center_id)
-        ind = np.where(bin_mask)[0] #G*8 indices for weights
-        ind_G = ind//8 #G indices for eps
-
-        w_bin = all_weights[ind]
-        eps_bin = eps_q[ind_G]
-
-        w[i] = np.sum(w_bin) #total weight
-        eps_E[i] = np.sum(w_bin[:,None]*eps_bin, axis=0) #total w*eps
-    return w, eps_E
-'''
