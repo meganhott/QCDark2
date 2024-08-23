@@ -160,6 +160,7 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     #find bin index and weights simultaneously
     r_n = np.round(qG_sph[:,0]/parmt.dq - 0.5, n)
     r_l = np.floor(r_n).astype(int)
+    r_l[r_l < 0] = 0
     r_g = np.ceil(r_n).astype(int)
     w_r_l = 1 - r_n % 1
     w_r_g = 1 - w_r_l #if r_l=r_g, only one weight=1, otherwise we're double-counting
