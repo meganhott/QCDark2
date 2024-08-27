@@ -318,6 +318,7 @@ def construct_R_vectors(cell: pbcgto.cell.Cell) -> np.ndarray:
         unR:    np.ndarray of shape (M, ), M << N, unique scalars in Rvecs. 
     """
     Rvecs = cell.get_lattice_Ls()
+    Rvecs = Rvecs[np.argsort(np.linalg.norm(Rvecs, axis=1))] #sort by norm
     np.save(parmt.store + '/R_vectors.npy', Rvecs)
     logging.info('{} R vectors generated for the cell given precision = {}, and saved to {}.'.format(Rvecs.shape[0], cell.precision, parmt.store + '/R_vectors.npy'))
     return Rvecs
@@ -556,7 +557,7 @@ def primgauss_1D_overlaps(dark_objects: dict):
         primgauss_1d_integrals
             dim_i
                 q+G.npy
-    Each stored array has shape (N_Ru_i, N_AO, N_AO) since primgauss indices have been summed over.
+    Each stored array has shape (N_Ru_i, N_primgauss, N_primgauss)
 
     Inputs:
         dark_objects:   dict: equivalent to a class object, except not self-referential.
@@ -690,6 +691,50 @@ def get_3D_overlaps(q, G, k_f, mo_coeff_i, mo_coeff_f, R_id, unique_Ri):
     eta_qG = np.einsum('kab,kai,kbj->kij', eta_qG, mo_coeff_i, mo_coeff_f.conj())
     #logging.info('All {} 3D overlaps generated for q+G vector {}. eta_qG is {:.3f} MB in memory.'.format(np.prod(eta_qG.shape), list(map(lambda qG :str(qG),qG.round(5))), sys.getsizeof(eta_qG)/10**6))
     return eta_qG
+
+def get_R_cutoffs(aos, N_primgauss, p):
+    """
+    Notes:
+        - Should precision p be the same as parmt.precision that is fed to pyscf?
+        - Currently only implemented in one direction - do we need to worry about 3D? For anisotropic could implement cutoff in terms of number of R cells to include instead of R_cut
+
+    To Do:
+        - change load_unique_R and 3D_overlaps so that R_id is only generated for R vectors up to |R| = R_cut(|q+G|)
+
+    Inputs:
+        aos:            atomic orbitals
+        N_primgauss:    number of primitive gaussians
+        p:              precision
+    Outputs:
+        qG_mag:         magnitudes of q+G sorted from smallest to largest
+        R_cut:          largest magnitude of R vector required to obtain precision 
+    """
+    d = 0
+
+    #determine max normalizations from all AO 
+    norm_max = np.zeros(N_primgauss)
+    for ao in aos: 
+        for i,m in enumerate(ao.prim_indices[d]):
+            norm_max[m] = max(norm_max[m],(ao.norm[i])**(1/3)) #updates maximum norm
+    norm_max = np.tensordot(norm_max, norm_max, axes=0) #(m,n)
+
+    dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(d)
+    Ru = np.load(dir+'Ru.npy')
+    files = os.listdir(dir)
+    files.remove('Ru.npy')
+    qG_mag = np.zeros(len(files))
+    R_cut = np.zeros(len(files))
+    for i,f in enumerate(files): #(for q:)
+        q_1d_integrals = np.load(dir+f)
+        q_1d_integrals = norm_max[None,:,:]*q_1d_integrals #multiply by max normalizations
+        R_cut[i] = np.max(np.abs(Ru[np.max(q_1d_integrals, axis=(1,2)) > p])) #compares maximum 1d integral for each R_i to precision
+        
+        qG_mag[i] =  np.abs(float(f[:-4]))
+        s = np.argsort(qG_mag)
+        qG_mag = qG_mag[s] #sorted magnitude of q+G 
+        R_cut = R_cut[s] #corresponding R_cut
+
+    return qG_mag, R_cut
 
 def RPA_susceptibility(E, eta_qG, eta_qGp, mo_en_i, mo_en_f):
     """

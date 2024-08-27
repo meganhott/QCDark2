@@ -147,7 +147,6 @@ class AO(object):
         self.prim_indices = None
         self.find_location_and_indices(primgauss)
         self.coef = self.coef*self.norm
-        del self.norm
         return None
 
     def normalize(self) -> None:
