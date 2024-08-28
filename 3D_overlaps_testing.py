@@ -47,7 +47,7 @@ ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
 
 dft_path = parmt.store + '/DFT/'
 mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[k_pairs[:,0]]#[:,:,ivalbot:ivaltop+1]
-mo_coeff_f_conj = np.load(dft_path + 'mo_coeff_f.npy')[k_pairs[:,1]].conj()#[:,:,iconbot:icontop+1].conj()
+mo_coeff_f_conj = np.load(dft_path + 'mo_coeff_f.npy')[k_pairs[:,1]].conj()#[:,:,iconbot:icontop+1]
 mo_en_i = np.load(dft_path + 'mo_en_i.npy')
 mo_en_f = np.load(dft_path + 'mo_en_f.npy')
 k2 = np.load(parmt.store + '/k-pts_f.npy')[k_pairs[:,1]]
