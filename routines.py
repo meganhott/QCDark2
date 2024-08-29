@@ -237,8 +237,21 @@ def gen_all_1D_prim_gauss(cell: pbcgto.cell.Cell) -> np.ndarray:
                                         exponent from 0 to l, inclusive (should be int, stored as float)
                         exponent:       Basis set element
                         A_x, A_y, A_z:  location of the atom from atom_index
+                        norm:           cube-root of the normalization.
     """
-    primgauss = np.zeros((0, 7))
+    def normalize(exp, L) -> None:
+        """
+        Routine to normalize the basis functions. Note that s and p orbitals have different normalizations
+        for cartesian and spherical shells, while higher orbitals carry same normalization scheme no matter what.
+        Function modifies attribute:
+            self.norm
+        """
+        if L < 2:
+            return np.sqrt(np.power(2,2*(L)+1.5)*np.power(exp,L+1.5)/cartmoments.fact2(2*L-1)/cartmoments.fact2(-1)/cartmoments.fact2(-1)/np.power(np.pi,1.5))
+        else:
+            return np.sqrt(np.power(2, L + 2.5)*np.power(exp, L + 1.5)/cartmoments.gamma(1.5 + L))
+        
+    primgauss = np.zeros((0, 8))
     for atom_id, atom in enumerate(cell._atom):
         species, loc = atom[0], atom[1]
         atom_basis = cell._basis[species]
@@ -246,8 +259,9 @@ def gen_all_1D_prim_gauss(cell: pbcgto.cell.Cell) -> np.ndarray:
             l = basis_element[0]
             elements = basis_element[1:]
             for element in elements:
+                norm = normalize(element[0], l)
                 for i in range(l+1):
-                    primgauss = np.append(primgauss, [[atom_id, l, i, element[0], loc[0], loc[1], loc[2]]], axis = 0)
+                    primgauss = np.append(primgauss, [[atom_id, l, i, element[0], loc[0], loc[1], loc[2], norm]], axis = 0)
     logging.info("All 1D primitive gaussians found for the cell.\n\tNumber of unique primitive gaussians = {}.\n\tThis includes all possible angular momentum in one direction.".format(primgauss.shape[0]))
     return primgauss
 
@@ -539,18 +553,8 @@ def get_1BZ_q_points(cell: pbcgto.cell.Cell) -> dict:
     logging.info("{} unique q-vectors found in 1BZ. Storing all unique q-vectors in {}/unique_q.npy.".format(qu.shape[0], parmt.store))
     return dic
 
-def store_primgauss_1D(dim: int, qG: np.ndarray, results: np.ndarray, Ru: np.ndarray):
-    dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
-    makedir(dir)
-    np.save(dir + 'Ru', Ru)
-    results = np.transpose(results, axes = (2, 1, 0, 3))
-    print(results.shape) 
-    for q, res in zip(qG, results):
-        np.save(dir + '{:.5f}'.format(q), res)
-    return None
-
 @time_wrapper
-def primgauss_1D_overlaps(dark_objects: dict):
+def primgauss_1D_overlaps_test(cell, dark_objects: dict) -> list[np.ndarray]:
     """
     Store all 1D primitive gaussians in files. 
     parmt.store
@@ -562,20 +566,25 @@ def primgauss_1D_overlaps(dark_objects: dict):
     Inputs:
         dark_objects:   dict: equivalent to a class object, except not self-referential.
     """
-    def store_primgauss_1D_0(dim: int, qG: np.ndarray, results: np.ndarray, Ru: np.ndarray):
+    def store_primgauss_1D(dim: int, qG: np.ndarray, results: np.ndarray, Ru: np.ndarray, norms: np.ndarray) -> np.ndarray:
         dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
         makedir(dir)
         np.save(dir + 'Ru', Ru)
-        results = np.transpose(results, axes = (3,0,1,2))
+        results = np.transpose(results, axes = (3, 0, 1, 2))
+        val = []
         for q, res in zip(qG, results):
             np.save(dir + '{:.5f}'.format(q), res)
-        return None
+            loc = np.where(np.abs(np.einsum('Rab,a,b->Rab', res, norms, norms, optimize = False)).max(axis = (1,2)) > parmt.precision)[0]
+            val.append([q, loc.min(), loc.max()])
+        return np.array(val)
+    norms = dark_objects['primitive_gaussians'][:,-1]**(1./3.)
     primindices = dark_objects['primindices']
     atom_locs = dark_objects['atom_locs']
     q, G = np.load(parmt.store + '/unique_q.npy'), dark_objects['G_vectors']
     Rv = dark_objects['R_vectors']
     logging.info("Generating overlaps of 1D primitve gaussians.")
     makedir(parmt.store + '/primgauss_1d_integrals/')
+    vals = []
     with mp.get_context('fork').Pool(mp.cpu_count()) as p:
         for d in range(3):
             qu, Gu = get_all_unique_nums_in_array(q[:,d], round_to=10), get_all_unique_nums_in_array(G[:,d], round_to=10)
@@ -586,9 +595,9 @@ def primgauss_1D_overlaps(dark_objects: dict):
             logging.info('\tDimension = {}:\n\t\tNumber of unique q = {};\n\t\tNumber of unique R = {}.'.format(d, qG.size, Ru.size))
             res = p.map(partial(cartmoments.primgauss_1D_overlaps_uR, primindices = primindices, q = qG, atom_locs = atom_locs[:,d]), Ru)
             res = np.array(res)
-            store_primgauss_1D_0(d, qG, res, Ru)
+            vals.append(store_primgauss_1D(d, qG, res, Ru, norms))
     logging.info("Generated overlaps of 1D primitive gaussians.")
-    return 
+    return vals
 
 def get_band_indices():
     """
