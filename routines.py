@@ -15,12 +15,14 @@ import pyscf.pbc.dft as pbcdft
 import pyscf.pbc
 import pyscf
 import scipy
+import scipy.interpolate
 import cartesian_moments as cartmoments
 import multiprocessing as mp
 from functools import partial
 import shutil
 import input_parameters as parmt
 import binning as bin
+
 ##==== Constants in the whole calculation ============
 c = 299792458.                                                                  # c in m/s
 me = 0.51099895000e6                                                            # eV/c^2
@@ -554,7 +556,7 @@ def get_1BZ_q_points(cell: pbcgto.cell.Cell) -> dict:
     return dic
 
 @time_wrapper
-def primgauss_1D_overlaps_test(cell, dark_objects: dict) -> list[np.ndarray]:
+def primgauss_1D_overlaps(cell, dark_objects: dict) -> list[np.ndarray]:
     """
     Store all 1D primitive gaussians in files. 
     parmt.store
@@ -575,8 +577,15 @@ def primgauss_1D_overlaps_test(cell, dark_objects: dict) -> list[np.ndarray]:
         for q, res in zip(qG, results):
             np.save(dir + '{:.5f}'.format(q), res)
             loc = np.where(np.abs(np.einsum('Rab,a,b->Rab', res, norms, norms, optimize = False)).max(axis = (1,2)) > parmt.precision)[0]
-            val.append([q, loc.min(), loc.max()])
+            val.append([q, min(np.abs(Ru[loc.min()]), np.abs(Ru[loc.max()]))])
         return np.array(val)
+    def get_R_cutoffs(vals: np.ndarray) -> np.ndarray:
+        uns = get_all_unique_nums_in_array(vals[:,1])
+        v = []
+        for u in uns:
+            v.append([min(np.abs(vals[vals[:,1] == u, 0])), u])
+        v.reverse()
+        return np.array(v)
     norms = dark_objects['primitive_gaussians'][:,-1]**(1./3.)
     primindices = dark_objects['primindices']
     atom_locs = dark_objects['atom_locs']
@@ -596,8 +605,9 @@ def primgauss_1D_overlaps_test(cell, dark_objects: dict) -> list[np.ndarray]:
             res = p.map(partial(cartmoments.primgauss_1D_overlaps_uR, primindices = primindices, q = qG, atom_locs = atom_locs[:,d]), Ru)
             res = np.array(res)
             vals.append(store_primgauss_1D(d, qG, res, Ru, norms))
+    vals = np.append(vals[0], np.append(vals[1], vals[2], axis = 0), axis = 0)
     logging.info("Generated overlaps of 1D primitive gaussians.")
-    return vals
+    return get_R_cutoffs(vals)
 
 def get_band_indices():
     """
