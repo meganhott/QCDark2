@@ -4,7 +4,7 @@ import multiprocessing as mp
 from functools import partial
 import logging
 import time
-#from routines import time_wrapper
+from numba import njit
 
 n = 10 #rounding precision
 
@@ -42,10 +42,14 @@ def spherical_to_cartesian(sph: np.ndarray, unique=False) -> np.ndarray:
         cart = np.unique(cart, axis=0)
     return cart
 
-def cartesian_to_spherical(cart: np.ndarray, unique=False) -> np.ndarray:
+@njit
+def cartesian_to_spherical(cart: np.ndarray) -> np.ndarray:
     """
-    Converts all vectors given in cartesian coordinates to corresponding vectors in spherical polar coordinates,
-    and remove non-unique vectors.
+    Converts all vectors given in cartesian coordinates to corresponding vectors in spherical polar coordinates.
+
+    Notes:
+    - Huge speedup using numba which is important for binning algorithm (288 ms to 3.8 ms for ~70000 vectors). Can't implement "unique" option with numba but I don't think we were using that anyway
+
     Inputs:
         cart:   np.ndarray of shape (N, 3)
                 cart[i] = [x, y, z]
@@ -65,9 +69,7 @@ def cartesian_to_spherical(cart: np.ndarray, unique=False) -> np.ndarray:
             phi[i] = 0
         if round(phi[i],9) == round(np.pi, 9): 
             phi[i] = -np.pi
-    sph = np.round(np.transpose([r, theta, phi]), n)
-    if unique:
-        sph = np.unique(sph, axis=0)
+    sph = np.round(np.stack((r, theta, phi), axis=1), n)
     return sph
 
 def construct_theta_bins() -> np.ndarray:
@@ -135,6 +137,17 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     - Multiprocessing does not seem to be working well, it's actually faster to run in a for loop (20s). May have to chunk into multiple processes (e.g. each process gets 1000 bin_centers to loop through) and run those in parallel for any speedup
     - Chunking is even slower than normal multiprocessing (~50s)
     - Way faster to loop through all_closest_bins: now ~1.8s. We can't implement multiprocessing for this method since we have multiple contributions being written to each bin.
+    - numpy functions to find r, theta, phi bins are not parallelized but are very fast anyway. May be possible to parallelize bin construction for slight speedup, but slowest part of code is still the loop to bin epsilon. We can't parallelize this though since one bin will be written to many times, and past attempts at parallelizing this step were slower than current implementation.
+
+    Timings: (on PC for 71137 G vectors)
+    Converting to spherical: 4 ms (290 ms without numba)
+    Finding r bins: 1.7 ms
+    Finding phi bins: 1.5 ms
+    Finding theta bins: 7.4 ms
+    Constructing all closest bins array: 27.1 ms
+    Constructing weights array: 27.5 ms
+    Binning epsilon: 1.07 s
+    Total: 1.32 s
 
     Inputs:
         bin_centers: (N_bins,3): (r,theta,phi)
