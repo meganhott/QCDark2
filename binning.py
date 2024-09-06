@@ -138,6 +138,8 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     - Chunking is even slower than normal multiprocessing (~50s)
     - Way faster to loop through all_closest_bins: now ~1.8s. We can't implement multiprocessing for this method since we have multiple contributions being written to each bin.
     - numpy functions to find r, theta, phi bins are not parallelized but are very fast anyway. May be possible to parallelize bin construction for slight speedup, but slowest part of code is still the loop to bin epsilon. We can't parallelize this though since one bin will be written to many times, and past attempts at parallelizing this step were slower than current implementation.
+    - Applying numba to the binning loop speeds that step up by a factor of ~2. We need to add extra "junk" rows to our binned epsilon and weights for bins beyond the ones included in bin_centers since we can't use the try-except statement in numba's c-implementation (it results in a seg fault since we're trying to access invalid memory)
+    - Next step could be to try to make whole function compatible with numba
 
     Timings: (on PC for 71137 G vectors)
     Converting to spherical: 4 ms (290 ms without numba)
@@ -146,8 +148,8 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     Finding theta bins: 7.4 ms
     Constructing all closest bins array: 27.1 ms
     Constructing weights array: 27.5 ms
-    Binning epsilon: 1.07 s
-    Total: 1.32 s
+    Binning epsilon: 422 ms (1.07 s without numba)
+    Total: 0.71 s
 
     Inputs:
         bin_centers: (N_bins,3): (r,theta,phi)
@@ -204,7 +206,10 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     all_closest_bins_id = np.hstack(find_bin_id(np.stack([np.repeat(np.stack([r_l,r_g], axis=1), 4, axis=1), np.tile(np.repeat(np.stack([theta_l,theta_g], axis=1), 2, axis=1), 2), np.tile(np.stack([phi_l,phi_g], axis=1), 4)], axis=2))) #(G,8,3) -> (G*8) (each group of 8 elements corresponds to one G vector)
     
     all_weights = np.hstack(np.prod(np.stack([np.repeat(np.stack([w_r_l,w_r_g], axis=1), 4, axis=1), np.tile(np.repeat(np.stack([w_theta_l,w_theta_g], axis=1), 2, axis=1), 2), np.tile(np.stack([w_phi_l,w_phi_g], axis=1), 4)], axis=2), axis=2)) #(G*8)
+
+    tot_bin_eps, tot_bin_weights = apply_to_bins(all_closest_bins_id, all_weights, tot_bin_weights, tot_bin_eps, eps_q)
  
+    '''
     for i, bin_id in enumerate(all_closest_bins_id):
         try:
             w = all_weights[i]
@@ -215,5 +220,15 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
             If |q+G| > q_max - dq/2, only the closest bins corresponding to r_l should contribute since the r_g bins are not included in bin_centers. This raises an error since the bin_id will be too large.
             """  
             pass
+    '''
+
+    return tot_bin_eps, tot_bin_weights
+
+@njit
+def apply_to_bins(all_closest_bins_id, all_weights, tot_bin_weights, tot_bin_eps, eps_q):
+    for i, bin_id in enumerate(all_closest_bins_id):
+        w = all_weights[i]
+        tot_bin_weights[bin_id] += w
+        tot_bin_eps[bin_id] += w*eps_q[i//8] # i//8 is G-vector index
 
     return tot_bin_eps, tot_bin_weights

@@ -9,8 +9,9 @@ q = np.array(list(dark_objects['unique_q'].keys())[0])
 G_q = dark_objects['G_vectors'][np.linalg.norm(q+dark_objects['G_vectors'], axis=1) < parmt.q_max][:num_G]
 
 bin_centers = gen_bin_centers()
-tot_bin_eps = np.zeros((bin_centers.shape[0], int(parmt.E_max/parmt.dE)+1), dtype='complex')
-tot_bin_weights = np.zeros(bin_centers.shape[0])
+#need to add extra #angular bins "junk" entries to binned epsilon and weights for numba optimization
+tot_bin_eps = np.zeros((bin_centers.shape[0]+(parmt.N_phi*(parmt.N_theta-2)+2), int(parmt.E_max/parmt.dE)+1), dtype='complex')
+tot_bin_weights = np.zeros(bin_centers.shape[0]+(parmt.N_phi*(parmt.N_theta-2)+2))
 
 eps_q = np.ones((G_q.shape[0], int(parmt.E_max/parmt.dE)+1)) + 1j*np.zeros((G_q.shape[0], int(parmt.E_max/parmt.dE)+1))
 
