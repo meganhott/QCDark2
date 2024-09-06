@@ -128,6 +128,7 @@ def gen_bin_centers(cartesian=False) -> np.ndarray:
     return np.round(qra, n)
 
 @time_wrapper
+@njit
 def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     """
     Notes:
@@ -139,17 +140,17 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     - Way faster to loop through all_closest_bins: now ~1.8s. We can't implement multiprocessing for this method since we have multiple contributions being written to each bin.
     - numpy functions to find r, theta, phi bins are not parallelized but are very fast anyway. May be possible to parallelize bin construction for slight speedup, but slowest part of code is still the loop to bin epsilon. We can't parallelize this though since one bin will be written to many times, and past attempts at parallelizing this step were slower than current implementation.
     - Applying numba to the binning loop speeds that step up by a factor of ~2. We need to add extra "junk" rows to our binned epsilon and weights for bins beyond the ones included in bin_centers since we can't use the try-except statement in numba's c-implementation (it results in a seg fault since we're trying to access invalid memory)
-    - Next step could be to try to make whole function compatible with numba
+    - all_closest_bins_id and all_weights were rewritten so whole function is now comapatible with numba. This reduces total run time per q vector to 0.51s!
 
     Timings: (on PC for 71137 G vectors)
     Converting to spherical: 4 ms (290 ms without numba)
     Finding r bins: 1.7 ms
     Finding phi bins: 1.5 ms
     Finding theta bins: 7.4 ms
-    Constructing all closest bins array: 27.1 ms
-    Constructing weights array: 27.5 ms
+    Constructing all closest bins array: 8.2 ms (27.1 ms before flattening)
+    Constructing weights array: 2.6 ms (27.5 ms before flattening)
     Binning epsilon: 422 ms (1.07 s without numba)
-    Total: 0.71 s
+    Total: 0.51 s
 
     Inputs:
         bin_centers: (N_bins,3): (r,theta,phi)
@@ -164,26 +165,26 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
         Input: (G, 8, [r_id,theta_id,phi_id])
         Output: (G, 8) = bin_id
         """
-        theta_id = coord_id[:,:,1]
+        theta_id = coord_id[:,1]
         theta_factor = (theta_id > 0)*1 + ((theta_id - 1) > 0)*(theta_id - 1)*parmt.N_phi - (theta_id == (parmt.N_theta - 1))*(parmt.N_phi - 1) #need this since only one bin for theta = 0,pi
-        phi_factor = (1 - (theta_id == 0))*(1 - (theta_id == (parmt.N_theta-1)))*coord_id[:,:,2]
-        return coord_id[:,:,0]*(parmt.N_phi*(parmt.N_theta-2)+2) + theta_factor + phi_factor
+        phi_factor = (1 - (theta_id == 0))*(1 - (theta_id == (parmt.N_theta-1)))*coord_id[:,2]
+        return coord_id[:,0]*(parmt.N_phi*(parmt.N_theta-2)+2) + theta_factor + phi_factor
     
     #convert q+G to spherical coords
     qG_sph = cartesian_to_spherical(q + G_vectors)
 
     #find bin index and weights simultaneously
     r_n = np.round(qG_sph[:,0]/parmt.dq - 0.5, n)
-    r_l = np.floor(r_n).astype(int)
+    r_l = np.floor(r_n).astype(np.int32)
     r_l[r_l < 0] = 0
-    r_g = np.ceil(r_n).astype(int)
+    r_g = np.ceil(r_n).astype(np.int32)
     w_r_l = 1 - r_n % 1
     w_r_g = 1 - w_r_l #if r_l=r_g, only one weight=1, otherwise we're double-counting
 
     d_phi = 2*np.pi/parmt.N_phi
     phi_n = np.round((qG_sph[:,2] + np.pi)/d_phi, n)
-    phi_l = np.floor(phi_n).astype(int)
-    phi_g = np.ceil(phi_n).astype(int)
+    phi_l = np.floor(phi_n).astype(np.int32)
+    phi_g = np.ceil(phi_n).astype(np.int32)
     w_phi_l = 1 - phi_n % 1
     w_phi_g = 1 - w_phi_l
     phi_g[phi_g == parmt.N_phi] = 0 #maps pi to -pi
@@ -203,32 +204,13 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     w_theta_l[np.round(bin_diff, n) == 0] = 1
     w_theta_g[np.round(bin_diff, n) == 0] = 1
 
-    all_closest_bins_id = np.hstack(find_bin_id(np.stack([np.repeat(np.stack([r_l,r_g], axis=1), 4, axis=1), np.tile(np.repeat(np.stack([theta_l,theta_g], axis=1), 2, axis=1), 2), np.tile(np.stack([phi_l,phi_g], axis=1), 4)], axis=2))) #(G,8,3) -> (G*8) (each group of 8 elements corresponds to one G vector)
-    
-    all_weights = np.hstack(np.prod(np.stack([np.repeat(np.stack([w_r_l,w_r_g], axis=1), 4, axis=1), np.tile(np.repeat(np.stack([w_theta_l,w_theta_g], axis=1), 2, axis=1), 2), np.tile(np.stack([w_phi_l,w_phi_g], axis=1), 4)], axis=2), axis=2)) #(G*8)
+    all_closest_bins_id = find_bin_id(np.stack((np.ravel(np.stack((r_l,r_l,r_l,r_l,r_g,r_g,r_g,r_g), axis=1)),  np.ravel(np.stack((theta_l,theta_l,theta_g,theta_g,theta_l,theta_l,theta_g,theta_g), axis=1)),  np.ravel(np.stack((phi_l,phi_g,phi_l,phi_g,phi_l,phi_g,phi_l,phi_g), axis=1))), axis=1)) #(G*8,) (each group of 8 elements corresponds to one G vector)
 
-    tot_bin_eps, tot_bin_weights = apply_to_bins(all_closest_bins_id, all_weights, tot_bin_weights, tot_bin_eps, eps_q)
- 
-    '''
-    for i, bin_id in enumerate(all_closest_bins_id):
-        try:
-            w = all_weights[i]
-            tot_bin_weights[bin_id] += w
-            tot_bin_eps[bin_id] += w*eps_q[i//8] # i//8 is G-vector index
-        except:
-            """
-            If |q+G| > q_max - dq/2, only the closest bins corresponding to r_l should contribute since the r_g bins are not included in bin_centers. This raises an error since the bin_id will be too large.
-            """  
-            pass
-    '''
+    all_weights = np.ravel(np.stack((w_r_l,w_r_l,w_r_l,w_r_l,w_r_g,w_r_g,w_r_g,w_r_g), axis=1)) * np.ravel(np.stack((w_theta_l,w_theta_l,w_theta_g,w_theta_g,w_theta_l,w_theta_l,w_theta_g,w_theta_g), axis=1)) * np.ravel(np.stack((w_phi_l,w_phi_g,w_phi_l,w_phi_g,w_phi_l,w_phi_g,w_phi_l,w_phi_g), axis=1))
 
-    return tot_bin_eps, tot_bin_weights
-
-@njit
-def apply_to_bins(all_closest_bins_id, all_weights, tot_bin_weights, tot_bin_eps, eps_q):
     for i, bin_id in enumerate(all_closest_bins_id):
         w = all_weights[i]
         tot_bin_weights[bin_id] += w
-        tot_bin_eps[bin_id] += w*eps_q[i//8] # i//8 is G-vector index
-
+        tot_bin_eps[bin_id] += w*eps_q[i//8] #i//8 is G-vector index
+ 
     return tot_bin_eps, tot_bin_weights
