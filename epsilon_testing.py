@@ -11,6 +11,7 @@ tot_bin_eps, tot_bin_weights = initialize_RPA_dielectric(dark_objects, test=True
 
 binned_eps = get_binned_epsilon(tot_bin_eps, tot_bin_weights)
 
+np.save(parmt.store+'/binned_eps.npy', binned_eps)
 
 """
 #timings done on laptop

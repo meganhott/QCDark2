@@ -804,7 +804,7 @@ def RPA_dielectric(G, q, k_f, mo_coeff_i, mo_coeff_f_conj, re_delE, im_delE, R_i
     """
     eta_qG = get_3D_overlaps_blocks(q, G, k_f, blocks, N_AO, R_id, unique_Ri, mo_coeff_i, mo_coeff_f_conj)
 
-    eps = 1 - (4*np.pi)**2 / (np.dot(q,q)+np.dot(G,G)) * RPA_susceptibility(eta_qG, eta_qG, re_delE, im_delE)
+    eps = 1 - (4*np.pi)**2 * hbarc * alpha / (np.dot(q,q)+np.dot(G,G)) * RPA_susceptibility(eta_qG, eta_qG, re_delE, im_delE)
     #logging.info('epsilon_GG(q, E) calculated for all G and E for 1BZ q vector {:.5f}. epsilon_q is {:.3f} MB in memory.'.format(q, sys.getsizeof(eps)/10**6))
     return eps
 
@@ -877,7 +877,7 @@ def initialize_RPA_dielectric(dark_objects, test=False):
     if test:
         #for test case only run for one q vector and a few G vectors
         unique_q = {list(unique_q.keys())[0]: unique_q[list(unique_q.keys())[0]]}
-        G_vectors = G_vectors[:1000]
+        #G_vectors = G_vectors[:1000]
 
     for q in unique_q.keys():
         k_pairs = np.array(unique_q[q])
