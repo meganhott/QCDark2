@@ -3,6 +3,7 @@ import numpy as np
 import input_parameters as parmt
 from routines import *
 
+"""
 #testing epsilon function (without dynamic R_cutoff implementation)
 cell, dark_objects = initialize_cell()
 dark_objects['unique_q'] = routines.get_1BZ_q_points(cell)
@@ -11,50 +12,35 @@ tot_bin_eps, tot_bin_weights = initialize_RPA_dielectric(dark_objects, test=True
 
 binned_eps = get_binned_epsilon(tot_bin_eps, tot_bin_weights)
 
-np.save(parmt.store+'/binned_eps.npy', binned_eps)
-
+np.save(parmt.store+'/binned_eps3.npy', binned_eps)
 """
-#timings done on laptop
+
+#for running test calculation of chi on cluster
 cell, dark_objects = initialize_cell()
 dark_objects['unique_q'] = routines.get_1BZ_q_points(cell)
-q = list(dark_objects['unique_q'].keys())[0]
 
-ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
-dft_path = parmt.store + '/DFT/'
-mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,:,ivalbot:ivaltop+1]
-mo_coeff_f = np.load(dft_path + 'mo_coeff_f.npy')[:,:,iconbot:icontop+1]
-mo_en_i = np.load(dft_path + 'mo_en_i.npy')[:,ivalbot:ivaltop+1]
-mo_en_f = np.load(dft_path + 'mo_en_f.npy')[:,iconbot:icontop+1]
-k_f = np.load(parmt.store + '/k-pts_f.npy')
+tot_bin_chi, tot_bin_weights = initialize_RPA_dielectric(dark_objects)
 
-N_AO = len(dark_objects['aos'])
-blocks = dark_objects['blocks']
+np.save('/gpfs/scratch/mhott/tot_bin_chi.npy', tot_bin_chi)
+np.save('/gpfs/scratch/mhott/tot_bin_weights.npy', tot_bin_weights)
 
-R_vectors = dark_objects['R_vectors']
-R_id, unique_Ri = load_unique_R(R_vectors)
+binned_chi = get_binned_epsilon(tot_bin_chi, tot_bin_weights)
+np.save('/gpfs/scratch/mhott/binned_chi.npy', binned_chi)
 
-E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
 
-unique_q = dark_objects['unique_q']
-k_pairs = np.array(unique_q[q])
+"""
+with mp.get_context('fork').Pool(mp.cpu_count()) as p:  #parallelization over G
+    chi = p.map(partial(RPA_dielectric, q=q, k_f=k_f_q, mo_coeff_i=mo_coeff_i_q, mo_coeff_f_conj=mo_coeff_f_q_conj, re_delE=re_delE, im_delE=im_delE, R_id=R_id, unique_Ri=unique_Ri, blocks=blocks, N_AO=N_AO), G_q)
+    chi = np.array(chi) 
+np.save('/gpfs/scratch/mhott/unbinned_chi.npy', chi)
 
-q = np.array(q)
-G = np.array([0.0,0.0,0.0]) #only testing for one G, G'
+tot_bin_chi, tot_bin_weights = bin.bin_eps_q(q, G_q, chi, bin_centers, tot_bin_chi, tot_bin_weights)
+np.save('/gpfs/scratch/mhott/binned_chi.npy', tot_bin_chi)
+"""
 
-#generate parameters for q
-mo_en_i_q = mo_en_i[k_pairs[:,0]] #(k_pair,i)
-mo_en_f_q = mo_en_f[k_pairs[:,1]] #(k_pair,j)
-mo_coeff_i_q = mo_coeff_i[k_pairs[:,0]] #(k_pair,a,i)
-mo_coeff_f_q_conj = mo_coeff_f[k_pairs[:,1]].conj() #(k_pair,b,j)
-k_f_q = k_f[k_pairs[:,1]]
-
-#Compute energy differences for denominator of Re(chi), and Im(chi)
-re_delE, im_delE = get_energy_diff(mo_en_i_q, mo_en_f_q, E) #4.8ms
-
-eta_qG = get_3D_overlaps_blocks(q, G, k_f_q, blocks, N_AO, R_id, unique_Ri, mo_coeff_i_q, mo_coeff_f_q_conj) #625ms
+#eta_qG = get_3D_overlaps_blocks(q, G, k_f_q, blocks, N_AO, R_id, unique_Ri, mo_coeff_i_q, mo_coeff_f_q_conj) #625ms
 
 #chi = RPA_susceptibility(eta_qG, eta_qG, re_delE, im_delE)
-eps = 1 - (4*np.pi)**2 / (np.dot(q,q)+np.dot(G,G)) * RPA_susceptibility(eta_qG, eta_qG, re_delE, im_delE) #7.8ms
+#eps = 1 - (4*np.pi)**2 / (np.dot(q,q)+np.dot(G,G)) * RPA_susceptibility(eta_qG, eta_qG, re_delE, im_delE) #7.8ms
 
 #eps = RPA_dielectric(G, q, k_f_q, mo_coeff_i_q, mo_coeff_f_q_conj, re_delE, im_delE, R_id, unique_Ri, blocks, N_AO) #for one G (non-lfe)
-"""

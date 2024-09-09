@@ -36,11 +36,11 @@ include_lfe = False                                    # If False, does not inco
 """parameters for dielectric function calculations,
      including q_max, bin widths, number of bands, etc"""
 dq = 0.02                                              # In units of alpha*(mass of electron) 
-q_max = 25                                             # In units of alpha*(mass of electron) 
+q_max = 1                                             # In units of alpha*(mass of electron) 
 N_theta = 9                                            # Number of theta bins
 N_phi = 16                                             # Number of phi bins
 dE = 0.1                                               # In eV
-E_max = 50                                             # In eV
+E_max = 15                                             # In eV
 numval = 'all'                                         # number of valence bands to include in the calculation, 
                                                        # use 'all' for all available valence bands
 numcon = 'all'                                         # number of conduction bands to include in the calculation,

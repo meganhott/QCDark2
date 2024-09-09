@@ -804,7 +804,8 @@ def RPA_dielectric(G, q, k_f, mo_coeff_i, mo_coeff_f_conj, re_delE, im_delE, R_i
     """
     eta_qG = get_3D_overlaps_blocks(q, G, k_f, blocks, N_AO, R_id, unique_Ri, mo_coeff_i, mo_coeff_f_conj)
 
-    eps = 1 - (4*np.pi)**2 * hbarc * alpha / (np.dot(q,q)+np.dot(G,G)) * RPA_susceptibility(eta_qG, eta_qG, re_delE, im_delE)
+    #eps = 1 - 4*np.pi * hbarc * alpha / a2bohr / (np.dot(q,q)+np.dot(G,G)) * RPA_susceptibility(eta_qG, eta_qG, re_delE, im_delE)
+    eps = 1 / (np.dot(q,q)+np.dot(G,G)) * RPA_susceptibility(eta_qG, eta_qG, re_delE, im_delE)
     #logging.info('epsilon_GG(q, E) calculated for all G and E for 1BZ q vector {:.5f}. epsilon_q is {:.3f} MB in memory.'.format(q, sys.getsizeof(eps)/10**6))
     return eps
 
@@ -877,7 +878,7 @@ def initialize_RPA_dielectric(dark_objects, test=False):
     if test:
         #for test case only run for one q vector and a few G vectors
         unique_q = {list(unique_q.keys())[0]: unique_q[list(unique_q.keys())[0]]}
-        #G_vectors = G_vectors[:1000]
+        G_vectors = G_vectors[:1000]
 
     for q in unique_q.keys():
         k_pairs = np.array(unique_q[q])
@@ -938,3 +939,13 @@ def get_binned_epsilon(tot_bin_eps, tot_bin_weights):
     binned_eps = tot_bin_eps/tot_bin_weights[:,None]
     #remove nans?
     return(binned_eps)
+
+def epsilon_r(bin_centers, binned_eps):
+    N_ang_bins = (parmt.N_phi*(parmt.N_theta-2)+2)
+    r = np.unique(bin_centers[:,0])
+    eps_r = np.zeros((r.shape[0], binned_eps.shape[1]), dtype='complex')
+    for i, r_i in enumerate(r):
+        eps_ri = binned_eps[i*N_ang_bins:(i+1)*N_ang_bins]
+        eps_r[i] = np.nansum(eps_ri, axis=0) / (N_ang_bins - np.sum(np.isnan(eps_ri).astype(int), axis=0)) #treats nans as 0, want to average over all non-nan entries
+    return eps_r
+
