@@ -18,6 +18,7 @@ def initialize_cell() -> tuple[routines.pbcgto.cell.Cell, dict]:
     blocks = routines.get_basis_blocks(aos)
     G_vectors = routines.gen_G_vectors(cell)                                   # Get all relevant G vectors
     R_vectors = routines.construct_R_vectors(cell)
+    V_cell = routines.get_cell_volume(cell)
     dark_objects = {
         'primitive_gaussians': primgauss,
         'aos': aos,
@@ -25,7 +26,8 @@ def initialize_cell() -> tuple[routines.pbcgto.cell.Cell, dict]:
         'primindices': primindices[0],
         'atom_locs': primindices[1],
         'R_vectors': R_vectors,
-        'blocks': blocks
+        'blocks': blocks,
+        'V_cell': V_cell
     }
     return cell, dark_objects
 
