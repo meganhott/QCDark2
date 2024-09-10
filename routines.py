@@ -805,7 +805,7 @@ def RPA_dielectric(G, q, k_f, mo_coeff_i, mo_coeff_f_conj, re_delE, im_delE, R_i
     eta_qG = get_3D_overlaps_blocks(q, G, k_f, blocks, N_AO, R_id, unique_Ri, mo_coeff_i, mo_coeff_f_conj)
 
     #eps = 1 - 4*np.pi * hbarc * alpha / a2bohr / (np.dot(q,q)+np.dot(G,G)) * RPA_susceptibility(eta_qG, eta_qG, re_delE, im_delE)
-    eps = 1 / (np.dot(q,q)+np.dot(G,G)) * RPA_susceptibility(eta_qG, eta_qG, re_delE, im_delE)
+    eps = 1 / np.linalg.norm(q+G)**2 * RPA_susceptibility(eta_qG, eta_qG, re_delE, im_delE)
     #logging.info('epsilon_GG(q, E) calculated for all G and E for 1BZ q vector {:.5f}. epsilon_q is {:.3f} MB in memory.'.format(q, sys.getsizeof(eps)/10**6))
     return eps
 
