@@ -697,7 +697,7 @@ def get_3D_overlaps_blocks(qG, k2: np.ndarray, blocks: dict, unique_Ri: list[np.
     R_id = np.load(parmt.store + '/R_ids/{}.npy'.format(np.sum(q_cuts < np.linalg.norm(qG)) - 1))
     ints = []
     for d in range(3): #435us total
-        ints.append(np.load('test_resources/primgauss_1d_integrals/dim_{}/{:.5f}.npy'.format(d, qG[d]))[:,None,:,:] * np.exp(-1.j*unique_Ri[d][:,None]*k2[None,:,d])[:,:,None,None])
+        ints.append(np.load(parmt.store + '/primgauss_1d_integrals/dim_{}/{:.5f}.npy'.format(d, qG[d]))[:,None,:,:] * np.exp(-1.j*unique_Ri[d][:,None]*k2[None,:,d])[:,:,None,None])
     ovlp = np.empty((k2.shape[0], n, n), dtype = np.complex128) 
     for p1 in blocks:
         d1 = blocks[p1]
