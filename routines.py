@@ -610,6 +610,29 @@ def primgauss_1D_overlaps(dark_objects: dict) -> list[np.ndarray]:
     logging.info("Generated overlaps of 1D primitive gaussians.")
     return get_R_cutoffs(vals)
 
+@time_wrapper
+def store_Rids(Rcutoffs: np.ndarray, dark_objects: dict):
+    """
+    Store R_ids for each R_cutoff.
+    Inputs:
+        Rcutoffs:       np.ndarray of dim = 2, shape (N, 2)
+        dark_objects:   dict
+    Returns:
+        q_cuts:         np.ndarray of dim = 1, shape (N, )
+    """
+    makedir(parmt.store + '/R_ids')
+    R_vecs = dark_objects['R_vectors']
+    abs_R = np.linalg.norm(R_vecs, axis = 1)
+    R_id, _ = load_unique_R(R_vecs)
+    np.save(parmt.store + '/R_ids/{}'.format(-1), R_id)
+    q_cuts = []
+    for i, R_cut in enumerate(Rcutoffs):
+        q_cuts.append(R_cut[0])
+        tR = R_vecs[abs_R <= R_cut[1]]
+        R_id, _ = load_unique_R(tR)
+        np.save(parmt.store + '/R_ids/{}'.format(i), R_id)
+    return np.array(q_cuts)
+
 def get_band_indices():
     """
     Outputs:
@@ -651,7 +674,7 @@ def get_band_indices():
 
     np.save(parmt.store + '/bands.npy', np.array([ivalbot, ivaltop, iconbot, icontop]))
 
-def get_3D_overlaps_blocks(q, G, k2: np.ndarray, blocks: dict, N_AO: int, R_id: np.ndarray, unique_Ri: list[np.ndarray], mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray) -> np.ndarray:
+def get_3D_overlaps_blocks(qG, k2: np.ndarray, blocks: dict, unique_Ri: list[np.ndarray], n: int, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray, q_cuts: np.ndarray) -> np.ndarray:
     """
     Notes:
         - last two axes of result are transposed compared to testing script so we have eta_qG(k,i,j) to use in susceptibility function
@@ -666,15 +689,16 @@ def get_3D_overlaps_blocks(q, G, k2: np.ndarray, blocks: dict, N_AO: int, R_id: 
         N_AO:           int: number of atomic orbitals
         mo_coeff_i:     np.ndarray of shape (N_kpairs, N_AO, N_valbands)
         mo_coeff_f:     np.ndarray of shape (N_kpairs, N_AO, N_conbands)
-        R_id:           np.ndarray of shape (3, N_R_vectors)
-        unique_Ri:      np.ndarray of shape (3, N_R_unique
+        unique_Ri:      list of shape (3, N_R_unique
+        q_cuts:         np.ndarray of shape (N_q, ) where each element corresponds to the value at which the R_ids change.
     Outputs:
         eta_qG:         np.ndarray of shape (N_kpairs, N_val_bands (i), N_cond_bands (j)): all 3D overlaps <jk'|exp(i(q+G)r)|ik>
     """
+    R_id = np.load(parmt.store + '/R_ids/{}.npy'.format(np.sum(q_cuts < np.linalg.norm(qG)) - 1))
     ints = []
     for d in range(3): #435us total
-        ints.append(np.load('test_resources/primgauss_1d_integrals/dim_{}/{:.5f}.npy'.format(d, (q+G)[d]))[:,None,:,:] * np.exp(-1.j*unique_Ri[d][:,None]*k2[None,:,d])[:,:,None,None])
-    ovlp = np.empty((k2.shape[0], N_AO, N_AO), dtype = np.complex128) 
+        ints.append(np.load('test_resources/primgauss_1d_integrals/dim_{}/{:.5f}.npy'.format(d, qG[d]))[:,None,:,:] * np.exp(-1.j*unique_Ri[d][:,None]*k2[None,:,d])[:,:,None,None])
+    ovlp = np.empty((k2.shape[0], n, n), dtype = np.complex128) 
     for p1 in blocks:
         d1 = blocks[p1]
         p1 = np.array(p1)
@@ -692,7 +716,7 @@ def get_3D_overlaps_blocks(q, G, k2: np.ndarray, blocks: dict, N_AO: int, R_id: 
             for i in d1:
                 for j in d2:
                     ovlp[:,i,j] = (tot@d1[i])@d2[j]
-    return np.einsum('kia,kij,kjb->kba', mo_coeff_f_conj, ovlp, mo_coeff_i, optimize = True)
+    return np.einsum('kia,kij,kjb->kab', mo_coeff_f_conj, ovlp, mo_coeff_i, optimize = True)
 
 def get_R_cutoffs(aos, N_primgauss, p):
     """

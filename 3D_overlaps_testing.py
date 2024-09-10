@@ -5,7 +5,8 @@ from routines import time_wrapper
 import matplotlib.pyplot as plt
 
 @time_wrapper
-def get_3D_overlaps_blocks(qG, k2: np.ndarray, blocks: dict, R_id: np.ndarray, unique_Ri: list[np.ndarray], n: int, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray) -> np.ndarray:
+def get_3D_overlaps_blocks(qG, k2: np.ndarray, blocks: dict, unique_Ri: list[np.ndarray], n: int, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray, q_cuts: np.ndarray) -> np.ndarray:
+    R_id = np.load(parmt.store + '/R_ids/{}.npy'.format(np.sum(q_cuts < np.linalg.norm(qG)) - 1))
     ints = []
     for d in range(3): #435us total
         ints.append(np.load('test_resources/primgauss_1d_integrals/dim_{}/{:.5f}.npy'.format(d, qG[d]))[:,None,:,:] * np.exp(-1.j*unique_Ri[d][:,None]*k2[None,:,d])[:,:,None,None])
@@ -60,7 +61,7 @@ n = len(aos)
 
 qG = np.array(q)
 #ovlp_alt = get_3D_overlaps_alternate(qG, k2, dark_objects['aos'], R_id, unique_Ri)
-ovlp_blk = get_3D_overlaps_blocks(qG, k2, dark_objects['blocks'], R_id, unique_Ri, n, mo_coeff_i, mo_coeff_f_conj)
+#ovlp_blk = get_3D_overlaps_blocks(qG, k2, dark_objects['blocks'], unique_Ri, n, mo_coeff_i, mo_coeff_f_conj)
 
 from rpa_dielectric_cython import get_3D_overlaps_blocks as cython_3d_overlaps
 

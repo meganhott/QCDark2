@@ -38,7 +38,7 @@ def electronic_structure(cell: routines.pbcgto.cell.Cell, dark_objects: dict) ->
 
 def dielectric_RPA(dark_objects: dict) -> None:
     Rcutoffs = routines.primgauss_1D_overlaps(dark_objects)
-    dark_objects['R_cutoffs'] = Rcutoffs
+    dark_objects['R_cutoff_q_points'] = routines.store_Rids(Rcutoffs, dark_objects)
     return dark_objects
 
 def main():

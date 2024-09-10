@@ -1,5 +1,6 @@
 import numpy as np
 import input_parameters as parmt
+alpha = 1/137
 
 def get_3D_overlaps_blocks(qG, k2: np.ndarray, blocks: dict, R_id: np.ndarray, unique_Ri: list[np.ndarray], n: int, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray) -> np.ndarray:
     ints = []
@@ -25,9 +26,10 @@ def get_3D_overlaps_blocks(qG, k2: np.ndarray, blocks: dict, R_id: np.ndarray, u
                     ovlp[:,i,j] = (tot@d1[i])@d2[j]
     return np.einsum('kia,kij,kjb->kab', mo_coeff_f_conj, ovlp, mo_coeff_i, optimize = True)
 
-def epsilon_no_LFE_G(qG0: float, qG1: float, qG2: float, k2: np.ndarray, blocks: dict, R_id: np.ndarray, unique_Ri: list[np.ndarray], n: int, k_pairs: np.ndarray, bands: list[int], VCell: float) -> np.ndarray:
+def epsilon_no_LFE_G(qG0: float, qG1: float, qG2: float, k2: np.ndarray, blocks: dict, R_id: np.ndarray, unique_Ri: list[np.ndarray], n: int, k_pairs: np.ndarray, bands: list[int], VCell: float, Rcuts: np.ndarray) -> np.ndarray:
     mo_coeff_i = np.load(parmt.store + '/DFT/mo_coeff_i.npy')[k_pairs[:,0]][:,:,bands[0]:bands[1]+1]
     mo_coeff_f_conj = np.load(parmt.store + '/DFT/mo_coeff_i.npy')[k_pairs[:,0]][:,:,bands[2]:bands[3]+1].conj()
+    
     qG = np.array([qG0, qG1, qG2])
     coeff = 4*np.pi*alpha/np.sum(qG**2)
     trans_prob = np.abs(get_3D_overlaps_blocks(qG, k2, blocks, R_id, unique_Ri, n, mo_coeff_i, mo_coeff_f_conj))**2
