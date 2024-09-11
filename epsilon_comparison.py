@@ -4,6 +4,35 @@ import matplotlib.pyplot as plt
 from routines import epsilon_r
 from binning import *
 
+#q = np.arange(0.01, 25.00, 0.02) #alpha me
+q = np.arange(0.01, parmt.q_max, parmt.dq) #alpha me
+#E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE) #eV
+E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE) #eV
+
+binned_eps = np.load('test_resources/binned_eps.npy')
+bin_centers = gen_bin_centers()
+eps = epsilon_r(bin_centers, binned_eps)
+
+eps_re = np.real(eps)
+eps_im = np.imag(eps)
+eps_re[eps_re > 10] = 10 #for plotting
+eps_re[eps_re < -10] = -10
+eps_im[eps_im > 10] = 10
+eps_im[eps_im < -10] = -10
+
+fig, ax = plt.subplots(1,2)
+im0 = ax[0].imshow(np.real(eps), cmap='gnuplot2_r', origin='lower')
+im1 = ax[1].imshow(np.imag(eps), cmap='gnuplot2_r', origin='lower')
+fig.colorbar(im0, ax=ax[0], orientation='horizontal')
+fig.colorbar(im1, ax=ax[1], orientation='horizontal')
+ax[0].set_title('Re(eps)')
+ax[1].set_title('Im(eps)')
+for i in [0,1]:
+    ax[i].set_xlabel('E (0-15eV)')
+    ax[i].set_ylabel('q (0-1ame)')
+plt.show()
+
+"""
 #constants
 m_e = 0.51099895000e6 #eV
 hbarc = 0.1973269804*10**(-6) #hbarc in eV*m
@@ -15,18 +44,11 @@ tau = 1.563
 omega_p = 16.6 #eV
 q_TF = 4.13e3 #eV
 
-#q = np.arange(0.01, 25.00, 0.02) #alpha me
-q = np.arange(0.01, parmt.q_max, parmt.dq) #alpha me
-#E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE) #eV
-E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE) #eV
-
 eps_an = 1 + (1/(e_0-1) + tau*(q[:,None]*hbarc/bohr2m/q_TF)**2 + (q[:,None]*hbarc/bohr2m)**4/(4*m_e**2*omega_p**2) - (E[None,:]/omega_p)**2)**(-1) #(q,E)
-
 chi_an = -(1/(e_0-1) + tau*(q[:,None]*hbarc/bohr2m/q_TF)**2 + (q[:,None]*hbarc/bohr2m)**4/(4*m_e**2*omega_p**2) - (E[None,:]/omega_p)**2)**(-1)
 
 chi_an[chi_an > 100] = 100 #for plot
 chi_an[chi_an < -100] = -100
-
 
 binned_chi = np.load('test_resources/binned_chi1.npy')
 bin_centers = gen_bin_centers()
@@ -60,3 +82,4 @@ for i in [0,1]:
     ax[i].set_ylabel('q (0-1ame)')
 
 plt.show()
+"""
