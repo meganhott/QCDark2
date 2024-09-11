@@ -1,6 +1,7 @@
 import numpy as np
 import input_parameters as parmt
 import matplotlib.pyplot as plt
+import matplotlib.colors
 from routines import epsilon_r
 from binning import *
 
@@ -9,27 +10,44 @@ q = np.arange(0.01, parmt.q_max, parmt.dq) #alpha me
 #E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE) #eV
 E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE) #eV
 
+#RPA
 binned_eps = np.load('test_resources/binned_eps.npy')
 bin_centers = gen_bin_centers()
 eps = epsilon_r(bin_centers, binned_eps)
 
-eps_re = np.real(eps)
-eps_im = np.imag(eps)
-eps_re[eps_re > 10] = 10 #for plotting
-eps_re[eps_re < -10] = -10
-eps_im[eps_im > 10] = 10
-eps_im[eps_im < -10] = -10
+#Lindhard model
+m_e = 0.51099895000e6 #eV
+alpha = 1/137
+E_F = 0.56 #eV: Fermi energy 
+k_F = np.sqrt(2*m_e*E_F)/alpha/m_e #ame: Fermi wavevector
+K_s = 4.13e3/alpha/m_e #eV Thomas-Fermi screening wavevector? Not sure if this is correct value
 
-fig, ax = plt.subplots(1,2)
-im0 = ax[0].imshow(np.real(eps), cmap='gnuplot2_r', origin='lower')
-im1 = ax[1].imshow(np.imag(eps), cmap='gnuplot2_r', origin='lower')
-fig.colorbar(im0, ax=ax[0], orientation='horizontal')
-fig.colorbar(im1, ax=ax[1], orientation='horizontal')
-ax[0].set_title('Re(eps)')
-ax[1].set_title('Im(eps)')
+b = lambda q: q/2/k_F
+d = lambda E: E/E_F
+eps_l_re = lambda q,E: 1 + K_s**2/q**2/8/b(q) * (4*b(q) + (1 - (b(q) - d(E)/4/b(q))**2) * np.log(np.abs((1 + (b(q) - d(E)/4/b(q))) / (1 - (b(q) - d(E)/4/b(q))))) + (1 - (b(q) + d(E)/4/b(q))**2) * np.log(np.abs((1 + (b(q) + d(E)/4/b(q))) / (1 - (b(q) + d(E)/4/b(q))))))
+eps_l_im = lambda q,E: np.pi*K_s**2/q**2/8/b(q) * ((b(q) < 1)*(d(E) <= 4*np.abs(b(q)**2 - b(q)))*d(E) + (4*np.abs(b(q)**2 - b(q)) < d(E))*(d(E) < 4*np.abs(b(q)**2 + b(q))))
+
+E_mesh, q_mesh = np.meshgrid(E, q)
+fig, ax = plt.subplots(2,2)
+im0 = ax[(0,0)].pcolormesh(E, q, eps_l_re(q_mesh, E_mesh), cmap='gnuplot2_r', norm=matplotlib.colors.SymLogNorm(1e-4))
+im1 = ax[(0,1)].pcolormesh(E, q, eps_l_im(q_mesh, E_mesh), cmap='gnuplot2_r', norm=matplotlib.colors.SymLogNorm(1e-4))
+fig.colorbar(im0, ax=ax[(0,0)])
+fig.colorbar(im1, ax=ax[(0,1)])
+ax[(0,0)].set_title(r'Lindhard Re($\epsilon$)')
+ax[(0,1)].set_title(r'Lindhard Im($\epsilon$)')
+
+im2 = ax[(1,0)].pcolormesh(E, q, np.real(eps), cmap='gnuplot2_r', norm=matplotlib.colors.SymLogNorm(1e-4))
+im3 = ax[(1,1)].pcolormesh(E, q, np.imag(eps), cmap='gnuplot2_r', norm=matplotlib.colors.SymLogNorm(1e-4))
+fig.colorbar(im2, ax=ax[(1,0)])
+fig.colorbar(im3, ax=ax[(1,1)])
+ax[(1,0)].set_title(r'RPA Re($\epsilon$)')
+ax[(1,1)].set_title(r'RPA Im($\epsilon$)')
+
 for i in [0,1]:
-    ax[i].set_xlabel('E (0-15eV)')
-    ax[i].set_ylabel('q (0-1ame)')
+    for j in [0,1]:
+        ax[(i,j)].set_xlabel('E (eV)')
+        ax[(i,j)].set_ylabel(r'q ($\alpha m_e$)')
+plt.tight_layout()
 plt.show()
 
 """
