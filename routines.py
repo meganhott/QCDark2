@@ -727,50 +727,6 @@ def get_3D_overlaps_blocks(qG, k2: np.ndarray, blocks: dict, N_AO: int, mo_coeff
                     ovlp[:,i,j] = (tot@d1[i])@d2[j]
     return np.einsum('kbj,kba,kai->kij', mo_coeff_f_conj, ovlp, mo_coeff_i, optimize = True)
 
-def get_R_cutoffs(aos, N_primgauss, p):
-    """
-    Notes:
-        - Should precision p be the same as parmt.precision that is fed to pyscf?
-        - Currently only implemented in one direction - do we need to worry about 3D? For anisotropic could implement cutoff in terms of number of R cells to include instead of R_cut
-
-    To Do:
-        - change load_unique_R and 3D_overlaps so that R_id is only generated for R vectors up to |R| = R_cut(|q+G|)
-
-    Inputs:
-        aos:            atomic orbitals
-        N_primgauss:    number of primitive gaussians
-        p:              precision
-    Outputs:
-        qG_mag:         magnitudes of q+G sorted from smallest to largest
-        R_cut:          largest magnitude of R vector required to obtain precision 
-    """
-    d = 0
-
-    #determine max normalizations from all AO 
-    norm_max = np.zeros(N_primgauss)
-    for ao in aos: 
-        for i,m in enumerate(ao.prim_indices[d]):
-            norm_max[m] = max(norm_max[m],(ao.norm[i])**(1/3)) #updates maximum norm
-    norm_max = np.tensordot(norm_max, norm_max, axes=0) #(m,n)
-
-    dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(d)
-    Ru = np.load(dir+'Ru.npy')
-    files = os.listdir(dir)
-    files.remove('Ru.npy')
-    qG_mag = np.zeros(len(files))
-    R_cut = np.zeros(len(files))
-    for i,f in enumerate(files): #(for q:)
-        q_1d_integrals = np.load(dir+f)
-        q_1d_integrals = norm_max[None,:,:]*q_1d_integrals #multiply by max normalizations
-        R_cut[i] = np.max(np.abs(Ru[np.max(q_1d_integrals, axis=(1,2)) > p])) #compares maximum 1d integral for each R_i to precision
-        
-        qG_mag[i] =  np.abs(float(f[:-4]))
-        s = np.argsort(qG_mag)
-        qG_mag = qG_mag[s] #sorted magnitude of q+G 
-        R_cut = R_cut[s] #corresponding R_cut
-
-    return qG_mag, R_cut
-
 @njit
 def get_energy_diff(mo_en_i, mo_en_f, E):
     """
