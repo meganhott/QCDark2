@@ -619,7 +619,7 @@ def primgauss_1D_overlaps(dark_objects: dict) -> list[np.ndarray]:
     return get_R_cutoffs(vals)
 
 @time_wrapper
-def store_Rids(Rcutoffs: np.ndarray, dark_objects: dict):
+def store_Rids(dark_objects: dict):
     """
     Store R_ids for each R_cutoff.
     Inputs:
@@ -630,12 +630,13 @@ def store_Rids(Rcutoffs: np.ndarray, dark_objects: dict):
     """
     makedir(parmt.store + '/R_ids')
     R_vecs = dark_objects['R_vectors']
+    R_cutoffs = dark_objects['R_cutoffs']
     abs_R = np.linalg.norm(R_vecs, axis = 1)
     unique_Ri = load_unique_R()
     R_id = get_R_id(R_vecs, unique_Ri)
     np.save(parmt.store + '/R_ids/{}'.format(-1), R_id)
     q_cuts = []
-    for i, R_cut in enumerate(Rcutoffs):
+    for i, R_cut in enumerate(R_cutoffs):
         q_cuts.append(R_cut[0])
         tR = R_vecs[abs_R <= R_cut[1]]
         R_id = get_R_id(tR, unique_Ri)
@@ -899,7 +900,7 @@ def initialize_RPA_dielectric(dark_objects, test=False):
     V_cell = dark_objects['V_cell']
     q_cuts = dark_objects['R_cutoff_q_points']
 
-    unique_Ri = load_unique_R(R_vectors)
+    unique_Ri = load_unique_R()
 
     #energy bins
     E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)

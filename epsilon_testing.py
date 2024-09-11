@@ -15,17 +15,19 @@ binned_eps = get_binned_epsilon(tot_bin_eps, tot_bin_weights)
 np.save(parmt.store+'/binned_eps3.npy', binned_eps)
 """
 
-#for running test calculation of chi on cluster
+#for running test calculation of epsilon on cluster
 cell, dark_objects = initialize_cell()
 dark_objects['unique_q'] = routines.get_1BZ_q_points(cell)
+dark_objects['R_cutoffs'] = routines.primgauss_1D_overlaps(dark_objects)
+dark_objects['R_cutoff_q_points'] = routines.store_Rids(dark_objects)
 
-tot_bin_chi, tot_bin_weights = initialize_RPA_dielectric(dark_objects)
+tot_bin_eps, tot_bin_weights = initialize_RPA_dielectric(dark_objects)
 
-np.save('/gpfs/scratch/mhott/tot_bin_chi.npy', tot_bin_chi)
-np.save('/gpfs/scratch/mhott/tot_bin_weights.npy', tot_bin_weights)
+#np.save('/gpfs/scratch/mhott/tot_bin_eps.npy', tot_bin_eps)
+#np.save('/gpfs/scratch/mhott/tot_bin_weights.npy', tot_bin_weights)
 
-binned_chi = get_binned_epsilon(tot_bin_chi, tot_bin_weights)
-np.save('/gpfs/scratch/mhott/binned_chi.npy', binned_chi)
+binned_eps = get_binned_epsilon(tot_bin_eps, tot_bin_weights)
+np.save('/gpfs/scratch/mhott/binned_eps.npy', binned_eps)
 
 
 """
