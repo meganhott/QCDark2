@@ -727,7 +727,7 @@ def get_3D_overlaps_blocks(qG, k2: np.ndarray, blocks: dict, N_AO: int, mo_coeff
                     ovlp[:,i,j] = (tot@d1[i])@d2[j]
     return np.einsum('kbj,kba,kai->kij', mo_coeff_f_conj, ovlp, mo_coeff_i, optimize = True)
 
-@njit
+#@njit
 def get_energy_diff(mo_en_i, mo_en_f, E):
     """
     Notes:
@@ -749,7 +749,10 @@ def get_energy_diff(mo_en_i, mo_en_f, E):
     re_delE = (E[None,None,None,:] - mo_en_f[:,None,:,None] + mo_en_i[:,:,None,None]) #(k_pair,i,j,E)
 
     im_delE = (np.abs(re_delE) < parmt.dE) * (1.0 - np.abs(re_delE)/parmt.dE)
-    return re_delE**(-1), -np.pi*im_delE
+
+    with np.errstate(divide='ignore'): #need this to avoid ZeroDivisionError
+        re_delE = np.where(re_delE == 0, 0, re_delE**(-1)) #gives inverse of energy difference unless delE == 0, in which case 0 is returned since there is no real part
+    return re_delE, -np.pi*im_delE
 
 
 def RPA_susceptibility(eta_qG, re_delE, im_delE, N_kpairs, V_cell):

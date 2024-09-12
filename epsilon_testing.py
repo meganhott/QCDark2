@@ -23,11 +23,14 @@ dark_objects['R_cutoff_q_points'] = routines.store_Rids(dark_objects)
 
 tot_bin_eps, tot_bin_weights = initialize_RPA_dielectric(dark_objects)
 
-np.save('/gpfs/scratch/mhott/tot_bin_eps.npy', tot_bin_eps)
-np.save('/gpfs/scratch/mhott/tot_bin_weights.npy', tot_bin_weights)
+#np.save('/gpfs/scratch/mhott/tot_bin_eps.npy', tot_bin_eps)
+np.save('test_resources/tot_bin_eps.npy', tot_bin_eps)
+#np.save('/gpfs/scratch/mhott/tot_bin_weights.npy', tot_bin_weights)
+np.save('test_resources/tot_bin_weights.npy', tot_bin_weights)
 
 binned_eps = get_binned_epsilon(tot_bin_eps, tot_bin_weights)
-np.save('/gpfs/scratch/mhott/binned_eps.npy', binned_eps)
+#np.save('/gpfs/scratch/mhott/binned_eps.npy', binned_eps)
+np.save('test_resources/binned_eps.npy', binned_eps)
 
 
 """
