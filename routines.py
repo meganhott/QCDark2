@@ -429,7 +429,7 @@ def KS_electronic_structure(cell: pbcgto.cell.Cell) -> pbcdft.krks_ksymm.KsymAda
     kmf.xc = parmt.xcfunc
     kmf.kernel()
     if kmf.converged:
-        np.save(dft_path + 'mo_en_i', kpts.transform_mo_energy(kmf.mo_energy))
+        np.save(dft_path + 'mo_en_i_dft', kpts.transform_mo_energy(kmf.mo_energy))
         np.save(dft_path + 'mo_coeff_i', kpts.transform_mo_coeff(kmf.mo_coeff))
         np.save(dft_path + 'mo_occ_i', kpts.transform_mo_occ(kmf.mo_occ))
     else:
@@ -456,7 +456,7 @@ def KS_non_self_consistent_field(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS) -> None
     ek , ck = kmf.get_bands(kpts.kpts_ibz)
     ek = kpts.transform_mo_energy(ek)
     ck = kpts.transform_mo_coeff(ck)
-    np.save(dft_path + 'mo_en_f', ek)
+    np.save(dft_path + 'mo_en_f_dft', ek)
     np.save(dft_path + 'mo_coeff_f', ck)
     logging.info('Non self consistent field equations solved for final state k-points. Data is stored to {}.'.format(dft_path))
     return None
@@ -500,8 +500,8 @@ def convert_to_eV_and_scissor(cell: pbcgto.cell.Cell) -> None:
         parmt.store + '/DFT/mo_en_f.npy':   np.ndarray object, stored to disk
     """
     occ_orb = cell.tot_electrons()//2
-    en_i = np.load(parmt.store + '/DFT/mo_en_i.npy')*alpha*alpha*me
-    en_f = np.load(parmt.store + '/DFT/mo_en_f.npy')*alpha*alpha*me
+    en_i = np.load(parmt.store + '/DFT/mo_en_i_dft.npy')*alpha*alpha*me
+    en_f = np.load(parmt.store + '/DFT/mo_en_f_dft.npy')*alpha*alpha*me
     homo = max(en_i[:,:occ_orb].max(), en_f[:,:occ_orb].max())
     en_i, en_f = en_i - homo, en_f - homo
     homo = 0
