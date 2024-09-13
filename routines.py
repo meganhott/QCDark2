@@ -729,6 +729,7 @@ def initialize_RPA_dielectric(dark_objects, test=False):
     k_f = np.load(parmt.store + '/k-pts_f.npy')
 
     unique_q = dark_objects['unique_q']
+    n_q = len(unique_q) #number of 1BZ q vectors
     G_vectors = dark_objects['G_vectors']
     R_vectors = dark_objects['R_vectors']
     N_AO = len(dark_objects['aos'])
@@ -753,7 +754,7 @@ def initialize_RPA_dielectric(dark_objects, test=False):
     else:
         RPA_eps = eps.RPA_dielectric
 
-    for q in unique_q.keys():
+    for i_q, q in enumerate(unique_q.keys()):
         k_pairs = np.array(unique_q[q])
         N_kpairs = k_pairs.shape[0]
 
@@ -771,16 +772,19 @@ def initialize_RPA_dielectric(dark_objects, test=False):
         #Compute energy differences for denominator of Re(chi), and Im(chi)
         re_delE, im_delE = get_energy_diff(mo_en_i_q, mo_en_f_q, E)
 
+        start_eps_q = time.time()
+        
         #Compute epsilon for all G_q
         with mp.get_context('fork').Pool(mp.cpu_count()) as p:  #parallelization over G
-            eps = p.map(partial(RPA_eps, q=q, k_f=k_f_q, mo_coeff_i=mo_coeff_i_q, mo_coeff_f_conj=mo_coeff_f_q_conj, re_delE=re_delE, im_delE=im_delE, unique_Ri=unique_Ri, blocks=blocks, N_AO=N_AO, q_cuts=q_cuts, N_kpairs=N_kpairs, V_cell=V_cell), G_q)
-        eps = np.array(eps) #(G, E)
+            epsilon = p.map(partial(RPA_eps, q=q, k_f=k_f_q, mo_coeff_i=mo_coeff_i_q, mo_coeff_f_conj=mo_coeff_f_q_conj, re_delE=re_delE, im_delE=im_delE, unique_Ri=unique_Ri, blocks=blocks, N_AO=N_AO, q_cuts=q_cuts, N_kpairs=N_kpairs, V_cell=V_cell), G_q)
+        epsilon = np.array(epsilon) #(G, E)
 
         #bin eps calculated for all G
-        tot_bin_eps, tot_bin_weights = bin.bin_eps_q(q, G_q, eps, bin_centers, tot_bin_eps, tot_bin_weights)
-
-        #logging.info('epsilon_GG(q, E) calculated for all G and E for 1BZ q vector {:.5f}. epsilon_q is {:.3f} MB in memory.'.format(q, sys.getsizeof(eps)/10**6))
-
+        tot_bin_eps, tot_bin_weights = bin.bin_eps_q(q, G_q, epsilon, bin_centers, tot_bin_eps, tot_bin_weights)
+        
+        end_eps_q = time.time()
+        
+        logging.info('epsilon_GG(q, E) calculated and binned for all G and E for 1BZ q vector {} ({}/{}). Time taken = {:.2f} s.\n'.format(np.array2string(q, precision=5), i_q, n_q, end_eps_q - start_eps_q))
     return tot_bin_eps, tot_bin_weights
 
 

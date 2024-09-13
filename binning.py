@@ -127,7 +127,6 @@ def gen_bin_centers(q_max = parmt.q_max, cartesian=False) -> np.ndarray:
         qra = spherical_to_cartesian(qra)
     return np.round(qra, n)
 
-@time_wrapper
 @njit
 def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     """
