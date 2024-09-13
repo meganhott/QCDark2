@@ -429,7 +429,7 @@ def KS_electronic_structure(cell: pbcgto.cell.Cell) -> pbcdft.krks_ksymm.KsymAda
     kmf.xc = parmt.xcfunc
     kmf.kernel()
     if kmf.converged:
-        np.save(dft_path + 'mo_en_i', kpts.transform_mo_energy(kmf.mo_energy))
+        np.save(dft_path + 'mo_en_i_dft', kpts.transform_mo_energy(kmf.mo_energy))
         np.save(dft_path + 'mo_coeff_i', kpts.transform_mo_coeff(kmf.mo_coeff))
         np.save(dft_path + 'mo_occ_i', kpts.transform_mo_occ(kmf.mo_occ))
     else:
@@ -456,7 +456,7 @@ def KS_non_self_consistent_field(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS) -> None
     ek , ck = kmf.get_bands(kpts.kpts_ibz)
     ek = kpts.transform_mo_energy(ek)
     ck = kpts.transform_mo_coeff(ck)
-    np.save(dft_path + 'mo_en_f', ek)
+    np.save(dft_path + 'mo_en_f_dft', ek)
     np.save(dft_path + 'mo_coeff_f', ck)
     logging.info('Non self consistent field equations solved for final state k-points. Data is stored to {}.'.format(dft_path))
     return None
@@ -500,8 +500,8 @@ def convert_to_eV_and_scissor(cell: pbcgto.cell.Cell) -> None:
         parmt.store + '/DFT/mo_en_f.npy':   np.ndarray object, stored to disk
     """
     occ_orb = cell.tot_electrons()//2
-    en_i = np.load(parmt.store + '/DFT/mo_en_i.npy')*alpha*alpha*me
-    en_f = np.load(parmt.store + '/DFT/mo_en_f.npy')*alpha*alpha*me
+    en_i = np.load(parmt.store + '/DFT/mo_en_i_dft.npy')*alpha*alpha*me
+    en_f = np.load(parmt.store + '/DFT/mo_en_f_dft.npy')*alpha*alpha*me
     homo = max(en_i[:,:occ_orb].max(), en_f[:,:occ_orb].max())
     en_i, en_f = en_i - homo, en_f - homo
     homo = 0
@@ -727,7 +727,7 @@ def get_3D_overlaps_blocks(qG, k2: np.ndarray, blocks: dict, N_AO: int, mo_coeff
                     ovlp[:,i,j] = (tot@d1[i])@d2[j]
     return np.einsum('kbj,kba,kai->kij', mo_coeff_f_conj, ovlp, mo_coeff_i, optimize = True)
 
-@njit
+#@njit
 def get_energy_diff(mo_en_i, mo_en_f, E):
     """
     Notes:
@@ -749,7 +749,10 @@ def get_energy_diff(mo_en_i, mo_en_f, E):
     re_delE = (E[None,None,None,:] - mo_en_f[:,None,:,None] + mo_en_i[:,:,None,None]) #(k_pair,i,j,E)
 
     im_delE = (np.abs(re_delE) < parmt.dE) * (1.0 - np.abs(re_delE)/parmt.dE)
-    return re_delE**(-1), -np.pi*im_delE
+
+    with np.errstate(divide='ignore'): #need this to avoid ZeroDivisionError
+        re_delE = np.where(re_delE == 0, 0, re_delE**(-1)) #gives inverse of energy difference unless delE == 0, in which case 0 is returned since there is no real part
+    return re_delE, -np.pi*im_delE
 
 
 def RPA_susceptibility(eta_qG, re_delE, im_delE, N_kpairs, V_cell):

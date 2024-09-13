@@ -34,6 +34,26 @@ def Lindhard(om, q, fp): #energy, q,
     factor1 = 3*(omp**2)/(q**2)/(vF**2)
     factor2 = 0.5 + kF/(4*q)*(1-Qm**2)*plog((Qm+1)/(Qm-1)) + kF/(4*q)*(1-Qp**2)*plog((Qp+1)/(Qp-1))
     return 1 + factor1*factor2
+VCell = 5.209e-9
+nValence = 8
+MCell = 52322355000.0
+mElectron = 5.1099894e5
+alpha = 1.0/137.03599908
+
+def Lindhard(om, q, fp): #energy, q, 
+    q = q*alpha*mElectron #convert q from ame to eV
+    def plog(x):
+        return np.log(np.abs(x)) + 1j*np.angle(x)
+    ne = nValence/VCell
+    kF = (3*np.pi**2*ne)**(1./3.)
+    omp = np.sqrt(4*np.pi*alpha*ne/mElectron)
+    vF = kF/mElectron
+    Gp = fp*omp
+    Qp = q/(2*kF) + (om + 1j*Gp)/(q*vF)
+    Qm = q/(2*kF) - (om + 1j*Gp)/(q*vF)
+    factor1 = 3*(omp**2)/(q**2)/(vF**2)
+    factor2 = 0.5 + kF/(4*q)*(1-Qm**2)*plog((Qm+1)/(Qm-1)) + kF/(4*q)*(1-Qp**2)*plog((Qp+1)/(Qp-1))
+    return 1 + factor1*factor2
 
 E_mesh, q_mesh = np.meshgrid(E, q)
 eps_l = Lindhard(E_mesh, q_mesh, 0.1)

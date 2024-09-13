@@ -115,9 +115,9 @@ def construct_all_solid_angles() -> np.ndarray:
                 solid_angles.append([theta, phi])
     return np.array(solid_angles)
 
-def gen_bin_centers(cartesian=False) -> np.ndarray:
+def gen_bin_centers(q_max = parmt.q_max, cartesian=False) -> np.ndarray:
     Omega = construct_all_solid_angles()
-    qr = np.arange(parmt.dq*0.5, parmt.q_max + parmt.dq*0.5, parmt.dq)
+    qr = np.arange(parmt.dq*0.5, q_max + parmt.dq*0.5, parmt.dq)
     qra = []
     for q in qr:
         for O in Omega:
