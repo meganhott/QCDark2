@@ -805,10 +805,6 @@ def RPA_dielectric(G, q, k_f, mo_coeff_i, mo_coeff_f_conj, re_delE, im_delE, uni
 
     eps = 1 - 4*np.pi * alpha**2 * me / np.linalg.norm(q+G)**2 * RPA_susceptibility(eta_qG, re_delE, im_delE, N_kpairs, V_cell)
     #logging.info('epsilon_GG(q, E) calculated for all G and E for 1BZ q vector {:.5f}. epsilon_q is {:.3f} MB in memory.'.format(q, sys.getsizeof(eps)/10**6))
-
-    #checks for any non-zero imaginary part for delta E below bandgap ~ 1eV
-    if (np.imag(eps[:10]) > 0).any():
-        print(f'Imaginary part for q = {q}, G = {G}')
     return eps
 
 def RPA_dielectric_lfe(q, G_vectors, k_pairs, mo_en_i, mo_en_f, eta_q):
