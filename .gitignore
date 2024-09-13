@@ -1,11 +1,11 @@
 /__pycache__
-/test_eps.log
-/test_pyscf.log
-/test_resources
+/*.log
+/*.out
+/*.sh
+/*_resources
 /reference_dir/__pycache__
 /reference_dir/Si*
 /test
-/run_on_slurm.sh
 /configure_pyscf.py
 /rpa_dielectric_cython.c*
 /build
