@@ -50,16 +50,16 @@ def get_E_ijt(a: float, b: float, i_max: int, j_max: int, Qx: float) -> list[lis
         """
         nonlocal E_ijt
 
-        if (t < 0) or (t > i+j):                                    # 0 < t < i + j
+        if (t < 0) or (t > i+j):                    # 0 < t < i + j
             return 0.
         if not E_ijt[i][j][t]:
-            if i == j == t == 0:                                      # E_{00}^0 = K_{AB} = e^{-q Qx^2}
+            if i == j == t == 0:                    # E_{00}^0 = K_{AB} = e^{-q Qx^2}
                 E_ijt[i][j][t] = e**(-q*Qx*Qx)
-            elif j == 0:                                                # Decrement index i
+            elif j == 0:                            # Decrement index i
                 E_ijt[i][j][t] =    1./(2.*p)*E(a, b, i-1, j, t-1, Qx, p, q) - \
                                     q*Qx/a*E(a, b, i-1, j, t, Qx, p, q)      + \
                                     (t+1.)*E(a, b, i-1, j, t+1, Qx, p, q)
-            else:                                                       # Default decrement index j
+            else:                                   # Default decrement index j
                 E_ijt[i][j][t] =    1./(2.*p)*E(a, b, i, j-1, t-1, Qx, p, q) + \
                                     q*Qx/b*E(a, b, i, j-1, t, Qx, p, q)      + \
                                     (t+1.)*E(a, b, i, j-1, t+1, Qx, p, q)
