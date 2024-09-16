@@ -1,26 +1,10 @@
 import numpy as np
-import input_parameters as parmt
-import multiprocessing as mp
-from functools import partial
-import logging
-import time
 from numba import njit
 
+from routines import logger
+import input_parameters as parmt
+
 n = 10 #rounding precision
-
-def time_wrapper(func):
-    """
-    Wrapper for printing execution time to logger.
-    """
-    def wrap(*args, **kwargs):
-        logging.info('Entering function {}'.format(func.__name__))
-        start = time.time()
-        val = func(*args, **kwargs)
-        end = time.time()
-        logging.info('Exiting function {}. Time taken = {:.2f} s.\n'.format(func.__name__, end - start))
-        return val
-
-    return wrap
 
 def spherical_to_cartesian(sph: np.ndarray, unique=False) -> np.ndarray:
     """
@@ -100,10 +84,10 @@ def construct_all_solid_angles() -> np.ndarray:
     Construct points in theta and phi, such that the integral over solid angles is well-approximated by a trapezoidal rule integration law in theta.
     """
     if type(parmt.N_theta) != int or type(parmt.N_phi) != int:
-        logging.info('Raising exception, in input_parameters.py, N_theta and N_phi must be of the type int.')
+        logger.info('Raising exception, in input_parameters.py, N_theta and N_phi must be of the type int.')
         raise Exception('In input_parameters.py, N_theta and N_phi must be of the type int.')
     if not parmt.N_theta%2:
-        logging.info('! WARNING: Given N_theta = {} is even and will not contain points in the x-y plane.\nThe accuracy of the dielectric function will remain unaffected.'.format(parmt.N_theta))
+        logger.info('! WARNING: Given N_theta = {} is even and will not contain points in the x-y plane.\nThe accuracy of the dielectric function will remain unaffected.'.format(parmt.N_theta))
     theta_bins = construct_theta_bins()
     phi_bins = np.arange(-0.5, 0.5, 1./parmt.N_phi)*2*np.pi #-pi <= phi <pi
     solid_angles = []

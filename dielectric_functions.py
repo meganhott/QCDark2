@@ -7,18 +7,21 @@ QCDark branch to calculate the dielectric function:
     version: 0.01
     authors: github: @meganhott; github: @asingal14
 """
-    
-import routines as routines
 
-def initialize_cell() -> tuple[routines.pbcgto.cell.Cell, dict]:
-    cell = routines.build_cell_from_input()                                    # Build cell object
-    primgauss = routines.gen_all_1D_prim_gauss(cell)                           # Get all primitive gaussian objects
-    primindices = routines.gen_prim_gauss_indices(primgauss)                   # Get all main indices for primitive gaussian objects.
-    aos = routines.gen_all_atomic_orbitals(cell, primgauss)
-    blocks = routines.get_basis_blocks(aos)
-    G_vectors = routines.gen_G_vectors(cell)                                   # Get all relevant G vectors
-    R_vectors = routines.construct_R_vectors(cell)
-    V_cell = routines.get_cell_volume(cell)
+import dark_objects_routines as do_routines
+import dft_routines
+import utils
+
+def initialize_cell() -> tuple[do_routines.pbcgto.cell.Cell, dict]:
+    cell = do_routines.build_cell_from_input()
+    primgauss = do_routines.gen_all_1D_prim_gauss(cell)
+    primindices = do_routines.gen_prim_gauss_indices(primgauss)
+    aos = do_routines.gen_all_atomic_orbitals(cell, primgauss)
+    blocks = do_routines.get_basis_blocks(aos)
+    G_vectors = do_routines.gen_G_vectors(cell)
+    R_vectors = do_routines.construct_R_vectors(cell)
+    V_cell = do_routines.get_cell_volume(cell)
+    
     dark_objects = {
         'primitive_gaussians': primgauss,
         'aos': aos,
@@ -31,16 +34,16 @@ def initialize_cell() -> tuple[routines.pbcgto.cell.Cell, dict]:
     }
     return cell, dark_objects
 
-def electronic_structure(cell: routines.pbcgto.cell.Cell, dark_objects: dict) -> dict:
-    kmf = routines.KS_electronic_structure(cell)
-    routines.KS_non_self_consistent_field(kmf)
-    routines.convert_to_eV_and_scissor(cell)
-    dark_objects['unique_q'] = routines.get_1BZ_q_points(cell)
+def electronic_structure(cell: do_routines.pbcgto.cell.Cell, dark_objects: dict) -> dict:
+    kmf = dft_routines.KS_electronic_structure(cell)
+    dft_routines.KS_non_self_consistent_field(kmf)
+    dft_routines.convert_to_eV_and_scissor(cell)
+    dark_objects['unique_q'] = do_routines.get_1BZ_q_points(cell)
     return dark_objects
 
 def dielectric_RPA(dark_objects: dict) -> None:
-    dark_objects['R_cutoffs'] = routines.primgauss_1D_overlaps(dark_objects)
-    dark_objects['R_cutoff_q_points'] = routines.store_Rids(dark_objects)
+    dark_objects['R_cutoffs'] = do_routines.primgauss_1D_overlaps(dark_objects)
+    dark_objects['R_cutoff_q_points'] = do_routines.store_R_ids(dark_objects)
     return dark_objects
 
 def main():
@@ -50,6 +53,6 @@ def main():
     return
 
 if __name__ == '__main__':
-    routines.check_requirements()                                              # Check requirements
-    routines.patch()                                                           # Patch required for some versions, see function for details
+    utils.check_requirements() # Check requirements
+    utils.patch() # Patch required for some versions, see function for details
     main()
