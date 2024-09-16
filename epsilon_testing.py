@@ -17,4 +17,4 @@ else: #For existing DFT results
 
 tot_bin_eps, tot_bin_weights = eps_routines.initialize_RPA_dielectric(dark_objects)
 binned_eps = eps_routines.get_binned_epsilon(tot_bin_eps, tot_bin_weights)
-np.save(parmt.store+'/binned_eps.npy')
+np.save(parmt.store+'/binned_eps.npy', binned_eps)
