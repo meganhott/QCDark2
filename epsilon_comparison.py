@@ -2,15 +2,22 @@ import numpy as np
 import input_parameters as parmt
 import matplotlib.pyplot as plt
 import matplotlib.colors
-from routines import epsilon_r
-from binning import *
+from epsilon_routines import epsilon_r
+from binning import gen_bin_centers
 
-q = np.arange(0.01, parmt.q_max, parmt.dq) #alpha me
-E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE) #eV
+import sys
+import os
+sys.path.append(os.getcwd()+'/../DarkELF')
+from darkelf import darkelf, targets
+
+darkelf_gpaw = darkelf(target='Si', filename='Si_gpaw_noLFE.dat')
+
+q = np.arange(0.01, 1, parmt.dq) #alpha me
+E = np.arange(0, 50+parmt.dE, parmt.dE) #eV
 
 #RPA
-binned_eps = np.load('test_resources/epsilon_1q_30E/binned_eps.npy')
-bin_centers = gen_bin_centers()
+binned_eps = np.load('test_resources/epsilon_1q_50E_tz_6/binned_eps.npy')
+bin_centers = gen_bin_centers(q_max=1)
 eps = epsilon_r(bin_centers, binned_eps)
 
 #Lindhard model
@@ -46,12 +53,14 @@ im_min = np.min(np.concatenate([np.imag(eps[np.invert(np.isnan(eps))]), np.imag(
 im_max = np.max(np.concatenate([np.imag(eps[np.invert(np.isnan(eps))]), np.imag(eps_l[np.invert(np.isnan(eps_l))])]))
 re_max = max(-1*re_min, re_max)
 
-fig, ax = plt.subplots(2,2)
+fig, ax = plt.subplots(2,3)
 
-im0 = ax[(0,0)].pcolormesh(E, q, np.real(eps_l), cmap=c, norm=matplotlib.colors.SymLogNorm(th, vmin=-re_max, vmax=re_max))
-im1 = ax[(0,1)].pcolormesh(E, q, np.imag(eps_l), cmap=c, norm=matplotlib.colors.SymLogNorm(th, vmin=-im_max, vmax=im_max,))
-im2 = ax[(1,0)].pcolormesh(E, q, np.real(eps), cmap=c, norm=matplotlib.colors.SymLogNorm(th, vmin=-re_max, vmax=re_max))
-im3 = ax[(1,1)].pcolormesh(E, q, np.imag(eps), cmap=c, norm=matplotlib.colors.SymLogNorm(th, vmin=-im_max, vmax=im_max,))
+im0 = ax[(0,0)].pcolormesh(E, q, np.real(eps), cmap=c, norm=matplotlib.colors.SymLogNorm(th, vmin=-re_max, vmax=re_max))
+im1 = ax[(1,0)].pcolormesh(E, q, np.imag(eps), cmap=c, norm=matplotlib.colors.SymLogNorm(th, vmin=-im_max, vmax=im_max,))
+im2 = ax[(0,1)].pcolormesh(E, q, np.real(eps_l), cmap=c, norm=matplotlib.colors.SymLogNorm(th, vmin=-re_max, vmax=re_max))
+im3 = ax[(1,1)].pcolormesh(E, q, np.imag(eps_l), cmap=c, norm=matplotlib.colors.SymLogNorm(th, vmin=-im_max, vmax=im_max,))
+im4 = ax[(0,2)].pcolormesh(E, q, darkelf_gpaw.eps1(E, q*alpha*mElectron), cmap=c, norm=matplotlib.colors.SymLogNorm(th, vmin=-re_max, vmax=re_max))
+im5 = ax[(1,2)].pcolormesh(E, q, darkelf_gpaw.eps2(E, q*alpha*mElectron), cmap=c, norm=matplotlib.colors.SymLogNorm(th, vmin=-re_max, vmax=re_max))
 """
 im0 = ax[(0,0)].imshow(np.real(eps_l), cmap=c, norm=matplotlib.colors.SymLogNorm(th, vmin=-re_max, vmax=re_max), origin='lower')
 im1 = ax[(0,1)].imshow(np.imag(eps_l), cmap=c, norm=matplotlib.colors.SymLogNorm(th, vmin=-im_max, vmax=im_max,), origin='lower')
@@ -59,18 +68,22 @@ im2 = ax[(1,0)].imshow(np.real(eps), cmap=c, norm=matplotlib.colors.SymLogNorm(t
 im3 = ax[(1,1)].imshow(np.imag(eps), cmap=c, norm=matplotlib.colors.SymLogNorm(th, vmin=-im_max, vmax=im_max,), origin='lower')
 """
 fig.colorbar(im0, ax=ax[(0,0)])
-fig.colorbar(im1, ax=ax[(0,1)])
-ax[(0,0)].set_title(r'Lindhard Re($\epsilon$)')
-ax[(0,1)].set_title(r'Lindhard Im($\epsilon$)')
-ax[(1,1)].axvline(x=1.12, ymin=0, ymax=1, color='k', linestyle='--')
-fig.colorbar(im2, ax=ax[(1,0)])
+fig.colorbar(im1, ax=ax[(1,0)])
+ax[(0,0)].set_title(r'RPA Re($\epsilon$)')
+ax[(1,0)].set_title(r'RPA Im($\epsilon$)')
+#ax[(1,0)].axvline(x=1.12, ymin=0, ymax=1, color='k', linestyle='--')
+fig.colorbar(im2, ax=ax[(0,1)])
 fig.colorbar(im3, ax=ax[(1,1)])
-ax[(1,0)].set_title(r'RPA Re($\epsilon$)')
-ax[(1,1)].set_title(r'RPA Im($\epsilon$)')
+ax[(0,1)].set_title(r'Lindhard Re($\epsilon$)')
+ax[(1,1)].set_title(r'Lindhard Im($\epsilon$)')
+fig.colorbar(im4, ax=ax[(0,2)])
+fig.colorbar(im5, ax=ax[(1,2)])
+ax[(0,2)].set_title(r'GPAW no LFE Re($\epsilon$)')
+ax[(1,2)].set_title(r'GPAW no LFE Im($\epsilon$)')
 
 for i in [0,1]:
-    for j in [0,1]:
+    for j in [0,1,2]:
         ax[(i,j)].set_xlabel('E (eV)')
         ax[(i,j)].set_ylabel(r'q ($\alpha m_e$)')
-plt.tight_layout()
+#plt.tight_layout()
 plt.show()
