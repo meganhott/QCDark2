@@ -38,6 +38,7 @@ def electronic_structure(cell: do_routines.pbcgto.cell.Cell, dark_objects: dict)
     kmf = dft_routines.KS_electronic_structure(cell)
     dft_routines.KS_non_self_consistent_field(kmf)
     dft_routines.convert_to_eV_and_scissor(cell)
+    dft_routines.get_band_indices()
     dark_objects['unique_q'] = do_routines.get_1BZ_q_points(cell)
     return dark_objects
 
