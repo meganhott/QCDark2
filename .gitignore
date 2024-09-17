@@ -9,3 +9,4 @@
 /configure_pyscf.py
 /rpa_dielectric_cython.c*
 /build
+/plots.ipynb
