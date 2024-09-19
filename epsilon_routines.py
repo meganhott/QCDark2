@@ -63,14 +63,14 @@ def initialize_RPA_dielectric(dark_objects):
         mo_coeff_f_q_conj = mo_coeff_f[k_pairs[:,1]].conj() #(k_pair,b,j)
         k_f_q = k_f[k_pairs[:,1]]
 
-        #Compute energy differences for denominator of Re(chi), and Im(chi)
-        re_delE, im_delE = get_energy_diff(mo_en_i_q, mo_en_f_q, E)
+        #Compute and store energy differences for denominator of Re(chi), and Im(chi)
+        get_energy_diff(mo_en_i_q, mo_en_f_q, E)
 
         start_eps_q = time.time()
         
         #Compute epsilon for all G_q
         with mp.get_context('fork').Pool(mp.cpu_count()) as p:  #parallelization over G
-            epsilon = p.map(partial(RPA_eps, q=q, k_f=k_f_q, mo_coeff_i=mo_coeff_i_q, mo_coeff_f_conj=mo_coeff_f_q_conj, re_delE=re_delE, im_delE=im_delE, unique_Ri=unique_Ri, blocks=blocks, N_AO=N_AO, q_cuts=q_cuts, N_kpairs=N_kpairs, V_cell=V_cell), G_q)
+            epsilon = p.map(partial(RPA_eps, q=q, k_f=k_f_q, mo_coeff_i=mo_coeff_i_q, mo_coeff_f_conj=mo_coeff_f_q_conj, unique_Ri=unique_Ri, blocks=blocks, N_AO=N_AO, q_cuts=q_cuts, N_kpairs=N_kpairs, V_cell=V_cell), G_q)
         epsilon = np.array(epsilon) #(G, E)
 
         #bin eps calculated for all G
@@ -85,9 +85,9 @@ def get_energy_diff(mo_en_i, mo_en_f, E):
     """
     Notes:
     - numba roughly halves runtime, still only a few ms, but cannot use njit with errstate
+    - Faster to save and load im_delE and re_delE instead of passing to multiprocessing, speed up is even better for larger arrays
     To Do:
     - Account for Re = inf when the energy difference exactly = 0
-    - Is it faster to save and load this?
 
     Computes contributions to Re(chi) and Im(chi) coming from the energy difference denominator in Eq. (). Imaginary contributions arise when the energy difference is less than parmt.dE. We use a triangle approximation of the dirac delta function with width determined by parmt.dE
 
@@ -96,7 +96,7 @@ def get_energy_diff(mo_en_i, mo_en_f, E):
         mo_en_f:    np.ndarray of shape (N_kpairs, N_conbands): final molecular orbital energies
         E:          np.ndarray of shape (N_E,): energy transferred to electron
 
-    Outputs:
+    Stored:
         re_delE:  np.ndarray of shape (k_pairs, i, j, E): Real part of the energy denominator
         im_delE:  np.ndarray of shape (k_pairs, i, j, E): Imaginary part of the denominator
     """
@@ -105,7 +105,8 @@ def get_energy_diff(mo_en_i, mo_en_f, E):
 
     with np.errstate(divide='ignore'): #need this to avoid ZeroDivisionError
         re_delE = np.where(re_delE == 0, 0, re_delE**(-1)) #gives inverse of energy difference unless delE == 0, in which case 0 is returned since there is no real part
-    return re_delE, -np.pi*im_delE
+    np.save(parmt.store+'/re_delE.npy', re_delE)
+    np.save(parmt.store+'/im_delE.npy', -np.pi*im_delE)
 
 def get_binned_epsilon(tot_bin_eps, tot_bin_weights):
     """
