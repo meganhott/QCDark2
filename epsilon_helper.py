@@ -86,7 +86,7 @@ def RPA_dielectric(G, q, k_f, mo_coeff_i, mo_coeff_f_conj, re_delE, im_delE, uni
     """
     eta_qG = get_3D_overlaps_blocks(q+G, k_f, blocks, N_AO, mo_coeff_i, mo_coeff_f_conj, unique_Ri, q_cuts)
 
-    eps = 1 - 4*np.pi * alpha**2 * me / np.linalg.norm(q+G)**2 * RPA_susceptibility(eta_qG, re_delE, im_delE, N_kpairs, V_cell)
+    eps = 1 - (4*np.pi*alpha)**2 * me / np.linalg.norm(q+G)**2 * RPA_susceptibility(eta_qG, re_delE, im_delE, N_kpairs, V_cell)
     return eps
 
 def RPA_dielectric_lfe(q, G_vectors, k_pairs, mo_en_i, mo_en_f, eta_q):
