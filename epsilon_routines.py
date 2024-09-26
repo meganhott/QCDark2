@@ -156,8 +156,8 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict) -> tuple[np.ndarray, np.ndarra
     
     # Make working directory
     makedir(parmt.store + '/working_dir')
-    
-    logging.info('Total number of q: {}.'.format(n_q))
+
+    logger.info('Total number of q: {}.'.format(n_q))
     for i_q, q in enumerate(unique_q.keys()):
         k_pairs = np.array(unique_q[q])
         q = np.array(q)
