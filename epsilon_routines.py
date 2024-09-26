@@ -7,6 +7,7 @@ from routines import logger, time_wrapper, load_unique_R, makedir, alpha, me
 import input_parameters as parmt
 import epsilon_helper as eps
 import binning as bin
+from numba import njit
 
 @time_wrapper
 def initialize_RPA_dielectric(dark_objects):
@@ -81,6 +82,18 @@ def initialize_RPA_dielectric(dark_objects):
         logger.info('epsilon_GG(q, E) calculated and binned for all G and E for 1BZ q vector {} ({}/{}). Time taken = {:.2f} s.\n'.format(np.array2string(q, precision=5), i_q+1, n_q, end_eps_q - start_eps_q))
     return tot_bin_eps, tot_bin_weights
 
+@njit
+def delta_energy(mo_en_i, mo_en_f):
+    """
+    Get the lower energy bin and the remainder to feed into that particular bin.
+    """
+    nk, nmo, nmu = mo_en_f.shape[0], mo_en_i.shape[1], mo_en_f.shape[1]
+    delE = (mo_en_f[:, None, :] - mo_en_i[:, :, None])/parmt.dE
+    arr = np.zeros((nk, nmo, nmu, 2), dtype = np.float32)
+    arr[:,:,:,0] = delE//1
+    arr[:,:,:,1] = 1. - delE%1
+    return arr
+
 def get_RPA_dielectric_no_LFE_q(E: np.ndarray, q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.ndarray, mo_coeff_f_conj: np.ndarray, mo_coeff_i: np.ndarray, k_f: np.ndarray, k_pairs: np.ndarray, blocks: dict, N_AO: int, q_cuts: np.ndarray, VCell: float, G_q: np.ndarray):
     
     # Prepare computation
@@ -93,8 +106,7 @@ def get_RPA_dielectric_no_LFE_q(E: np.ndarray, q: np.ndarray, mo_en_f: np.ndarra
     k_f = k_f[k_pairs[:,1]]
 
     # Calculating the delta function in energy
-    re_delE = (E[None,None,None,:] - mo_en_f[:,None,:,None] + mo_en_i[:,:,None,None])
-    im_delE = (np.abs(re_delE) < parmt.dE) * (1.0 - np.abs(re_delE)/parmt.dE)
+    im_delE = delta_energy(mo_en_i, mo_en_f)
 
     # store relevant quantities, perhaps faster to load in each iteration than supply 
     working_dir = parmt.store + '/working_dir/'
