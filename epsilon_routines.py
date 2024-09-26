@@ -156,11 +156,12 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict) -> tuple[np.ndarray, np.ndarra
     
     # Make working directory
     makedir(parmt.store + '/working_dir')
-
+    
+    logging.info('Total number of q: {}.'.format(n_q))
     for i_q, q in enumerate(unique_q.keys()):
         k_pairs = np.array(unique_q[q])
         q = np.array(q)
-        logger.info('\ti_q: {} (out of {})\n\t\tq = {},'.format(i_q+1, n_q, np.array2string(q, precision=5)))
+        logger.info('\ti_q: {}\n\t\tq = {},'.format(i_q+1, np.array2string(q, precision=5)))
         start_time = time.time()
         
         # Finding relevant G vectors

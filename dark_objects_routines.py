@@ -360,10 +360,12 @@ def store_R_ids(dark_objects: dict):
     unique_Ri = load_unique_R()
     R_id = get_R_id(R_vecs, unique_Ri)
     np.save(parmt.store + '/R_ids/{}'.format(-1), R_id)
+    logger.info('\tNumber of R vectors: \t{}.'.format(R_id.shape[1]))
     q_cuts = []
     for i, R_cut in enumerate(R_cutoffs):
         q_cuts.append(R_cut[0])
         tR = R_vecs[abs_R <= R_cut[1]]
         R_id = get_R_id(tR, unique_Ri)
+        logger.info('\tq > \t{:.2f} amu, nR = \t{},'.format(q_cuts[-1], R_id.shape[1]))
         np.save(parmt.store + '/R_ids/{}'.format(i), R_id)
     return np.array(q_cuts)
