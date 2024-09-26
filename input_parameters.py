@@ -40,7 +40,7 @@ q_max = 5                                             # In units of alpha*(mass 
 N_theta = 9                                            # Number of theta bins
 N_phi = 16                                             # Number of phi bins
 dE = 0.1                                               # In eV
-E_max = 30                                             # In eV
+E_max = 50                                             # In eV
 numval = 'all'                                         # number of valence bands to include in the calculation, 
                                                        # use 'all' for all available valence bands
 numcon = 'all'                                         # number of conduction bands to include in the calculation,
