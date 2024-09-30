@@ -19,17 +19,17 @@ lattice_vectors = [[2.715,    2.715,    0. ],
                    [2.715,    0.,       2.715]]
 atomloc =  ''' Si	0.	     0.	     0.    
 		     Si	1.3575	1.3575	1.3575'''
-mybasis = {'Si': 'cc-pvdz'}                            # Recommended to keep all basis sets same, however can be made different
+mybasis = {'Si': 'cc-pvtz'}                            # Recommended to keep all basis sets same, however can be made different
                                                        # We follow pyscf notations, see pyscf documentation
 effective_core_potential = None                        # All electron basis sets mandate the use of no ECPs,
                                                        # basis sets and ECPS must be chosen consistently
 
 """computational parameters;
      these determine precision, and whether optional parameters are applied"""
-precision = 1e-12                                      # precision parameter, fed to pyscf only
+precision = 1e-9                                      # precision parameter, fed to pyscf only
 xcfunc = 'pbe'                                         # Exchange-Correlation Functional
-ik_grid = [4,4,4]                                      # k-grid: resolution of grid points in reciprocal space
-fk_grid = [6,6,6]	                                   # Grid size for NSCF calculation
+ik_grid = [8,8,8]                                      # k-grid: resolution of grid points in reciprocal space
+fk_grid = [8,8,8]	                                   # Grid size for NSCF calculation
 scissor_bandgap = 1.1                                  # If None, scissor correction is not applied, generally float in eV
 include_lfe = False                                    # If False, does not incorporate local field effects into the calculation of epsilon. If True, LFEs will be calculated by inverting eps_{GG'} 
 
@@ -40,7 +40,7 @@ q_max = 5                                             # In units of alpha*(mass 
 N_theta = 9                                            # Number of theta bins
 N_phi = 16                                             # Number of phi bins
 dE = 0.1                                               # In eV
-E_max = 30                                             # In eV
+E_max = 50                                             # In eV
 numval = 'all'                                         # number of valence bands to include in the calculation, 
                                                        # use 'all' for all available valence bands
 numcon = 'all'                                         # number of conduction bands to include in the calculation,

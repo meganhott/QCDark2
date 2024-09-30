@@ -3,10 +3,11 @@ import time
 import multiprocessing as mp
 from functools import partial
 
-from routines import logger, time_wrapper, load_unique_R
+from routines import logger, time_wrapper, load_unique_R, makedir, alpha, me
 import input_parameters as parmt
 import epsilon_helper as eps
 import binning as bin
+from numba import njit
 
 @time_wrapper
 def initialize_RPA_dielectric(dark_objects):
@@ -80,6 +81,107 @@ def initialize_RPA_dielectric(dark_objects):
         
         logger.info('epsilon_GG(q, E) calculated and binned for all G and E for 1BZ q vector {} ({}/{}). Time taken = {:.2f} s.\n'.format(np.array2string(q, precision=5), i_q+1, n_q, end_eps_q - start_eps_q))
     return tot_bin_eps, tot_bin_weights
+
+@njit
+def delta_energy(mo_en_i, mo_en_f):
+    """
+    Get the lower energy bin and the remainder to feed into that particular bin.
+    """
+    nk, nmo, nmu = mo_en_f.shape[0], mo_en_i.shape[1], mo_en_f.shape[1]
+    delE = (mo_en_f[:, None, :] - mo_en_i[:, :, None])/parmt.dE
+    arr = np.zeros((nk, nmo, nmu, 2), dtype = np.float32)
+    arr[:,:,:,0] = delE//1
+    arr[:,:,:,1] = 1. - delE%1
+    return arr
+
+def get_RPA_dielectric_no_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.ndarray, mo_coeff_f_conj: np.ndarray, mo_coeff_i: np.ndarray, k_f: np.ndarray, k_pairs: np.ndarray, blocks: dict, N_AO: int, q_cuts: np.ndarray, VCell: float, G_q: np.ndarray, unique_Ri: list[np.ndarray]) -> np.ndarray:
+    
+    # Prepare computation
+    prefactor = 32.*(np.pi**3)*(alpha**2)*me/(VCell*len(k_pairs))
+
+    mo_en_i = mo_en_i[k_pairs[:,0]] #(k_pair,i)
+    mo_en_f = mo_en_f[k_pairs[:,1]] #(k_pair,j)
+    mo_coeff_i = mo_coeff_i[k_pairs[:,0]] #(k_pair,a,i)
+    mo_coeff_f_conj = mo_coeff_f_conj[k_pairs[:,1]] #(k_pair,b,j)
+    k_f = k_f[k_pairs[:,1]]
+
+    # Calculating the delta function in energy
+    im_delE = delta_energy(mo_en_i, mo_en_f)
+
+    # store relevant quantities, perhaps faster to load in each iteration than supply 
+    working_dir = parmt.store + '/working_dir/'
+    np.save(working_dir + 'im_energy', im_delE)
+    np.save(working_dir + 'k_f', k_f)
+    np.save(working_dir + 'mo_coeff_i', mo_coeff_i)
+    np.save(working_dir + 'mo_coeff_f_conj', mo_coeff_f_conj)
+
+    qG = q[None, :] + G_q
+
+    with mp.get_context('fork').Pool(mp.cpu_count()) as p:
+        epsilon = p.map(partial(eps.RPA_Im_eps_external_prefactor_no_LFE, unique_Ri=unique_Ri, blocks=blocks, N_AO=N_AO, q_cuts=q_cuts), qG)
+    epsilon = np.array(epsilon)
+
+    return prefactor*epsilon
+
+@time_wrapper
+def get_RPA_dielectric_no_LFE(dark_objects: dict) -> tuple[np.ndarray, np.ndarray]:
+
+    # Reading all relevant data
+
+    N_AO = len(dark_objects['aos'])
+    ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
+    
+    dft_path = parmt.store + '/DFT/'
+    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,:,ivalbot:ivaltop+1]
+    mo_coeff_f_conj = np.load(dft_path + 'mo_coeff_f.npy')[:,:,iconbot:icontop+1].conj()
+    mo_en_i = np.load(dft_path + 'mo_en_i.npy')[:,ivalbot:ivaltop+1]
+    mo_en_f = np.load(dft_path + 'mo_en_f.npy')[:,iconbot:icontop+1]
+    k_f = np.load(parmt.store + '/k-pts_f.npy')
+
+    q_cuts = dark_objects['R_cutoff_q_points']
+    G_vectors = dark_objects['G_vectors']
+    VCell = dark_objects['V_cell']
+    unique_q = dark_objects['unique_q']
+    n_q = len(unique_q)
+    blocks = dark_objects['blocks']
+
+    unique_Ri = load_unique_R()
+
+    # Generating energy centers & bins
+    E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
+    bin_centers = bin.gen_bin_centers()
+    N_ang_bins = (parmt.N_phi*(parmt.N_theta-2)+2)
+    tot_bin_eps = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1), dtype='complex')
+    tot_bin_weights = np.zeros(bin_centers.shape[0]+N_ang_bins)
+    
+    # Make working directory
+    makedir(parmt.store + '/working_dir')
+
+    logger.info('Total number of q: {}.'.format(n_q))
+    for i_q, q in enumerate(unique_q.keys()):
+        k_pairs = np.array(unique_q[q])
+        q = np.array(q)
+        logger.info('\ti_q: {}\n\t\tq = {},'.format(i_q+1, np.array2string(q, precision=5)))
+        start_time = time.time()
+        
+        # Finding relevant G vectors
+        G_q = G_vectors[np.linalg.norm(q[None, :]+G_vectors, axis=1) < parmt.q_max]
+        logger.info('\t\tnumber of G vectors = {},'.format(len(G_q)))
+
+        eps_q = get_RPA_dielectric_no_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, blocks, N_AO, q_cuts, VCell, G_q, unique_Ri)
+        tot_bin_eps, tot_bin_weights = bin.bin_eps_q(q, G_q, eps_q, bin_centers, tot_bin_eps, tot_bin_weights)
+        
+        logger.info('\t\tcomplete. Time taken = {:.2f} s.'.format(time.time() - start_time))
+
+    print(q)
+    return tot_bin_eps, tot_bin_weights
+
+def get_RPA_dielectric(dark_objects: dict) -> tuple[np.ndarray, np.ndarray]:
+    
+    if parmt.include_lfe:
+        raise NotImplementedError('Local Field Effects are not yet implemented. The optimization will be done via a different route and needs to be done at a later stage.')
+    else:
+        return get_RPA_dielectric_no_LFE(dark_objects)
 
 def get_energy_diff(mo_en_i, mo_en_f, E):
     """
