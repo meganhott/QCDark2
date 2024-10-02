@@ -118,10 +118,10 @@ def get_RPA_dielectric_no_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.
     qG = q[None, :] + G_q
 
     with mp.get_context('fork').Pool(mp.cpu_count()) as p:
-        epsilon = p.map(partial(eps.RPA_Im_eps_external_prefactor_no_LFE, unique_Ri=unique_Ri, blocks=blocks, N_AO=N_AO, q_cuts=q_cuts), qG)
-    epsilon = np.array(epsilon)
+        epsilon_im = p.map(partial(eps.RPA_Im_eps_external_prefactor_no_LFE, unique_Ri=unique_Ri, blocks=blocks, N_AO=N_AO, q_cuts=q_cuts), qG)
+    epsilon_im = prefactor*np.array(epsilon_im)
 
-    return prefactor*epsilon
+    return prefactor*epsilon_im
 
 @time_wrapper
 def get_RPA_dielectric_no_LFE(dark_objects: dict) -> tuple[np.ndarray, np.ndarray]:
@@ -151,7 +151,7 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict) -> tuple[np.ndarray, np.ndarra
     E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
     bin_centers = bin.gen_bin_centers()
     N_ang_bins = (parmt.N_phi*(parmt.N_theta-2)+2)
-    tot_bin_eps = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1), dtype='complex')
+    tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1), dtype='complex')
     tot_bin_weights = np.zeros(bin_centers.shape[0]+N_ang_bins)
     
     # Make working directory
@@ -168,13 +168,19 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict) -> tuple[np.ndarray, np.ndarra
         G_q = G_vectors[np.linalg.norm(q[None, :]+G_vectors, axis=1) < parmt.q_max]
         logger.info('\t\tnumber of G vectors = {},'.format(len(G_q)))
 
-        eps_q = get_RPA_dielectric_no_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, blocks, N_AO, q_cuts, VCell, G_q, unique_Ri)
-        tot_bin_eps, tot_bin_weights = bin.bin_eps_q(q, G_q, eps_q, bin_centers, tot_bin_eps, tot_bin_weights)
+        eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, blocks, N_AO, q_cuts, VCell, G_q, unique_Ri)
+
+        tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, eps_q_im, bin_centers, tot_bin_eps_im, tot_bin_weights)
         
         logger.info('\t\tcomplete. Time taken = {:.2f} s.'.format(time.time() - start_time))
 
-    print(q)
-    return tot_bin_eps, tot_bin_weights
+    binned_eps_im = tot_bin_eps_im/tot_bin_weights[:,None]
+
+    #Eventually want to add interpolation of missing bins for Im(eps) before performing Kramers-Kronig transformation to get Re(eps)
+
+    binned_eps_re = kramerskronig(binned_eps_im)
+    
+    return binned_eps_re, binned_eps_im
 
 def get_RPA_dielectric(dark_objects: dict) -> tuple[np.ndarray, np.ndarray]:
     
@@ -226,6 +232,22 @@ def get_binned_epsilon(tot_bin_eps, tot_bin_weights):
     binned_eps = tot_bin_eps/tot_bin_weights[:,None]
     #remove nans?
     return(binned_eps)
+
+@time_wrapper
+def kramerskronig(eps_im):
+    """
+    Notes:
+        Add warning for E_max < plasmon?
+        Optimize with numba
+    """
+    E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
+    eps_re = np.empty_like(eps_im)
+    for n, En in enumerate(E):
+        E_pv = np.delete(E, n) #removes Ei = En for principal value
+        eps_im_pv = np.delete(eps_im, n, axis=1)
+
+        eps_re[:,n] = 2/np.pi*parmt.dE*(np.sum(E_pv[None,:] * eps_im_pv / (E_pv[None,:]**2 - En**2), axis=1) - 0.5*(E_pv[None,0]*eps_im_pv[:,0]/(E_pv[None,0]**2-En**2) + E_pv[None,-1]*eps_im_pv[:,-1]/(E_pv[None,-1]**2-En**2))) #trapezoid rule
+    return eps_re + 1
 
 def epsilon_r(bin_centers, binned_eps):
     N_ang_bins = (parmt.N_phi*(parmt.N_theta-2)+2)
