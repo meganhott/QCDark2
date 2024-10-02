@@ -82,7 +82,7 @@ def RPA_Im_eps_external_prefactor_no_LFE(qG, blocks, N_AO, q_cuts, unique_Ri):
                         if ind < nE - 1:
                             im_eps[int(ind+1)] += (1. - rem)*eta_qG_sq[k - i, a, b]
     else:
-        eta_qG = get_3D_overlaps_blocks(qG, k_f[i:f], blocks, N_AO, mo_coeff_i[i:f], mo_coeff_f_conj[i:f], unique_Ri, q_cuts)
+        eta_qG = get_3D_overlaps_blocks(qG, k_f, blocks, N_AO, mo_coeff_i, mo_coeff_f_conj, unique_Ri, q_cuts)
         eta_qG_sq = (eta_qG*eta_qG.conj()).real
         del eta_qG
         for k in range(nk):
