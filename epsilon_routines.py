@@ -121,7 +121,7 @@ def get_RPA_dielectric_no_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.
         epsilon_im = p.map(partial(eps.RPA_Im_eps_external_prefactor_no_LFE, unique_Ri=unique_Ri, blocks=blocks, N_AO=N_AO, q_cuts=q_cuts), qG)
     epsilon_im = prefactor*np.array(epsilon_im)
 
-    return prefactor*epsilon_im
+    return epsilon_im
 
 @time_wrapper
 def get_RPA_dielectric_no_LFE(dark_objects: dict) -> tuple[np.ndarray, np.ndarray]:
