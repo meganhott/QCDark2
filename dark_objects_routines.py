@@ -17,6 +17,9 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
     Returns:
         cell:   pyscf.pbc.gto.cell.Cell object
     """
+    if (parmt.pseudo is not None) and (parmt.effective_core_potential is not None):
+        raise ValueError("Can only specify effective_core_potential or pseudo. Set one of these parameters to None.")
+
     cell = pbcgto.M(
         a = np.asarray(parmt.lattice_vectors),
         atom = parmt.atomloc,
@@ -25,7 +28,8 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
         verbose = parmt.pyscf_outlev,
         output = parmt.pyscf_outfile,
         ecp = parmt.effective_core_potential,
-        precision = parmt.precision
+        precision = parmt.precision,
+        pseudo = parmt.pseudo
         )
     
     max_memory = psutil.virtual_memory().available/(2**20)*.9
@@ -54,14 +58,19 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
     for a in cell.basis:
         logger.info("\t\t{}: {}".format(a, cell.basis[a]))
     
-    logger.info("\tEffective core potential:")
     if len(cell.ecp):
+        logger.info("\tEffective core potential:")
         for a in cell.ecp:
             logger.info("\t\t{}: {}".format(a, cell.ecp[a]))
+    elif len(cell.pseudo):
+        logger.info("\tPseudopotential:")
+        for a in cell.pseudo:
+            logger.info("\t\t{}: {}".format(a, cell.pseudo[a]))
     else:
-        logger.info("\t\tNone, all-electron calculation.")
-    
+        logger.info("\tAll-electron calculation.")
+
     logger.info("\tSelected precision: {}".format(cell.precision))
+    logger.info("\tRadial cut-off for basis functions = {:.2f} Bohr.".format(rcut))
     logger.info("Further information is in {}.".format(cell.output))
 
     makedir(parmt.store, log = False)
