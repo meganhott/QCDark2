@@ -62,7 +62,7 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
         logger.info("\tEffective core potential:")
         for a in cell.ecp:
             logger.info("\t\t{}: {}".format(a, cell.ecp[a]))
-    elif len(cell.pseudo):
+    elif cell.pseudo is not None:
         logger.info("\tPseudopotential:")
         for a in cell.pseudo:
             logger.info("\t\t{}: {}".format(a, cell.pseudo[a]))
