@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors
-from scipy.interpolate import RBFInterpolator
+from scipy.interpolate import RBFInterpolator, LinearNDInterpolator
 
 import input_parameters as parmt
 from epsilon_routines import epsilon_r, kramerskronig
@@ -40,15 +40,18 @@ def main():
     eps_int2_r_im = epsilon_r(bin_centers_sph, binned_eps, eps_dtype='float')
     eps_int2_r_re = kramerskronig(eps_int2_r_im)
 
-    interp3 = RBFInterpolator(interp_bins, interp_eps, kernel='gaussian', epsilon=10)(nan_bins)
+    interp3 = RBFInterpolator(interp_bins, interp_eps, kernel='linear')(nan_bins)
     binned_eps[nan_loc] = interp3 #replace nans with interpolated data
     eps_int3_r_im = epsilon_r(bin_centers_sph, binned_eps, eps_dtype='float')
     eps_int3_r_re = kramerskronig(eps_int3_r_im)
 
-    interp4 = RBFInterpolator(interp_bins, interp_eps, kernel='linear')(nan_bins)
+    interp4 = LinearNDInterpolator(interp_bins, interp_eps)(nan_bins)
     binned_eps[nan_loc] = interp4 #replace nans with interpolated data
     eps_int4_r_im = epsilon_r(bin_centers_sph, binned_eps, eps_dtype='float')
     eps_int4_r_re = kramerskronig(eps_int4_r_im)
+
+    print(np.min(binned_eps[np.where(np.invert(np.isnan(binned_eps[:,0])))[0]]))
+    print(np.min(eps_int4_r_im))
 
     n = 5
     fig, ax = plt.subplots(2, n, figsize=(4*n,8))
@@ -72,10 +75,10 @@ def main():
 
     ax[(0,0)].set_title(r'Im($\epsilon$)')
     ax[(1,0)].set_title(r'Re($\epsilon$)')
-    ax[(0,1)].set_title(r'thin plate spline')
-    ax[(0,2)].set_title(r'cubic')
-    ax[(0,3)].set_title(r'gaussian, epsilon=0.1')
-    ax[(0,4)].set_title(r'linear')
+    ax[(0,1)].set_title(r'RBF: thin plate spline')
+    ax[(0,2)].set_title(r'RBF: cubic')
+    ax[(0,3)].set_title(r'RBF: linear')
+    ax[(0,4)].set_title(r'LinearND')
 
     for i in [0,1]:
         for j in range(n):
