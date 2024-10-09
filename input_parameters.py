@@ -27,17 +27,18 @@ pseudo = None                                          # Similar to ECPs, slight
 
 """computational parameters;
      these determine precision, and whether optional parameters are applied"""
-precision = 1e-9                                      # precision parameter, fed to pyscf only
+precision = 1e-9                                       # precision parameter, fed to pyscf only
 xcfunc = 'pbe'                                         # Exchange-Correlation Functional
-ik_grid = [4,4,4]                                      # k-grid: resolution of grid points in reciprocal space
-fk_grid = [8,8,8]	                                   # Grid size for NSCF calculation
+k_grid = [4,4,4]                                       # k-grid: resolution of grid points in reciprocal space
+q_shift_dir = [1,1,1]                                  # Direction for q-shift
+q_shift = 0.01                                         # In units of alpha*(mass of electron) 
 scissor_bandgap = 1.1                                  # If None, scissor correction is not applied, generally float in eV
 include_lfe = False                                    # If False, does not incorporate local field effects into the calculation of epsilon. If True, LFEs will be calculated by inverting eps_{GG'} 
 
 """parameters for dielectric function calculations,
      including q_max, bin widths, number of bands, etc"""
 dq = 0.02                                              # In units of alpha*(mass of electron) 
-q_max = 5                                             # In units of alpha*(mass of electron) 
+q_max = 5                                              # In units of alpha*(mass of electron) 
 N_theta = 9                                            # Number of theta bins
 N_phi = 16                                             # Number of phi bins
 dE = 0.1                                               # In eV

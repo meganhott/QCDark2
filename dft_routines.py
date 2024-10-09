@@ -18,7 +18,7 @@ def make_kpts(cell: pbcgto.cell.Cell, with_gamma: bool = True) -> pyscf.pbc.lib.
     Returns:
         k_grid: np.ndarray of shape (N, 3), k vectors generated from the cell.
     """
-    k_grid = parmt.ik_grid
+    k_grid = parmt.k_grid
     kpts = cell.make_kpts(k_grid, wrap_around=True, with_gamma_point=with_gamma, space_group_symmetry=True)
     np.save(parmt.store + '/k-pts_i', kpts.kpts)
     logger.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k-pts_i.npy', k_grid[0], k_grid[1], k_grid[2]))
@@ -64,11 +64,13 @@ def KS_non_self_consistent_field(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS) -> None
     """
     logger.info("Final State Calculation:")
     dft_path = parmt.store + '/DFT/'
-    #kpts = make_kpts(kmf.cell, False)
-    k_grid = parmt.fk_grid
-    kpts = kmf.cell.make_kpts(k_grid, space_group_symmetry=True, wrap_around = True, scaled_center = kmf.cell.get_scaled_kpts(np.ones(3)[None, :]*parmt.dq*.5/(3**.5)))
+    q_shift_dir = np.array(parmt.q_shift_dir)
+    q_shift = parmt.q_shift*q_shift_dir/np.linalg.norm(q_shift_dir)
+    scaled_center = kmf.cell.get_scaled_kpts(q_shift)
+    kpts = kmf.cell.make_kpts(parmt.k_grid, space_group_symmetry=True, wrap_around = True, scaled_center = scaled_center)
     np.save(parmt.store + '/k-pts_f', kpts.kpts)
-    logger.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k-pts_f.npy', k_grid[0], k_grid[1], k_grid[2]))
+    logger.info("Selected q shift = {}".format(np.array2string(q_shift, precision = 5)))
+    logger.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k-pts_f.npy', parmt.k_grid[0], parmt.k_grid[1], parmt.k_grid[2]))
     ek , ck = kmf.get_bands(kpts.kpts_ibz)
     ek = kpts.transform_mo_energy(ek)
     ck = kpts.transform_mo_coeff(ck)
