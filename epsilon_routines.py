@@ -97,7 +97,7 @@ def delta_energy(mo_en_i, mo_en_f):
 def get_RPA_dielectric_no_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.ndarray, mo_coeff_f_conj: np.ndarray, mo_coeff_i: np.ndarray, k_f: np.ndarray, k_pairs: np.ndarray, blocks: dict, N_AO: int, q_cuts: np.ndarray, VCell: float, G_q: np.ndarray, unique_Ri: list[np.ndarray]) -> np.ndarray:
     
     # Prepare computation
-    prefactor = 32.*(np.pi**3)*(alpha**2)*me/(VCell*len(k_pairs))
+    prefactor = 8.*(np.pi**2)*(alpha**2)*me/(VCell*len(k_pairs))/parmt.dE
 
     mo_en_i = mo_en_i[k_pairs[:,0]] #(k_pair,i)
     mo_en_f = mo_en_f[k_pairs[:,1]] #(k_pair,j)
