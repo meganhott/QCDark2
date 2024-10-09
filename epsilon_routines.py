@@ -249,10 +249,10 @@ def kramerskronig(eps_im):
         eps_re[:,n] = 2/np.pi*parmt.dE*(np.sum(E_pv[None,:] * eps_im_pv / (E_pv[None,:]**2 - En**2), axis=1) - 0.5*(E_pv[None,0]*eps_im_pv[:,0]/(E_pv[None,0]**2-En**2) + E_pv[None,-1]*eps_im_pv[:,-1]/(E_pv[None,-1]**2-En**2))) #trapezoid rule
     return eps_re + 1
 
-def epsilon_r(bin_centers, binned_eps):
+def epsilon_r(bin_centers, binned_eps, eps_dtype='complex'):
     N_ang_bins = (parmt.N_phi*(parmt.N_theta-2)+2)
     r = np.unique(bin_centers[:,0])
-    eps_r = np.zeros((r.shape[0], binned_eps.shape[1]), dtype='complex')
+    eps_r = np.zeros((r.shape[0], binned_eps.shape[1]), dtype=eps_dtype)
     for i, r_i in enumerate(r):
         eps_ri = binned_eps[i*N_ang_bins:(i+1)*N_ang_bins]
         eps_r[i] = np.nansum(eps_ri, axis=0) / (N_ang_bins - np.sum(np.isnan(eps_ri).astype(int), axis=0)) #treats nans as 0, want to average over all non-nan entries
