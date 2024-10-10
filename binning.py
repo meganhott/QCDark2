@@ -101,7 +101,7 @@ def construct_all_solid_angles() -> np.ndarray:
 
 def gen_bin_centers(q_max = parmt.q_max, cartesian=False) -> np.ndarray:
     Omega = construct_all_solid_angles()
-    qr = np.arange(parmt.dq*0.5, q_max + parmt.dq*1.5, parmt.dq) #extra bin: now dq/2 <= q <= qmax+dq/2
+    qr = np.linspace(parmt.dq*0.5, q_max+parmt.dq*0.5, int(q_max/parmt.dq)) #extra bin: now dq/2 <= q <= qmax+dq/2
     qra = []
     for q in qr:
         for O in Omega:
