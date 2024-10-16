@@ -165,7 +165,7 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict) -> tuple[np.ndarray, np.ndarra
         start_time = time.time()
         
         # Finding relevant G vectors
-        G_q = G_vectors[np.linalg.norm(q[None, :]+G_vectors, axis=1) < parmt.q_max + 0.5*parmt.dq]
+        G_q = G_vectors[np.linalg.norm(q[None, :]+G_vectors, axis=1) < parmt.q_max + 1.5*parmt.dq]
         logger.info('\t\tnumber of G vectors = {},'.format(len(G_q)))
 
         eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, blocks, N_AO, q_cuts, VCell, G_q, unique_Ri)
@@ -174,7 +174,7 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict) -> tuple[np.ndarray, np.ndarra
         
         logger.info('\t\tcomplete. Time taken = {:.2f} s.'.format(time.time() - start_time))
 
-    binned_eps_im = tot_bin_eps_im[:-2*N_ang_bins, :]/tot_bin_weights[:-2*N_ang_bins, None] #removing extra bins 
+    binned_eps_im = tot_bin_eps_im[:-N_ang_bins, :]/tot_bin_weights[:-N_ang_bins, None] #removing extra bins 
 
     #Eventually want to add interpolation of missing bins for Im(eps) before performing Kramers-Kronig transformation to get Re(eps)
 

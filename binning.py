@@ -101,7 +101,7 @@ def construct_all_solid_angles() -> np.ndarray:
 
 def gen_bin_centers(q_max = parmt.q_max, cartesian=False) -> np.ndarray:
     Omega = construct_all_solid_angles()
-    qr = np.linspace(parmt.dq*0.5, q_max+parmt.dq*0.5, int(q_max/parmt.dq)) #extra bin: now dq/2 <= q <= qmax+dq/2
+    qr = np.linspace(parmt.dq*0.5, q_max+parmt.dq*0.5, int(q_max/parmt.dq)+1) #extra bin: now dq/2 <= q <= qmax+dq/2
     qra = []
     for q in qr:
         for O in Omega:
@@ -149,7 +149,7 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
         Output: (G, 8) = bin_id
         """
         theta_id = coord_id[:,1]
-        theta_factor = (theta_id > 0)*1 + ((theta_id - 1) > 0)*(theta_id - 1)*parmt.N_phi - (theta_id == (parmt.N_theta - 1))*(parmt.N_phi - 1) #need this since only one bin for theta = 0,pi
+        theta_factor = (theta_id > 0)*1 + ((theta_id - 1) > 0)*(theta_id - 1)*parmt.N_phi
         phi_factor = (1 - (theta_id == 0))*(1 - (theta_id == (parmt.N_theta-1)))*coord_id[:,2]
         return coord_id[:,0]*(parmt.N_phi*(parmt.N_theta-2)+2) + theta_factor + phi_factor
     
