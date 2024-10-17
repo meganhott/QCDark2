@@ -2,12 +2,13 @@ import numpy as np
 import time
 import multiprocessing as mp
 from functools import partial
+from numba import njit
+from scipy.interpolate import LinearNDInterpolator
 
 from routines import logger, time_wrapper, load_unique_R, makedir, alpha, me
 import input_parameters as parmt
 import epsilon_helper as eps
 import binning as bin
-from numba import njit
 
 @time_wrapper
 def initialize_RPA_dielectric(dark_objects):
@@ -249,7 +250,12 @@ def kramerskronig(eps_im):
         eps_re[:,n] = 2/np.pi*parmt.dE*(np.sum(E_pv[None,:] * eps_im_pv / (E_pv[None,:]**2 - En**2), axis=1) - 0.5*(E_pv[None,0]*eps_im_pv[:,0]/(E_pv[None,0]**2-En**2) + E_pv[None,-1]*eps_im_pv[:,-1]/(E_pv[None,-1]**2-En**2))) #trapezoid rule
     return eps_re + 1
 
+#May want to put functions below into separate post-processing module? 
+
 def epsilon_r(bin_centers, binned_eps, eps_dtype='complex'):
+    """
+    Calculate angular averaged dielectric function eps(|q|, E) from binned epsilon.
+    """
     N_ang_bins = (parmt.N_phi*(parmt.N_theta-2)+2)
     r = np.unique(bin_centers[:,0])
     eps_r = np.zeros((r.shape[0], binned_eps.shape[1]), dtype=eps_dtype)
@@ -257,3 +263,24 @@ def epsilon_r(bin_centers, binned_eps, eps_dtype='complex'):
         eps_ri = binned_eps[i*N_ang_bins:(i+1)*N_ang_bins]
         eps_r[i] = np.nansum(eps_ri, axis=0) / (N_ang_bins - np.sum(np.isnan(eps_ri).astype(int), axis=0)) #treats nans as 0, want to average over all non-nan entries
     return eps_r
+
+def interp_eps(bin_centers_sph, binned_eps):
+    """
+    Interpolate missing bins of Im(eps) before computing Re(eps) with Kramers-Kronig. Returns interpolated real and imaginary parts of binned epsilon.
+
+    bin_centers input should be in spherical coordinates
+    """
+    eps_im = np.imag(binned_eps)
+    bin_centers = bin.spherical_to_cartesian(bin_centers_sph)
+
+    nan_loc = np.where(np.isnan(eps_im[:,0]))[0] #Find indices of missing bins
+    nan_bins = bin_centers[nan_loc]
+
+    interp_loc = np.where(np.invert(np.isnan(eps_im[:,0])))[0] #Use remaining bins for interpolation input
+    interp_bins = bin_centers[interp_loc]
+    interp_eps = eps_im[interp_loc]
+
+    interp = LinearNDInterpolator(interp_bins, interp_eps)(nan_bins)
+    eps_im[nan_loc] = interp #replace nans with interpolated data
+
+    return kramerskronig(eps_im) + 1j*eps_im
