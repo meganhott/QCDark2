@@ -331,7 +331,7 @@ def primgauss_1D_overlaps(dark_objects: dict) -> list[np.ndarray]:
             qu, Gu = get_all_unique_nums_in_array(q[:,d], round_to=10), get_all_unique_nums_in_array(G[:,d], round_to=10)
             qG = (qu[:, None] + Gu[None, :]).reshape((-1))
             qG = get_all_unique_nums_in_array(qG, round_to=10)
-            qG = qG[np.abs(qG) <= parmt.q_max]
+            qG = qG[np.abs(qG) <= parmt.q_max + 1.5*parmt.dq]
             Ru = get_all_unique_nums_in_array(Rv[:,d], round_to=10)
             logger.info('\tDimension = {}:\n\t\tNumber of unique q = {};\n\t\tNumber of unique R = {}.'.format(d, qG.size, Ru.size))
             res = p.map(partial(cartmoments.primgauss_1D_overlaps_uR, primindices = primindices, q = qG, atom_locs = atom_locs[:,d]), Ru)
