@@ -9,7 +9,7 @@ from binning import gen_bin_centers, spherical_to_cartesian, cartesian_to_spheri
 
 #Testing interpolation for bins missing Im(eps) data
 def main():
-    q = np.arange(0.01, 1, parmt.dq) #alpha me
+    q = np.arange(0.01, 1+1.5*parmt.dq, parmt.dq) #alpha me
     E = np.arange(0, 50+parmt.dE, parmt.dE) #eV
 
     binned_eps = 10/4/np.pi*np.imag(np.load('test_resources/binned_eps/cc-pvtz_pbe_6_bg1.12_1q_50E.npy'))
