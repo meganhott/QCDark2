@@ -125,7 +125,7 @@ def get_RPA_dielectric_no_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.
     return epsilon_im
 
 @time_wrapper
-def get_RPA_dielectric_no_LFE(dark_objects: dict) -> tuple[np.ndarray, np.ndarray]:
+def get_RPA_dielectric_no_LFE(dark_objects: dict):
 
     # Reading all relevant data
 
@@ -249,6 +249,23 @@ def kramerskronig(eps_im):
 
         eps_re[:,n] = 2/np.pi*parmt.dE*(np.sum(E_pv[None,:] * eps_im_pv / (E_pv[None,:]**2 - En**2), axis=1) - 0.5*(E_pv[None,0]*eps_im_pv[:,0]/(E_pv[None,0]**2-En**2) + E_pv[None,-1]*eps_im_pv[:,-1]/(E_pv[None,-1]**2-En**2))) #trapezoid rule
     return eps_re + 1
+
+@time_wrapper
+def kramerskronig_lfe(eps_im):
+    """
+    Input should be (N_G, N_G, N_E)
+    Notes:
+        Add warning for E_max < plasmon?
+        Optimize with numba
+    """
+    E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
+    eps_re = np.empty_like(eps_im)
+    for n, En in enumerate(E):
+        E_pv = np.delete(E, n) #removes Ei = En for principal value
+        eps_im_pv = np.delete(eps_im, n, axis=2)
+
+        eps_re[:,:,n] = 2/np.pi*parmt.dE*(np.sum(E_pv[None,None,:] * eps_im_pv / (E_pv[None,None,:]**2 - En**2), axis=2) - 0.5*(E_pv[None,None,0]*eps_im_pv[:,0]/(E_pv[None,None,0]**2-En**2) + E_pv[None,None,-1]*eps_im_pv[:,-1]/(E_pv[None,None,-1]**2-En**2))) #trapezoid rule
+    return eps_re + np.identity(eps_im.shape[0])[:,:,None] #fix this??
 
 #May want to put functions below into separate post-processing module? 
 
