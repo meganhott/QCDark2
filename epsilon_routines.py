@@ -177,11 +177,10 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict):
 
     binned_eps_im = tot_bin_eps_im[:-N_ang_bins, :]/tot_bin_weights[:-N_ang_bins, None] #removing extra bins 
 
-    #Eventually want to add interpolation of missing bins for Im(eps) before performing Kramers-Kronig transformation to get Re(eps)
-
-    binned_eps_re = kramerskronig(binned_eps_im)
+    #Interpolating missing Im(eps) bins and then performing Kramers-Kronig transformation to get Re(eps)
+    binned_eps_interp = interp_eps(bin_centers, binned_eps_im) #includes real and imaginary parts
     
-    return binned_eps_re, binned_eps_im
+    return binned_eps_interp
 
 def get_RPA_dielectric(dark_objects: dict) -> tuple[np.ndarray, np.ndarray]:
     
