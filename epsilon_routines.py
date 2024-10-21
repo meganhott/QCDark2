@@ -179,15 +179,15 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict):
 
     #Interpolating missing Im(eps) bins and then performing Kramers-Kronig transformation to get Re(eps)
     binned_eps_interp = interp_eps(bin_centers, binned_eps_im) #includes real and imaginary parts
-    
-    return binned_eps_interp
+
+    np.save(parmt.store+'/binned_eps.npy', binned_eps_interp)
 
 def get_RPA_dielectric(dark_objects: dict) -> tuple[np.ndarray, np.ndarray]:
     
     if parmt.include_lfe:
         raise NotImplementedError('Local Field Effects are not yet implemented. The optimization will be done via a different route and needs to be done at a later stage.')
     else:
-        return get_RPA_dielectric_no_LFE(dark_objects)
+        get_RPA_dielectric_no_LFE(dark_objects)
 
 def get_energy_diff(mo_en_i, mo_en_f, E):
     """

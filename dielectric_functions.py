@@ -10,7 +10,9 @@ QCDark branch to calculate the dielectric function:
 
 import dark_objects_routines as do_routines
 import dft_routines
+import epsilon_routines as eps_routines
 import utils
+import input_parameters as parmt
 
 def initialize_cell() -> tuple[do_routines.pbcgto.cell.Cell, dict]:
     cell = do_routines.build_cell_from_input()
@@ -39,19 +41,22 @@ def electronic_structure(cell: do_routines.pbcgto.cell.Cell, dark_objects: dict)
     dft_routines.KS_non_self_consistent_field(kmf)
     dft_routines.convert_to_eV_and_scissor(cell)
     dft_routines.get_band_indices()
-    dark_objects['unique_q'] = do_routines.get_1BZ_q_points(cell)
     return dark_objects
 
-def dielectric_RPA(dark_objects: dict) -> None:
+def dielectric_RPA(cell: do_routines.pbcgto.cell.Cell, dark_objects: dict) -> dict:
+    dark_objects['unique_q'] = do_routines.get_1BZ_q_points(cell)
     dark_objects['R_cutoffs'] = do_routines.primgauss_1D_overlaps(dark_objects)
     dark_objects['R_cutoff_q_points'] = do_routines.store_R_ids(dark_objects)
     return dark_objects
 
 def main():
     cell, dark_objects = initialize_cell()
-    dark_objects = electronic_structure(cell, dark_objects)
-    dark_objects = dielectric_RPA(dark_objects)
-    return
+    if parmt.new_dft:
+        dark_objects = electronic_structure(cell, dark_objects)
+    dark_objects = dielectric_RPA(cell, dark_objects)
+
+    #Calculate and save interpolated 3D binned epsilon
+    eps_routines.get_RPA_dielectric(dark_objects)
 
 if __name__ == '__main__':
     utils.check_requirements() # Check requirements
