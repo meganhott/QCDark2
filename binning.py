@@ -99,9 +99,9 @@ def construct_all_solid_angles() -> np.ndarray:
                 solid_angles.append([theta, phi])
     return np.array(solid_angles)
 
-def gen_bin_centers(q_max = parmt.q_max, cartesian=False) -> np.ndarray:
+def gen_bin_centers(q_max = parmt.q_max, q_min=parmt.q_min, cartesian=False) -> np.ndarray:
     Omega = construct_all_solid_angles()
-    qr = np.linspace(parmt.dq*0.5, q_max+parmt.dq*0.5, int(q_max/parmt.dq)+1) #extra bin: now dq/2 <= q <= qmax+dq/2
+    qr = np.linspace(q_min+parmt.dq*0.5, q_max+parmt.dq*0.5, int((q_max - q_min)/parmt.dq)+1)
     qra = []
     for q in qr:
         for O in Omega:
@@ -157,7 +157,7 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     qG_sph = cartesian_to_spherical(q + G_vectors)
 
     #find bin index and weights simultaneously
-    r_n = np.round(qG_sph[:,0]/parmt.dq - 0.5, n)
+    r_n = np.round((qG_sph[:,0] - parmt.q_min)/parmt.dq - 0.5, n)
     r_l = np.floor(r_n).astype(np.int32)
     r_l[r_l < 0] = 0
     r_g = np.ceil(r_n).astype(np.int32)

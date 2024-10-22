@@ -167,6 +167,7 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict):
         
         # Finding relevant G vectors
         G_q = G_vectors[np.linalg.norm(q[None, :]+G_vectors, axis=1) < parmt.q_max + 1.5*parmt.dq]
+        G_q = G_q[np.linalg.norm(q[None, :]+G_q, axis=1) > parmt.q_min - 0.5*parmt.dq]
         logger.info('\t\tnumber of G vectors = {},'.format(len(G_q)))
 
         eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, blocks, N_AO, q_cuts, VCell, G_q, unique_Ri)
