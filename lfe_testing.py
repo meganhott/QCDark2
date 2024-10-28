@@ -11,6 +11,7 @@ import epsilon_helper as eps
 import binning as bin
 
 from epsilon_routines import kramerskronig, kramerskronig_lfe, delta_energy
+from dielectric_functions import *
 
 
 def get_RPA_dielectric_LFE(dark_objects: dict):
@@ -38,14 +39,20 @@ def get_RPA_dielectric_LFE(dark_objects: dict):
     E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
     bin_centers = bin.gen_bin_centers()
     N_ang_bins = (parmt.N_phi*(parmt.N_theta-2)+2)
-    tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1), dtype='complex')
+    tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1))
     tot_bin_weights = np.zeros(bin_centers.shape[0]+N_ang_bins)
+    
+    tot_bin_eps_re = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1))
+    tot_bin_weights_re = np.zeros(bin_centers.shape[0]+N_ang_bins)
     
     # Make working directory
     makedir(parmt.store + '/working_dir')
 
     logger.info('Total number of q: {}.'.format(n_q))
+
+    #testing just for first q
     for i_q, q in enumerate(unique_q.keys()):
+
         k_pairs = np.array(unique_q[q])
         q = np.array(q)
         logger.info('\ti_q: {}\n\t\tq = {},'.format(i_q+1, np.array2string(q, precision=5)))
@@ -64,22 +71,31 @@ def get_RPA_dielectric_LFE(dark_objects: dict):
         #Doesn't make sense to bin before doing lfe calculation since that averages over space
 
         #take inverse to account for LFEs
-        eps_lfe = 1/np.diagonal(np.linalg.inv(eps_q_re + 1j*eps_q_im), axis1=0, axis2=1) #check that this is correct diagonal
+        eps_lfe = (1/np.diagonal(np.linalg.inv((eps_q_re + 1j*eps_q_im).transpose((2,0,1))), axis1=1, axis2=2)).transpose((1,0)) #check that this is correct diagonal #(E,G,G) -> (E,G) -> (G,E)
 
         #Could now bin just imaginary part and then use KK to calculate real part again, or bin over both real and imaginary parts
+        #Bin over just imaginary part
+        tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, np.imag(eps_lfe), bin_centers, tot_bin_eps_im, tot_bin_weights)
 
-        tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, eps_q_im, bin_centers, tot_bin_eps_im, tot_bin_weights)
+        #Bin real part as well
+        tot_bin_eps_re, tot_bin_weights_re = bin.bin_eps_q(q, G_q, np.real(eps_lfe), bin_centers, tot_bin_eps_re, tot_bin_weights_re)
         
         logger.info('\t\tcomplete. Time taken = {:.2f} s.'.format(time.time() - start_time))
 
     binned_eps_im = tot_bin_eps_im[:-N_ang_bins, :]/tot_bin_weights[:-N_ang_bins, None] #removing extra bins 
 
+    binned_eps_re = tot_bin_eps_re[:-N_ang_bins, :]/tot_bin_weights_re[:-N_ang_bins, None] #removing extra bins 
+
     #Eventually want to add interpolation of missing bins for Im(eps) before performing Kramers-Kronig transformation to get Re(eps)
 
-    binned_eps_re = kramerskronig(binned_eps_im)
+    binned_eps_re_kk = kramerskronig(binned_eps_im)
 
+    np.save(parmt.store+'/binned_eps_re_bin.npy', binned_eps_re + 1j*binned_eps_im)
+    np.save(parmt.store+'/binned_eps_re_kk.npy', binned_eps_re_kk + 1j*binned_eps_im)
+    
     return binned_eps_re, binned_eps_im
 
+@time_wrapper
 def get_RPA_dielectric_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.ndarray, mo_coeff_f_conj: np.ndarray, mo_coeff_i: np.ndarray, k_f: np.ndarray, k_pairs: np.ndarray, blocks: dict, N_AO: int, q_cuts: np.ndarray, VCell: float, G_q: np.ndarray, unique_Ri: list[np.ndarray]) -> np.ndarray:
     
     # Prepare computation
@@ -132,36 +148,69 @@ def RPA_Im_eps_external_prefactor_LFE(qG, blocks, N_AO, q_cuts, unique_Ri):
 
     nk = len(energy_arr)
     nE = int(parmt.E_max/parmt.dE + 1)
-    im_eps = np.zeros(qG.shape[0], qG.shape[0], int(parmt.E_max/parmt.dE + 1))
-    if nk > 16:
-        partitions = np.append(np.arange(0, nk, 16), [nk])
-        for p in range(len(partitions) - 1):
-            i, f = partitions[p], partitions[p+1]
-            with mp.get_context('fork').Pool(mp.cpu_count()) as p:
-                eta_qG = p.map(partial(eps.get_3D_overlaps_blocks, k_f=k_f[i:f], blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i[i:f], mo_coeff_f_conj=mo_coeff_f_conj[i:f], unique_Ri=unique_Ri, q_cuts=q_cuts), qG)
-            eta_qG = np.array(eta_qG) / np.linalg.norm(qG, axis=1)[None, None, None, :]
-            eta_qG_sq = np.einsum('kijg, kijh -> kijgh', eta_qG*eta_qG.conj())
-            del eta_qG
-            for k in range(i, f):
-                for a in range(mo_coeff_i.shape[2]):
-                    for b in range(mo_coeff_f_conj.shape[2]):
-                        ind, rem = tuple(energy_arr[k, a, b])
-                        if ind < nE:
-                            im_eps[:,:,int(ind)] += rem*eta_qG_sq[k - i, a, b]
-                        if ind < nE - 1:
-                            im_eps[:,:,int(ind+1)] += (1. - rem)*eta_qG_sq[k - i, a, b]
-    else:
+    im_eps = np.zeros((qG.shape[0], qG.shape[0], int(parmt.E_max/parmt.dE + 1)), dtype='complex')
+
+    #calculate eta_qG and contribution to epsilon for each k separately to reduce memory of eta_qG_sq
+    for i_k, k in enumerate(k_f):
         with mp.get_context('fork').Pool(mp.cpu_count()) as p:
-            eta_qG = p.map(partial(eps.get_3D_overlaps_blocks, k_f=k_f, blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i, mo_coeff_f_conj=mo_coeff_f_conj, unique_Ri=unique_Ri, q_cuts=q_cuts), qG)
-        eta_qG = np.array(eta_qG) / np.linalg.norm(qG, axis=1)[None, None, None, :]
-        eta_qG_sq = np.einsum('kijg, kijh -> kijgh', eta_qG*eta_qG.conj())
+            eta_qG = p.map(partial(get_3D_overlaps_blocks_LFE, k_f=k, blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i[i_k], mo_coeff_f_conj=mo_coeff_f_conj[i_k], unique_Ri=unique_Ri, q_cuts=q_cuts), qG)
+        eta_qG = np.array(eta_qG).transpose((1,2,0)) / np.linalg.norm(qG, axis=1)[None, None,:] #(a,b,G)
+        eta_qG_sq = np.einsum('ijg, ijh -> ijgh', eta_qG, eta_qG.conj())
         del eta_qG
-        for k in range(nk):
-            for a in range(mo_coeff_i.shape[2]):
-                for b in range(mo_coeff_f_conj.shape[2]):
-                    ind, rem = tuple(energy_arr[k, a, b])
-                    if ind < nE:
-                        im_eps[:,:,int(ind)] += rem*eta_qG_sq[k, a, b]
-                    if ind < nE - 1:
-                        im_eps[:,:,int(ind+1)] += (1. - rem)*eta_qG_sq[k, a, b]
+        for a in range(mo_coeff_i.shape[2]):
+            for b in range(mo_coeff_f_conj.shape[2]):
+                ind, rem = tuple(energy_arr[i_k, a, b])
+                if ind < nE:
+                    im_eps[:,:,int(ind)] += rem*eta_qG_sq[a, b]
+                if ind < nE - 1:
+                    im_eps[:,:,int(ind+1)] += (1. - rem)*eta_qG_sq[a, b]
     return im_eps
+
+#for one k at a time
+def get_3D_overlaps_blocks_LFE(qG:np.ndarray, k_f:np.ndarray, blocks:dict, N_AO:int, mo_coeff_i:np.ndarray, mo_coeff_f_conj:np.ndarray, unique_Ri:list[np.ndarray], q_cuts:np.ndarray) -> np.ndarray:
+    """
+    Calculates all 3D overlaps eta = <jk'|exp(i(q+G)r)|ik> for a given 1BZ q-vector, G-vector, and (k,k') pair using stored 1D overlaps
+
+    Inputs:
+        qG:             np.ndarray of shape (3,): q+G
+        k_f:            np.ndarray of shape (3,): k' corresponding to q
+        blocks:         dict: atomic orbital blocks generated by get_basis_blocks 
+        N_AO:           int: number of atomic orbitals
+        mo_coeff_i:     np.ndarray of shape (N_AO, N_valbands) corresponding to k'
+        mo_coeff_f:     np.ndarray of shape (N_AO, N_conbands) corresponding to k'
+        unique_Ri:      list of [R_unique_x, R_unique_y, R_unique_z)
+        q_cuts:         np.ndarray of shape (N_q, ): |q+G| at which R_cutoff change
+    Outputs:
+        eta_qG:         np.ndarray of shape (N_val_bands (i), N_cond_bands (j)): all 3D overlaps <jk'|exp(i(q+G)r)|ik> for k'
+    """
+    R_id = np.load(parmt.store + '/R_ids/{}.npy'.format(np.sum(q_cuts < np.linalg.norm(qG)) - 1))
+    ints = []
+    for d in range(3):
+        ints.append(np.load(parmt.store + '/primgauss_1d_integrals/dim_{}/{:.5f}.npy'.format(d, qG[d])) * np.exp(-1.j*unique_Ri[d]*k_f[None,d])[:,None,None]) #(R,a,b)
+    ovlp = np.empty((N_AO, N_AO), dtype = np.complex128) #(a,b)
+    for p1 in blocks:
+        d1 = blocks[p1]
+        p1 = np.array(p1)
+        ints_i = []
+        for d in range(3):
+            ints_i.append(ints[d][:,:,p1[d]])
+        for p2 in blocks:
+            d2 = blocks[p2]
+            p2 = np.array(p2)
+            tot = np.ones((R_id.shape[1], p2.shape[1], p1.shape[1]), dtype = np.complex128)
+            for d in range(3):
+                ints_ij = ints_i[d][:,p2[d]]
+                tot *= ints_ij[R_id[d]]
+            tot = tot.sum(axis = 0)
+            for i in d1:
+                for j in d2:
+                    ovlp[i,j] = (tot@d1[i])@d2[j]
+    return np.einsum('bj,ba,ai->ij', mo_coeff_f_conj, ovlp, mo_coeff_i, optimize = True)
+
+def main():
+    cell, dark_objects = initialize_cell()
+    dark_objects = dielectric_RPA(cell, dark_objects)
+    get_RPA_dielectric_LFE(dark_objects)
+
+if __name__ == '__main__':
+    main()

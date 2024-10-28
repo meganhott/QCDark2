@@ -152,7 +152,7 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict):
     E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
     bin_centers = bin.gen_bin_centers()
     N_ang_bins = (parmt.N_phi*(parmt.N_theta-2)+2)
-    tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1), dtype='complex')
+    tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1))
     tot_bin_weights = np.zeros(bin_centers.shape[0]+N_ang_bins)
     
     # Make working directory
@@ -264,7 +264,7 @@ def kramerskronig_lfe(eps_im):
         E_pv = np.delete(E, n) #removes Ei = En for principal value
         eps_im_pv = np.delete(eps_im, n, axis=2)
 
-        eps_re[:,:,n] = 2/np.pi*parmt.dE*(np.sum(E_pv[None,None,:] * eps_im_pv / (E_pv[None,None,:]**2 - En**2), axis=2) - 0.5*(E_pv[None,None,0]*eps_im_pv[:,0]/(E_pv[None,None,0]**2-En**2) + E_pv[None,None,-1]*eps_im_pv[:,-1]/(E_pv[None,None,-1]**2-En**2))) #trapezoid rule
+        eps_re[:,:,n] = 2/np.pi*parmt.dE*(np.sum(E_pv[None,None,:] * eps_im_pv / (E_pv[None,None,:]**2 - En**2), axis=2) - 0.5*(E_pv[None,None,0]*eps_im_pv[:,:,0]/(E_pv[None,None,0]**2-En**2) + E_pv[None,None,-1]*eps_im_pv[:,:,-1]/(E_pv[None,None,-1]**2-En**2))) #trapezoid rule
     return eps_re + np.identity(eps_im.shape[0])[:,:,None] #fix this??
 
 #May want to put functions below into separate post-processing module? 
