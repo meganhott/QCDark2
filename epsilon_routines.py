@@ -2,7 +2,7 @@ import numpy as np
 import time
 import multiprocessing as mp
 from functools import partial
-from numba import njit
+from numba import njit, prange
 from scipy.interpolate import LinearNDInterpolator
 
 from routines import logger, time_wrapper, load_unique_R, makedir, alpha, me
@@ -234,38 +234,31 @@ def get_binned_epsilon(tot_bin_eps, tot_bin_weights):
     #remove nans?
     return(binned_eps)
 
-@time_wrapper
+@njit()
 def kramerskronig(eps_im):
     """
-    Notes:
-        Add warning for E_max < plasmon?
-        Optimize with numba
+    Computes Kramers-Kronig transformation of eps_im.
+
+    Input:
+        eps_im: np.ndarray (N_E, N_G)
+    Output:
+        eps_re: np.ndarray (N_E, N_G), Note that Re(eps) = eps_re + 1 
     """
     E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
     eps_re = np.empty_like(eps_im)
-    for n, En in enumerate(E):
-        E_pv = np.delete(E, n) #removes Ei = En for principal value
-        eps_im_pv = np.delete(eps_im, n, axis=1)
+    N_G, N_E = eps_im.shape
+    for nE in range(N_E):
+        E_pv = np.delete(E, nE) #removes Ei = En for principal value
+        En = E[nE]
+        for nG in range(N_G):
+            eps_im_pv = np.concatenate((eps_im[nG, :nE], eps_im[nG, nE+1:]))
 
-        eps_re[:,n] = 2/np.pi*parmt.dE*(np.sum(E_pv[None,:] * eps_im_pv / (E_pv[None,:]**2 - En**2), axis=1) - 0.5*(E_pv[None,0]*eps_im_pv[:,0]/(E_pv[None,0]**2-En**2) + E_pv[None,-1]*eps_im_pv[:,-1]/(E_pv[None,-1]**2-En**2))) #trapezoid rule
-    return eps_re + 1
+            s = 0
+            for ns in range(N_E-1):
+                s += E_pv[ns]*eps_im_pv[ns]/(E_pv[ns]**2 - En**2)
 
-@time_wrapper
-def kramerskronig_lfe(eps_im):
-    """
-    Input should be (N_G, N_G, N_E)
-    Notes:
-        Add warning for E_max < plasmon?
-        Optimize with numba
-    """
-    E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
-    eps_re = np.empty_like(eps_im)
-    for n, En in enumerate(E):
-        E_pv = np.delete(E, n) #removes Ei = En for principal value
-        eps_im_pv = np.delete(eps_im, n, axis=2)
-
-        eps_re[:,:,n] = 2/np.pi*parmt.dE*(np.sum(E_pv[None,None,:] * eps_im_pv / (E_pv[None,None,:]**2 - En**2), axis=2) - 0.5*(E_pv[None,None,0]*eps_im_pv[:,:,0]/(E_pv[None,None,0]**2-En**2) + E_pv[None,None,-1]*eps_im_pv[:,:,-1]/(E_pv[None,None,-1]**2-En**2))) #trapezoid rule
-    return eps_re + np.identity(eps_im.shape[0])[:,:,None] #fix this??
+            eps_re[nG,nE] = 2/np.pi*parmt.dE*(s - 0.5*(E_pv[0]*eps_im_pv[0]/(E_pv[0]**2-En**2) + E_pv[-1]*eps_im_pv[-1]/(E_pv[-1]**2-En**2))) #trapezoid rule
+    return eps_re
 
 #May want to put functions below into separate post-processing module? 
 
@@ -299,4 +292,4 @@ def interp_eps(bin_centers_sph, binned_eps_im):
     interp = LinearNDInterpolator(interp_bins, interp_eps)(nan_bins)
     binned_eps_im[nan_loc] = interp #replace nans with interpolated data
 
-    return kramerskronig(binned_eps_im) + 1j*binned_eps_im
+    return kramerskronig(binned_eps_im) + 1. + 1j*binned_eps_im
