@@ -283,7 +283,7 @@ def kramerskronig_re2im(re):
             for ns in range(N_E-1):
                 s += re_pv[ns]/(E_pv[ns]**2 - En**2)
 
-            im[nG,nE] = -2/np.pi*parmt.dE*En(s - 0.5*(re_pv[0]/(E_pv[0]**2-En**2) + re_pv[-1]/(E_pv[-1]**2-En**2))) #trapezoid rule
+            im[nG,nE] = -2/np.pi*parmt.dE*En*(s - 0.5*(re_pv[0]/(E_pv[0]**2-En**2) + re_pv[-1]/(E_pv[-1]**2-En**2))) #trapezoid rule
     return im
 
 #May want to put functions below into separate post-processing module? 

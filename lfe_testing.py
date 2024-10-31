@@ -208,8 +208,8 @@ def kramerskronig_lfe(eps_delta):
     eps_delta_re = np.real(eps_delta)
     eps_delta_im = np.imag(eps_delta)
     with mp.get_context('fork').Pool(mp.cpu_count()) as p:
-        eps_re_ta = p.map(kramerskronig_im2re(eps_delta_re), eps_delta_re)
-        eps_im_ta = p.map(kramerskronig_re2im(eps_delta_im), eps_delta_im)
+        eps_re_ta = p.map(kramerskronig_im2re, eps_delta_re)
+        eps_im_ta = p.map(kramerskronig_re2im, eps_delta_im)
     eps_ta = np.array(eps_re_ta) + 1j*np.array(eps_im_ta)
     return eps_ta
 
