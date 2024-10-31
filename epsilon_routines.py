@@ -235,30 +235,56 @@ def get_binned_epsilon(tot_bin_eps, tot_bin_weights):
     return(binned_eps)
 
 @njit()
-def kramerskronig(eps_im):
+def kramerskronig_im2re(im):
     """
-    Computes Kramers-Kronig transformation of eps_im.
+    Computes the Kramers-Kronig transformation of the input imaginary part to obtain the real part.
 
     Input:
-        eps_im: np.ndarray (N_E, N_G)
+        im: np.ndarray (N_E, N_G)
     Output:
-        eps_re: np.ndarray (N_E, N_G), Note that Re(eps) = eps_re + 1 
+        re: np.ndarray (N_E, N_G), Note that Re(eps) = eps_re + 1 
     """
     E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
-    eps_re = np.empty_like(eps_im)
-    N_G, N_E = eps_im.shape
+    re = np.empty_like(im)
+    N_G, N_E = im.shape
     for nE in range(N_E):
         E_pv = np.delete(E, nE) #removes Ei = En for principal value
         En = E[nE]
         for nG in range(N_G):
-            eps_im_pv = np.concatenate((eps_im[nG, :nE], eps_im[nG, nE+1:]))
+            im_pv = np.concatenate((im[nG, :nE], im[nG, nE+1:]))
 
             s = 0
             for ns in range(N_E-1):
-                s += E_pv[ns]*eps_im_pv[ns]/(E_pv[ns]**2 - En**2)
+                s += E_pv[ns]*im_pv[ns]/(E_pv[ns]**2 - En**2)
 
-            eps_re[nG,nE] = 2/np.pi*parmt.dE*(s - 0.5*(E_pv[0]*eps_im_pv[0]/(E_pv[0]**2-En**2) + E_pv[-1]*eps_im_pv[-1]/(E_pv[-1]**2-En**2))) #trapezoid rule
-    return eps_re
+            re[nG,nE] = 2/np.pi*parmt.dE*(s - 0.5*(E_pv[0]*im_pv[0]/(E_pv[0]**2-En**2) + E_pv[-1]*im_pv[-1]/(E_pv[-1]**2-En**2))) #trapezoid rule
+    return re
+
+@njit()
+def kramerskronig_re2im(re):
+    """
+    Computes the Kramers-Kronig transformation of the input real part to obtain the imaginary part.
+
+    Input:
+        re: np.ndarray (N_E, N_G)
+    Output:
+        im: np.ndarray (N_E, N_G)
+    """
+    E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
+    im = np.empty_like(re)
+    N_G, N_E = re.shape
+    for nE in range(N_E):
+        E_pv = np.delete(E, nE) #removes Ei = En for principal value
+        En = E[nE]
+        for nG in range(N_G):
+            re_pv = np.concatenate((re[nG, :nE], re[nG, nE+1:]))
+
+            s = 0
+            for ns in range(N_E-1):
+                s += re_pv[ns]/(E_pv[ns]**2 - En**2)
+
+            im[nG,nE] = -2/np.pi*parmt.dE*En(s - 0.5*(re_pv[0]/(E_pv[0]**2-En**2) + re_pv[-1]/(E_pv[-1]**2-En**2))) #trapezoid rule
+    return im
 
 #May want to put functions below into separate post-processing module? 
 
@@ -292,4 +318,4 @@ def interp_eps(bin_centers_sph, binned_eps_im):
     interp = LinearNDInterpolator(interp_bins, interp_eps)(nan_bins)
     binned_eps_im[nan_loc] = interp #replace nans with interpolated data
 
-    return kramerskronig(binned_eps_im) + 1. + 1j*binned_eps_im
+    return kramerskronig_im2re(binned_eps_im) + 1. + 1j*binned_eps_im

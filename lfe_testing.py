@@ -10,7 +10,7 @@ import input_parameters as parmt
 import epsilon_helper as eps
 import binning as bin
 
-from epsilon_routines import kramerskronig, delta_energy
+from epsilon_routines import kramerskronig_im2re, kramerskronig_re2im, delta_energy
 from dielectric_functions import *
 
 
@@ -50,7 +50,6 @@ def get_RPA_dielectric_LFE(dark_objects: dict):
 
     logger.info('Total number of q: {}.'.format(n_q))
 
-    #testing just for first q
     for i_q, q in enumerate(unique_q.keys()):
 
         k_pairs = np.array(unique_q[q])
@@ -62,38 +61,30 @@ def get_RPA_dielectric_LFE(dark_objects: dict):
         G_q = G_vectors[np.linalg.norm(q[None, :]+G_vectors, axis=1) < parmt.q_max + 1.5*parmt.dq]
         logger.info('\t\tnumber of G vectors = {},'.format(len(G_q)))
 
-        eps_q_im = get_RPA_dielectric_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, blocks, N_AO, q_cuts, VCell, G_q, unique_Ri) #(G,G',E)
+        eps_q_delta = get_RPA_dielectric_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, blocks, N_AO, q_cuts, VCell, G_q, unique_Ri) #(G,G',E)
 
-        #Kramers-Kronig to get eps_re
-        eps_q_re = kramerskronig_lfe(eps_q_im)
+        #Kramers-Kronig to get transition amplitude parts of Re(eps) and Im(eps)
+        eps_q_ta = kramerskronig_lfe(eps_q_delta)
 
-        #need eps_re to calculate inverse matrix, but can we do kramers-kronig over each GG' separately? Interpolate first?
-        #Doesn't make sense to bin before doing lfe calculation since that averages over space
+        eps_q =  eps_q_ta + 1j*eps_q_delta + np.identity(eps_q_delta.shape[0])[:,:,None]
 
         #take inverse to account for LFEs
-        eps_lfe = (1/np.diagonal(np.linalg.inv((eps_q_re + 1j*eps_q_im).transpose(2,0,1)), axis1=1, axis2=2)).transpose((1,0)) #(G,G',E) -> (E,G,G') -> (G,E)
+        eps_lfe = (1/np.diagonal(np.linalg.inv(eps_q.transpose(2,0,1)), axis1=1, axis2=2)).transpose((1,0)) #(G,G',E) -> (E,G,G') -> (G,E)
 
-        #Could now bin just imaginary part and then use KK to calculate real part again, or bin over both real and imaginary parts
-        #Bin over just imaginary part
+        #Bin real and imaginary parts - modify binning so both parts done at same time
         tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, np.imag(eps_lfe), bin_centers, tot_bin_eps_im, tot_bin_weights)
-
-        #Bin real part as well
         tot_bin_eps_re, tot_bin_weights_re = bin.bin_eps_q(q, G_q, np.real(eps_lfe), bin_centers, tot_bin_eps_re, tot_bin_weights_re)
         
         logger.info('\t\tcomplete. Time taken = {:.2f} s.'.format(time.time() - start_time))
 
     binned_eps_im = tot_bin_eps_im[:-N_ang_bins, :]/tot_bin_weights[:-N_ang_bins, None] #removing extra bins 
-
     binned_eps_re = tot_bin_eps_re[:-N_ang_bins, :]/tot_bin_weights_re[:-N_ang_bins, None] #removing extra bins 
 
-    #Eventually want to add interpolation of missing bins for Im(eps) before performing Kramers-Kronig transformation to get Re(eps)
+    #Could interpolate eps_im and re-compute eps_re from KK
+    #binned_eps_re_kk = kramerskronig(binned_eps_im)
 
-    binned_eps_re_kk = kramerskronig(binned_eps_im)
-
-    np.save(parmt.store+'/binned_eps_re_bin.npy', binned_eps_re + 1j*binned_eps_im)
-    np.save(parmt.store+'/binned_eps_re_kk.npy', binned_eps_re_kk + 1j*binned_eps_im)
-    
-    return binned_eps_re, binned_eps_im
+    np.save(parmt.store+'/binned_eps_lfe.npy', binned_eps_re + 1j*binned_eps_im)
+    #np.save(parmt.store+'/binned_eps_re_kk.npy', binned_eps_re_kk + 1j*binned_eps_im)
 
 @time_wrapper
 def get_RPA_dielectric_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.ndarray, mo_coeff_f_conj: np.ndarray, mo_coeff_i: np.ndarray, k_f: np.ndarray, k_pairs: np.ndarray, blocks: dict, N_AO: int, q_cuts: np.ndarray, VCell: float, G_q: np.ndarray, unique_Ri: list[np.ndarray]) -> np.ndarray:
@@ -119,13 +110,13 @@ def get_RPA_dielectric_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.nda
 
     qG = q[None, :] + G_q
 
-    epsilon_im = prefactor*RPA_Im_eps_external_prefactor_LFE(qG, blocks, N_AO, q_cuts, unique_Ri)
+    epsilon_delta = prefactor*RPA_Im_eps_external_prefactor_LFE(qG, blocks, N_AO, q_cuts, unique_Ri)
     
-    return epsilon_im
+    return epsilon_delta
 
 def RPA_Im_eps_external_prefactor_LFE(qG, blocks, N_AO, q_cuts, unique_Ri):
     """
-    Returns |<j(k+q)|exp(i(q+G)r)|ik>|^2/|q+G|^2 summed over i,j,k
+    Returns delta function part of lim_{n->0} |<j(k+q)|exp(i(q+G)r)|ik>|^2/|q+G|^2/(E - (E_{j(k+q)} - E_{ik} + i n)), summed over i,j,k. 
 
     Notes:
         -Speed up with numba? Is saving+loading data and using for loops or keeping data in memory and optimizing for loops with numba faster?
@@ -136,7 +127,8 @@ def RPA_Im_eps_external_prefactor_LFE(qG, blocks, N_AO, q_cuts, unique_Ri):
         N_AO:       int, number of atomic orbitals
         q_cuts:     np.ndarray, cut-off points in q for different R_ids.
     Outputs:
-        im_eps:     Imaginary part of RPA dielectric function, 
+        eps_delta:  delta function part of epsilon: Re(eps_delta) corresponds to Im(eps)
+                                                    Im(eps_delta) corresponds to Re(eps) 
                     shape = (N_G, N_G, int(parmt.E_max/parmt.dE + 1)), prefactor multiplied later.
     """
     # Load data
@@ -148,7 +140,7 @@ def RPA_Im_eps_external_prefactor_LFE(qG, blocks, N_AO, q_cuts, unique_Ri):
 
     nk = len(energy_arr)
     nE = int(parmt.E_max/parmt.dE + 1)
-    im_eps = np.zeros((qG.shape[0], qG.shape[0], int(parmt.E_max/parmt.dE + 1)), dtype='complex')
+    eps_delta = np.zeros((qG.shape[0], qG.shape[0], int(parmt.E_max/parmt.dE + 1)), dtype='complex')
 
     #calculate eta_qG and contribution to epsilon for each k separately to reduce memory of eta_qG_sq
     for i_k, k in enumerate(k_f):
@@ -161,10 +153,10 @@ def RPA_Im_eps_external_prefactor_LFE(qG, blocks, N_AO, q_cuts, unique_Ri):
             for b in range(mo_coeff_f_conj.shape[2]):
                 ind, rem = tuple(energy_arr[i_k, a, b])
                 if ind < nE:
-                    im_eps[:,:,int(ind)] += rem*eta_qG_sq[a, b]
+                    eps_delta[:,:,int(ind)] += rem*eta_qG_sq[a, b]
                 if ind < nE - 1:
-                    im_eps[:,:,int(ind+1)] += (1. - rem)*eta_qG_sq[a, b]
-    return im_eps #(G,G',E)
+                    eps_delta[:,:,int(ind+1)] += (1. - rem)*eta_qG_sq[a, b]
+    return eps_delta #(G,G',E)
 
 #for one k at a time
 def get_3D_overlaps_blocks_LFE(qG:np.ndarray, k_f:np.ndarray, blocks:dict, N_AO:int, mo_coeff_i:np.ndarray, mo_coeff_f_conj:np.ndarray, unique_Ri:list[np.ndarray], q_cuts:np.ndarray) -> np.ndarray:
@@ -208,15 +200,18 @@ def get_3D_overlaps_blocks_LFE(qG:np.ndarray, k_f:np.ndarray, blocks:dict, N_AO:
     return np.einsum('bj,ba,ai->ij', mo_coeff_f_conj, ovlp, mo_coeff_i, optimize = True)
 
 @time_wrapper
-def kramerskronig_lfe(eps_im):
+def kramerskronig_lfe(eps_delta):
     """
-    eps_im: (N_G, N_G, N_E)
+    eps_delta: (N_G, N_G, N_E)
     Parallelize over G1
     """
+    eps_delta_re = np.real(eps_delta)
+    eps_delta_im = np.imag(eps_delta)
     with mp.get_context('fork').Pool(mp.cpu_count()) as p:
-        eps_re = p.map(kramerskronig, eps_im)
-    eps_re = np.array(eps_re)
-    return eps_re + np.identity(eps_im.shape[0])[:,:,None]
+        eps_re_ta = p.map(kramerskronig_im2re(eps_delta_re), eps_delta_re)
+        eps_im_ta = p.map(kramerskronig_re2im(eps_delta_im), eps_delta_im)
+    eps_ta = np.array(eps_re_ta) + 1j*np.array(eps_im_ta)
+    return eps_ta
 
 def main():
     cell, dark_objects = initialize_cell()
