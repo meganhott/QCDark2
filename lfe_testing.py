@@ -1,5 +1,6 @@
 import numpy as np
 import time
+import os
 import multiprocessing as mp
 from functools import partial
 from numba import njit, prange
@@ -7,11 +8,14 @@ from scipy.interpolate import LinearNDInterpolator
 
 from routines import logger, time_wrapper, load_unique_R, makedir, alpha, me
 import input_parameters as parmt
-import epsilon_helper as eps
+#import epsilon_helper as eps
 import binning as bin
 
 from epsilon_routines import kramerskronig_im2re, kramerskronig_re2im, delta_energy
+from epsilon_helper import get_3D_overlaps_blocks
 from dielectric_functions import *
+
+#import tracemalloc
 
 
 def get_RPA_dielectric_LFE(dark_objects: dict):
@@ -141,14 +145,11 @@ def RPA_Im_eps_external_prefactor_LFE(qG, blocks, N_AO, q_cuts, unique_Ri):
     nk = len(energy_arr)
     nE = int(parmt.E_max/parmt.dE + 1)
     eps_delta = np.zeros((qG.shape[0], qG.shape[0], int(parmt.E_max/parmt.dE + 1)), dtype='complex')
-
-    #calculate eta_qG and contribution to epsilon for each k separately to reduce memory of eta_qG_sq
+    with mp.get_context('fork').Pool(mp.cpu_count()) as p:
+        eta_qG = p.map(partial(get_3D_overlaps_blocks, k_f=k_f, blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i, mo_coeff_f_conj=mo_coeff_f_conj, unique_Ri=unique_Ri, q_cuts=q_cuts), qG) #(G,k,i,j)
+    eta_qG = np.array(eta_qG).transpose((1,2,3,0)) / np.linalg.norm(qG, axis=1)[None,None,None,:] #(k,i,j,G)
     for i_k, k in enumerate(k_f):
-        with mp.get_context('fork').Pool(mp.cpu_count()) as p:
-            eta_qG = p.map(partial(get_3D_overlaps_blocks_LFE, k_f=k, blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i[i_k], mo_coeff_f_conj=mo_coeff_f_conj[i_k], unique_Ri=unique_Ri, q_cuts=q_cuts), qG)
-        eta_qG = np.array(eta_qG).transpose((1,2,0)) / np.linalg.norm(qG, axis=1)[None, None,:] #(a,b,G)
-        eta_qG_sq = np.einsum('ijg, ijh -> ijgh', eta_qG, eta_qG.conj())
-        del eta_qG
+        eta_qG_sq = np.einsum('ijg, ijh -> ijgh', eta_qG[i_k], eta_qG[i_k].conj())
         for a in range(mo_coeff_i.shape[2]):
             for b in range(mo_coeff_f_conj.shape[2]):
                 ind, rem = tuple(energy_arr[i_k, a, b])
@@ -158,7 +159,7 @@ def RPA_Im_eps_external_prefactor_LFE(qG, blocks, N_AO, q_cuts, unique_Ri):
                     eps_delta[:,:,int(ind+1)] += (1. - rem)*eta_qG_sq[a, b]
     return eps_delta #(G,G',E)
 
-#for one k at a time
+#for one k at a time - this function oversubscribes nodes, not sure why
 def get_3D_overlaps_blocks_LFE(qG:np.ndarray, k_f:np.ndarray, blocks:dict, N_AO:int, mo_coeff_i:np.ndarray, mo_coeff_f_conj:np.ndarray, unique_Ri:list[np.ndarray], q_cuts:np.ndarray) -> np.ndarray:
     """
     Calculates all 3D overlaps eta = <jk'|exp(i(q+G)r)|ik> for a given 1BZ q-vector, G-vector, and (k,k') pair using stored 1D overlaps
@@ -217,6 +218,95 @@ def main():
     cell, dark_objects = initialize_cell()
     dark_objects = dielectric_RPA(cell, dark_objects)
     get_RPA_dielectric_LFE(dark_objects)
+
+def mp_test():
+    cell, dark_objects = initialize_cell()
+    dark_objects = dielectric_RPA(cell, dark_objects)
+
+    # Reading all relevant data
+    N_AO = len(dark_objects['aos'])
+    ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
+    
+    dft_path = parmt.store + '/DFT/'
+    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,:,ivalbot:ivaltop+1]
+    mo_coeff_f_conj = np.load(dft_path + 'mo_coeff_f.npy')[:,:,iconbot:icontop+1].conj()
+    mo_en_i = np.load(dft_path + 'mo_en_i.npy')[:,ivalbot:ivaltop+1]
+    mo_en_f = np.load(dft_path + 'mo_en_f.npy')[:,iconbot:icontop+1]
+    k_f = np.load(parmt.store + '/k-pts_f.npy')
+
+    q_cuts = dark_objects['R_cutoff_q_points']
+    G_vectors = dark_objects['G_vectors']
+    VCell = dark_objects['V_cell']
+    unique_q = dark_objects['unique_q']
+    n_q = len(unique_q)
+    blocks = dark_objects['blocks']
+
+    unique_Ri = load_unique_R()
+
+    # Generating energy centers & bins
+    E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
+    bin_centers = bin.gen_bin_centers()
+    N_ang_bins = (parmt.N_phi*(parmt.N_theta-2)+2)
+    tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1))
+    tot_bin_weights = np.zeros(bin_centers.shape[0]+N_ang_bins)
+
+    tot_bin_eps_re = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1))
+    tot_bin_weights_re = np.zeros(bin_centers.shape[0]+N_ang_bins)
+
+    q = list(unique_q.keys())[0]
+    k_pairs = np.array(unique_q[q])
+    q = np.array(q)
+    start_time = time.time()
+
+
+    mo_en_i = mo_en_i[k_pairs[:,0]] #(k_pair,i)
+    mo_en_f = mo_en_f[k_pairs[:,1]] #(k_pair,j)
+    mo_coeff_i = mo_coeff_i[k_pairs[:,0]] #(k_pair,a,i)
+    mo_coeff_f_conj = mo_coeff_f_conj[k_pairs[:,1]] #(k_pair,b,j)
+    k_f = k_f[k_pairs[:,1]]
+
+    # Calculating the delta function in energy
+    working_dir = parmt.store + '/working_dir/'
+    energy_arr = np.load(working_dir + 'im_energy.npy')
+
+    G_q = G_vectors[np.linalg.norm(q[None, :]+G_vectors, axis=1) < parmt.q_max + 1.5*parmt.dq]
+    qG = q[None, :] + G_q
+
+
+    nE = int(parmt.E_max/parmt.dE + 1)
+    eps_delta = np.zeros((qG.shape[0], qG.shape[0], int(parmt.E_max/parmt.dE + 1)), dtype='complex')
+
+    #calculate eta_qG and contribution to epsilon for each k separately to reduce memory of eta_qG_sq
+    for cpus in [40,30,20,10]: #[90,80,70,60,50,40]:
+        print(f'mp cpus: {cpus}')
+        start_time = time.time()
+        
+        """
+        tracemalloc.start()
+        eta_qG = get_3D_overlaps_blocks(qG[0], k_f=k_f, blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i, mo_coeff_f_conj=mo_coeff_f_conj, unique_Ri=unique_Ri, q_cuts=q_cuts)
+        print(tracemalloc.get_traced_memory())
+        tracemalloc.stop()
+        exit()
+        """
+        
+        with mp.get_context('fork').Pool(cpus) as p:
+            eta_qG = p.map(partial(get_3D_overlaps_blocks, k_f=k_f, blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i, mo_coeff_f_conj=mo_coeff_f_conj, unique_Ri=unique_Ri, q_cuts=q_cuts), qG) #(G,k,i,j)
+        eta_qG = np.array(eta_qG).transpose((1,2,3,0)) / np.linalg.norm(qG, axis=1)[None,None,None,:] #(k,i,j,G)
+        print(f'load eta: {time.time() - start_time}')
+        start_time = time.time()
+        for i_k, k in enumerate(k_f):
+            eta_qG_sq = np.einsum('ijg, ijh -> ijgh', eta_qG[i_k], eta_qG[i_k].conj())
+            for a in range(mo_coeff_i.shape[2]):
+                for b in range(mo_coeff_f_conj.shape[2]):
+                    ind, rem = tuple(energy_arr[i_k, a, b])
+                    if ind < nE:
+                        eps_delta[:,:,int(ind)] += rem*eta_qG_sq[a, b]
+                    if ind < nE - 1:
+                        eps_delta[:,:,int(ind+1)] += (1. - rem)*eta_qG_sq[a, b]
+        
+        print(f'summing: {time.time() - start_time}')
+        print(os.getloadavg())
+    return eps_delta #(G,G',E)
 
 if __name__ == '__main__':
     main()
