@@ -15,7 +15,7 @@ from epsilon_routines import kramerskronig_im2re, kramerskronig_re2im, delta_ene
 from epsilon_helper import get_3D_overlaps_blocks
 from dielectric_functions import *
 
-#import tracemalloc
+import tracemalloc
 
 
 def get_RPA_dielectric_LFE(dark_objects: dict):
@@ -145,9 +145,21 @@ def RPA_Im_eps_external_prefactor_LFE(qG, blocks, N_AO, q_cuts, unique_Ri):
     nk = len(energy_arr)
     nE = int(parmt.E_max/parmt.dE + 1)
     eps_delta = np.zeros((qG.shape[0], qG.shape[0], int(parmt.E_max/parmt.dE + 1)), dtype='complex')
+    #For 6x6x6:
+    """
     with mp.get_context('fork').Pool(mp.cpu_count()) as p:
         eta_qG = p.map(partial(get_3D_overlaps_blocks, k_f=k_f, blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i, mo_coeff_f_conj=mo_coeff_f_conj, unique_Ri=unique_Ri, q_cuts=q_cuts), qG) #(G,k,i,j)
     eta_qG = np.array(eta_qG).transpose((1,2,3,0)) / np.linalg.norm(qG, axis=1)[None,None,None,:] #(k,i,j,G)
+    """
+    #For 8x8x8: need to figure out how to automatically split up calculation for large k-grids
+    with mp.get_context('fork').Pool(mp.cpu_count()) as p:
+        eta_qG = p.map(partial(get_3D_overlaps_blocks, k_f=k_f[:300], blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i[:300], mo_coeff_f_conj=mo_coeff_f_conj[:300], unique_Ri=unique_Ri, q_cuts=q_cuts), qG) #(G,k,i,j)
+    eta_qG1 = np.array(eta_qG).transpose((1,2,3,0))
+    with mp.get_context('fork').Pool(mp.cpu_count()) as p:
+        eta_qG = p.map(partial(get_3D_overlaps_blocks, k_f=k_f[300:], blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i[300:], mo_coeff_f_conj=mo_coeff_f_conj[300:], unique_Ri=unique_Ri, q_cuts=q_cuts), qG) #(G,k,i,j)
+    eta_qG2 = np.array(eta_qG).transpose((1,2,3,0))
+    eta_qG = np.concatenate((eta_qG1, eta_qG2), axis=0) / np.linalg.norm(qG, axis=1)[None,None,None,:] #(k,i,j,G)
+    
     for i_k, k in enumerate(k_f):
         eta_qG_sq = np.einsum('ijg, ijh -> ijgh', eta_qG[i_k], eta_qG[i_k].conj())
         for a in range(mo_coeff_i.shape[2]):
@@ -211,7 +223,7 @@ def kramerskronig_lfe(eps_delta):
     with mp.get_context('fork').Pool(mp.cpu_count()) as p:
         eps_re_ta = p.map(kramerskronig_im2re, eps_delta_re)
         eps_im_ta = p.map(kramerskronig_re2im, eps_delta_im)
-    eps_ta = np.array(eps_re_ta) + 1j*np.array(eps_im_ta)
+    eps_ta = np.array(eps_re_ta) - 1j*np.array(eps_im_ta)
     return eps_ta
 
 def main():
@@ -276,19 +288,13 @@ def mp_test():
     nE = int(parmt.E_max/parmt.dE + 1)
     eps_delta = np.zeros((qG.shape[0], qG.shape[0], int(parmt.E_max/parmt.dE + 1)), dtype='complex')
 
-    #calculate eta_qG and contribution to epsilon for each k separately to reduce memory of eta_qG_sq
-    for cpus in [40,30,20,10]: #[90,80,70,60,50,40]:
-        print(f'mp cpus: {cpus}')
+    for nk in [300,400,500]: #[90,80,70,60,50,40]:
+        print(f'nk: {nk}')
         start_time = time.time()
         
+        eta_qG = get_3D_overlaps_blocks(qG[0], k_f=k_f[:nk], blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i[:nk], mo_coeff_f_conj=mo_coeff_f_conj[:nk], unique_Ri=unique_Ri, q_cuts=q_cuts)
+        print(time.time()-start_time)
         """
-        tracemalloc.start()
-        eta_qG = get_3D_overlaps_blocks(qG[0], k_f=k_f, blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i, mo_coeff_f_conj=mo_coeff_f_conj, unique_Ri=unique_Ri, q_cuts=q_cuts)
-        print(tracemalloc.get_traced_memory())
-        tracemalloc.stop()
-        exit()
-        """
-        
         with mp.get_context('fork').Pool(cpus) as p:
             eta_qG = p.map(partial(get_3D_overlaps_blocks, k_f=k_f, blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i, mo_coeff_f_conj=mo_coeff_f_conj, unique_Ri=unique_Ri, q_cuts=q_cuts), qG) #(G,k,i,j)
         eta_qG = np.array(eta_qG).transpose((1,2,3,0)) / np.linalg.norm(qG, axis=1)[None,None,None,:] #(k,i,j,G)
@@ -303,9 +309,9 @@ def mp_test():
                         eps_delta[:,:,int(ind)] += rem*eta_qG_sq[a, b]
                     if ind < nE - 1:
                         eps_delta[:,:,int(ind+1)] += (1. - rem)*eta_qG_sq[a, b]
-        
         print(f'summing: {time.time() - start_time}')
         print(os.getloadavg())
+        """
     return eps_delta #(G,G',E)
 
 if __name__ == '__main__':

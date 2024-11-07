@@ -182,6 +182,7 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict):
     binned_eps_interp = interp_eps(bin_centers, binned_eps_im)
 
     np.save(parmt.store+'/binned_eps.npy', binned_eps_interp)
+    np.save(parmt.store+'/binned_eps_nointerp.npy', kramerskronig_im2re(binned_eps_im) + 1. + 1j*binned_eps_im) #no interpolation 
 
 def get_RPA_dielectric(dark_objects: dict) -> tuple[np.ndarray, np.ndarray]:
     
