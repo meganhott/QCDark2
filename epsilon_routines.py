@@ -179,7 +179,8 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict):
     binned_eps_im = tot_bin_eps_im[:-N_ang_bins, :]/tot_bin_weights[:-N_ang_bins, None] #removing extra bins 
 
     #Interpolating missing Im(eps) bins and then performing Kramers-Kronig transformation to get Re(eps)
-    binned_eps_interp = interp_eps(bin_centers, binned_eps_im)
+    binned_eps_im_interp = interp_eps(bin_centers, binned_eps_im)
+    binned_eps_interp = kramerskronig_im2re(binned_eps_im_interp) + 1j*binned_eps_im_interp
 
     np.save(parmt.store+'/binned_eps.npy', binned_eps_interp)
     np.save(parmt.store+'/binned_eps_nointerp.npy', kramerskronig_im2re(binned_eps_im) + 1. + 1j*binned_eps_im) #no interpolation 
@@ -301,22 +302,22 @@ def epsilon_r(bin_centers, binned_eps, eps_dtype='complex'):
         eps_r[i] = np.nansum(eps_ri, axis=0) / (N_ang_bins - np.sum(np.isnan(eps_ri).astype(int), axis=0)) #treats nans as 0, want to average over all non-nan entries
     return eps_r
 
-def interp_eps(bin_centers_sph, binned_eps_im):
+def interp_eps(bin_centers_sph, binned_eps):
     """
-    Interpolate missing bins of Im(eps) before computing Re(eps) with Kramers-Kronig. Returns interpolated real and imaginary parts of binned epsilon.
+    Interpolate missing bins of epsilon. Can be used to interpolate Im(eps) before computing Re(eps) with Kramers-Kronig, or to interpolate Re(eps) and Im(eps) in the LFE case.
 
     bin_centers input should be in spherical coordinates
     """
     bin_centers = bin.spherical_to_cartesian(bin_centers_sph)
 
-    nan_loc = np.where(np.isnan(binned_eps_im[:,0]))[0] #Find indices of missing bins
+    nan_loc = np.where(np.isnan(binned_eps[:,0]))[0] #Find indices of missing bins
     nan_bins = bin_centers[nan_loc]
 
-    interp_loc = np.where(np.invert(np.isnan(binned_eps_im[:,0])))[0] #Use remaining bins for interpolation input
+    interp_loc = np.where(np.invert(np.isnan(binned_eps[:,0])))[0] #Use remaining bins for interpolation input
     interp_bins = bin_centers[interp_loc]
-    interp_eps = binned_eps_im[interp_loc]
+    interp_eps = binned_eps[interp_loc]
 
     interp = LinearNDInterpolator(interp_bins, interp_eps)(nan_bins)
-    binned_eps_im[nan_loc] = interp #replace nans with interpolated data
+    binned_eps[nan_loc] = interp #replace nans with interpolated data
 
-    return kramerskronig_im2re(binned_eps_im) + 1. + 1j*binned_eps_im
+    return binned_eps
