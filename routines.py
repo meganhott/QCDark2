@@ -11,6 +11,7 @@ import os
 import time
 import logging
 import numpy as np
+from functools import wraps, partial
 
 import input_parameters as parmt
 
@@ -31,16 +32,20 @@ amu2eV = 9.315e8                                        # eV/u
 logger = logging
 logger.basicConfig(filename=parmt.qcdark_outfile, filemode = 'w', level=logging.INFO, format='%(message)s')
 
-def time_wrapper(func):
+def time_wrapper(func=None, *, n_tabs=0):
     """
     Wrapper for printing execution time to logger.
     """
+    if func is None:
+        return partial(time_wrapper, n_tabs=n_tabs)
+    
+    @wraps(func)
     def wrap(*args, **kwargs):
-        logger.info('Entering function {}'.format(func.__name__))
+        logger.info('\t'*n_tabs + 'Entering function {}'.format(func.__name__))
         start = time.time()
         val = func(*args, **kwargs)
         end = time.time()
-        logger.info('Exiting function {}. Time taken = {:.2f} s.\n'.format(func.__name__, end - start))
+        logger.info('\t'*n_tabs + 'Exiting function {}. Time taken = {:.2f} s.\n'.format(func.__name__, end - start))
         return val
 
     return wrap
