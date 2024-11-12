@@ -1,5 +1,6 @@
 import numpy as np
 import input_parameters as parmt
+from numba import njit
 
 #Constants
 alpha = 1/137
@@ -173,3 +174,55 @@ def RPA_dielectric_lfe(q, G_vectors, k_pairs, mo_en_i, mo_en_f, eta_q):
     eps_matrix = eps_matrix + np.identity(num_G)
     eps_lfe = 1/np.diag(np.linalg.inv(eps_matrix)) #need to fix: np.diag does not work with non-2d matrix
     return eps_lfe
+
+@njit()
+def kramerskronig_im2re(im):
+    """
+    Computes the Kramers-Kronig transformation of the input imaginary part to obtain the real part.
+
+    Input:
+        im: np.ndarray (N_E, N_G)
+    Output:
+        re: np.ndarray (N_E, N_G), Note that Re(eps) = eps_re + 1 
+    """
+    E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
+    re = np.empty_like(im)
+    N_G, N_E = im.shape
+    for nE in range(N_E):
+        E_pv = np.delete(E, nE) #removes Ei = En for principal value
+        En = E[nE]
+        for nG in range(N_G):
+            im_pv = np.concatenate((im[nG, :nE], im[nG, nE+1:]))
+
+            s = 0
+            for ns in range(N_E-1):
+                s += E_pv[ns]*im_pv[ns]/(E_pv[ns]**2 - En**2)
+
+            re[nG,nE] = 2/np.pi*parmt.dE*(s - 0.5*(E_pv[0]*im_pv[0]/(E_pv[0]**2-En**2) + E_pv[-1]*im_pv[-1]/(E_pv[-1]**2-En**2))) #trapezoid rule
+    return re
+
+@njit()
+def kramerskronig_re2im(re):
+    """
+    Computes the Kramers-Kronig transformation of the input real part to obtain the imaginary part.
+
+    Input:
+        re: np.ndarray (N_E, N_G)
+    Output:
+        im: np.ndarray (N_E, N_G)
+    """
+    E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
+    im = np.empty_like(re)
+    N_G, N_E = re.shape
+    for nE in range(N_E):
+        E_pv = np.delete(E, nE) #removes Ei = En for principal value
+        En = E[nE]
+        for nG in range(N_G):
+            re_pv = np.concatenate((re[nG, :nE], re[nG, nE+1:]))
+
+            s = 0
+            for ns in range(N_E-1):
+                s += re_pv[ns]/(E_pv[ns]**2 - En**2)
+
+            im[nG,nE] = -2/np.pi*parmt.dE*En*(s - 0.5*(re_pv[0]/(E_pv[0]**2-En**2) + re_pv[-1]/(E_pv[-1]**2-En**2))) #trapezoid rule
+    return im
