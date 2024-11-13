@@ -74,10 +74,8 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict):
 
     #Interpolating missing Im(eps) bins and then performing Kramers-Kronig transformation to get Re(eps)
     binned_eps_im_interp = interp_eps(bin_centers, binned_eps_im)
-    binned_eps_interp = eps.kramerskronig_im2re(binned_eps_im_interp) + 1j*binned_eps_im_interp
-
-    np.save(parmt.store+'/binned_eps.npy', binned_eps_interp)
-    np.save(parmt.store+'/binned_eps_nointerp.npy', eps.kramerskronig_im2re(binned_eps_im) + 1. + 1j*binned_eps_im) #no interpolation 
+    
+    np.save(parmt.store+'/binned_eps.npy', eps.kramerskronig_im2re(binned_eps_im) + 1. + 1j*binned_eps_im) #no interpolation 
 
 def get_RPA_dielectric_no_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.ndarray, mo_coeff_f_conj: np.ndarray, mo_coeff_i: np.ndarray, k_f: np.ndarray, k_pairs: np.ndarray, blocks: dict, N_AO: int, q_cuts: np.ndarray, VCell: float, G_q: np.ndarray, unique_Ri: list[np.ndarray]) -> np.ndarray:
     
