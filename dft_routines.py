@@ -69,7 +69,7 @@ def list_saved_dft():
         print('\tq Shift Direction: {}'.format(dft_dict['q_shift_dir']))
         print('\tq shift: {}'.format(dft_dict['q_shift']))
 
-def make_kpts(cell: pbcgto.cell.Cell, with_gamma: bool = True) -> pyscf.pbc.lib.kpts.KPoints:
+def make_kpts(cell: pbcgto.cell.Cell, dft_params: dict, with_gamma: bool = True) -> pyscf.pbc.lib.kpts.KPoints:
     """
     Function to get the grid in reciprocal unit cell given k_grid density in input_parameters.py.
     Inputs:
@@ -77,9 +77,10 @@ def make_kpts(cell: pbcgto.cell.Cell, with_gamma: bool = True) -> pyscf.pbc.lib.
     Returns:
         k_grid: np.ndarray of shape (N, 3), k vectors generated from the cell.
     """
+    dft_path = 'DFT_resources/' + dft_params['dft_instance']
     k_grid = parmt.k_grid
     kpts = cell.make_kpts(k_grid, wrap_around=True, with_gamma_point=with_gamma, space_group_symmetry=True)
-    np.save(parmt.store + '/k-pts_i', kpts.kpts)
+    np.save(dft_path + '/k-pts_i', kpts.kpts)
     logger.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k-pts_i.npy', k_grid[0], k_grid[1], k_grid[2]))
     return kpts
 
@@ -124,7 +125,7 @@ def KS_non_self_consistent_field(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS, dft_par
     q_shift = dft_params['q_shift']*q_shift_dir/np.linalg.norm(q_shift_dir)
     scaled_center = kmf.cell.get_scaled_kpts(q_shift)
     kpts = kmf.cell.make_kpts(dft_params['k_grid'], space_group_symmetry=True, wrap_around = True, scaled_center = scaled_center)
-    np.save(parmt.store + '/k-pts_f', kpts.kpts)
+    np.save(dft_path + '/k-pts_f', kpts.kpts)
     logger.info("Selected q shift = {}".format(np.array2string(q_shift, precision = 5)))
     logger.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k-pts_f.npy', dft_params['k_grid'][0], dft_params['k_grid'][1], dft_params['k_grid'][2]))
     ek , ck = kmf.get_bands(kpts.kpts_ibz)
@@ -167,11 +168,15 @@ def convert_to_eV_and_scissor(cell: pbcgto.cell.Cell, dft_params: dict):
     np.save(parmt.store + '/DFT/mo_en_i.npy', en_i)
     np.save(parmt.store + '/DFT/mo_en_f.npy', en_f)
 
-    #store mo_coeff in main file as well
+    #store mo_coeff and k points in main file as well
     coeff_i = np.load(dft_path + '/mo_coeff_i.npy')
     coeff_f = np.load(dft_path + '/mo_coeff_f.npy')
     np.save(parmt.store + '/DFT/mo_coeff_i.npy', coeff_i)
     np.save(parmt.store + '/DFT/mo_coeff_f.npy', coeff_f)
+    k_i = np.load(dft_path + '/k-pts_i.npy')
+    k_f = np.load(dft_path + '/k-pts_f.npy')
+    np.save(parmt.store + '/k-pts_i.npy', k_i)
+    np.save(parmt.store + '/k-pts_f.npy', k_f)
     logger.info("Electronic structure energies updated in files.")
 
 def get_band_indices(dft_params: dict):
