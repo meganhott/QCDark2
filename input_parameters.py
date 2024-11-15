@@ -13,8 +13,6 @@ import os
 system_name = 'test'
 res_filename = system_name + '_eps.hdf5'
 
-new_dft = True #set to False if DFT has already been performed. This is temporary and will be removed when this is checked automatically 
-
 """Build the periodic system, all units in angstrom"""
 lattice_vectors = [[2.715,    2.715,    0. ], 
                    [0.,       2.715,    2.715], 
