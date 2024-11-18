@@ -98,7 +98,7 @@ def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict) -> pbcdft.
     """
     dft_path = 'DFT_resources/' + dft_params['dft_instance']
     logger.info('Initial state calculation:')
-    kpts = make_kpts(cell, True)
+    kpts = make_kpts(cell, dft_params, True)
     kmf = pbcdft.KRKS(cell, kpts).density_fit()
     kmf.xc = parmt.xcfunc
     kmf.kernel()
