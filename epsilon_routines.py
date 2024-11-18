@@ -16,7 +16,7 @@ def get_RPA_dielectric(dark_objects: dict):
     if parmt.include_lfe:
         get_RPA_dielectric_LFE(dark_objects)
     else:
-        get_RPA_dielectric_no_LFE(dark_objects)
+        get_RPA_dielectric_no_LFE_alt_binning(dark_objects)
 
 @time_wrapper
 def get_RPA_dielectric_no_LFE(dark_objects: dict):
@@ -103,7 +103,7 @@ def get_RPA_dielectric_no_LFE_alt_binning(dark_objects: dict):
 
     # Generating energy centers & bins
     E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
-    bin_centers = bin.gen_bin_centers()
+    bin_centers = bin.gen_bin_centers(cartesian=True)
     #N_ang_bins = (parmt.N_phi*(parmt.N_theta-2)+2)
     #tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1))
     #tot_bin_weights = np.zeros(bin_centers.shape[0]+N_ang_bins)
@@ -114,7 +114,7 @@ def get_RPA_dielectric_no_LFE_alt_binning(dark_objects: dict):
     makedir(parmt.store + '/working_dir')
 
     logger.info('Total number of q: {}.'.format(n_q))
-    for i_q, q in enumerate(unique_q.keys()):
+    for i_q, q in enumerate(list(unique_q.keys())):
         k_pairs = np.array(unique_q[q])
         q = np.array(q)
         logger.info('\ti_q: {}\n\t\tq = {},'.format(i_q+1, np.array2string(q, precision=5)))
@@ -136,11 +136,16 @@ def get_RPA_dielectric_no_LFE_alt_binning(dark_objects: dict):
 
     eps_im = np.concatenate(eps_im, axis=0)
     qG = np.concatenate(qG, axis=0)
+    np.save(parmt.store + '/eps_im.npy', eps_im)
+    np.save(parmt.store + '/qG.npy', qG)
+
 
     #binned_eps_im = tot_bin_eps_im[:-N_ang_bins, :]/tot_bin_weights[:-N_ang_bins, None] #removing extra bins 
 
     #Interpolating missing Im(eps) bins and then performing Kramers-Kronig transformation to get Re(eps)
-    binned_eps_im = LinearNDInterpolator(qG, eps)(bin_centers)
+    start_time = time.time()
+    binned_eps_im = LinearNDInterpolator(qG, eps_im)(bin_centers)
+    logger.info('Interpolation to bins complete. Time taken = {:.2f} s.'.format(time.time() - start_time))
     np.save(parmt.store+'/binned_eps_altbin.npy', eps.kramerskronig_im2re(binned_eps_im) + 1. + 1j*binned_eps_im)
 
 def get_RPA_dielectric_no_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.ndarray, mo_coeff_f_conj: np.ndarray, mo_coeff_i: np.ndarray, k_f: np.ndarray, k_pairs: np.ndarray, blocks: dict, N_AO: int, q_cuts: np.ndarray, VCell: float, G_q: np.ndarray, unique_Ri: list[np.ndarray]) -> np.ndarray:
