@@ -165,6 +165,8 @@ def convert_to_eV_and_scissor(cell: pbcgto.cell.Cell, dft_params: dict):
         correction = parmt.scissor_bandgap - lumo
         en_i[:,occ_orb:], en_f[:,occ_orb:] = en_i[:,occ_orb:] + correction, en_f[:,occ_orb:] + correction
         logger.info("Scissor Correction applied, new bandgap is {:.2f} eV.".format(parmt.scissor_bandgap))
+    
+    makedir(parmt.store + '/DFT')
     np.save(parmt.store + '/DFT/mo_en_i.npy', en_i)
     np.save(parmt.store + '/DFT/mo_en_f.npy', en_f)
 
