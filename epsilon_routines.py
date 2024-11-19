@@ -25,7 +25,6 @@ def get_RPA_dielectric(dark_objects: dict):
 def get_RPA_dielectric_no_LFE(dark_objects: dict):
 
     # Reading all relevant data
-
     N_AO = len(dark_objects['aos'])
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
     
@@ -45,21 +44,34 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict):
 
     unique_Ri = load_unique_R()
 
-    # Generating energy centers & bins
-    E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
+    # Generating bins
     bin_centers = bin.gen_bin_centers()
     N_ang_bins = (parmt.N_phi*(parmt.N_theta-2)+2)
-    tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1))
-    tot_bin_weights = np.zeros(bin_centers.shape[0]+N_ang_bins)
     
     # Make working directory
     makedir(parmt.store + '/working_dir')
 
     logger.info('Total number of q: {}.'.format(n_q))
-    for i_q, q in enumerate(unique_q.keys()):
+
+    if parmt.q_start is not None: # Starts from intermediate q vector if specified
+        q_start = parmt.q_start
+        q_keys = list(unique_q.keys())[q_start-1:]
+        # Load saved intermediate calculations
+        try:
+            tot_bin_eps_im = np.load(parmt.store + '/working_dir/tot_bin_eps_im.npy')
+            tot_bin_weights = np.load(parmt.store + '/working_dir/tot_bin_weights.npy')
+        except FileNotFoundError:
+            raise Exception('Intermediate calculations were not found in {}. To start from a specified q vector, input_parameters.save_temp_eps must be set to True. To run calculation for all q vectors, set input_parameters.q_start = None'.format(parmt.store+'/working_dir'))
+    else: # Otherwise perform calculation for all q
+        q_start = 1
+        q_keys = unique_q.keys()
+        tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1))
+        tot_bin_weights = np.zeros(bin_centers.shape[0]+N_ang_bins)
+
+    for i_q, q in enumerate(q_keys, start=q_start):
         k_pairs = np.array(unique_q[q])
         q = np.array(q)
-        logger.info('\ti_q: {}\n\t\tq = {},'.format(i_q+1, np.array2string(q, precision=5)))
+        logger.info('\ti_q: {}\n\t\tq = {},'.format(i_q, np.array2string(q, precision=5)))
         start_time = time.time()
         
         # Finding relevant G vectors
@@ -70,6 +82,10 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict):
         eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, blocks, N_AO, q_cuts, VCell, G_q, unique_Ri)
 
         tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, eps_q_im, bin_centers, tot_bin_eps_im, tot_bin_weights)
+
+        if parmt.save_temp_eps:
+            np.save(parmt.store + '/working_dir/tot_bin_eps_im.npy', tot_bin_eps_im)
+            np.save(parmt.store + '/working_dir/tot_bin_weights.npy', tot_bin_weights)
         
         logger.info('\t\tcomplete. Time taken = {:.2f} s.'.format(time.time() - start_time))
 
@@ -201,26 +217,40 @@ def get_RPA_dielectric_LFE(dark_objects: dict):
 
     unique_Ri = load_unique_R()
 
-    # Generating energy centers & bins
-    E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
+    # Generating bins
     bin_centers = bin.gen_bin_centers()
     N_ang_bins = (parmt.N_phi*(parmt.N_theta-2)+2)
-    tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1))
-    tot_bin_weights = np.zeros(bin_centers.shape[0]+N_ang_bins)
-
-    tot_bin_eps_re = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1))
-    tot_bin_weights_re = np.zeros(bin_centers.shape[0]+N_ang_bins)
     
     # Make working directory
     makedir(parmt.store + '/working_dir')
 
     logger.info('Total number of q: {}.'.format(n_q))
 
-    for i_q, q in enumerate(unique_q.keys()):
+    if parmt.q_start is not None: # Starts from intermediate q vector if specified
+        q_start = parmt.q_start
+        q_keys = list(unique_q.keys())[q_start-1:]
+        # Load saved intermediate calculations
+        try:
+            tot_bin_eps_im = np.load(parmt.store + '/working_dir/tot_bin_eps_im.npy')
+            tot_bin_eps_re = np.load(parmt.store + '/working_dir/tot_bin_eps_re.npy')
+            tot_bin_weights = np.load(parmt.store + '/working_dir/tot_bin_weights.npy')
+            tot_bin_weights_re = tot_bin_weights
+        except FileNotFoundError:
+            raise Exception('Intermediate calculations were not found in {}. To start from a specified q vector, input_parameters.save_temp_eps must be set to True. To run calculation for all q vectors, set input_parameters.q_start = None'.format(parmt.store+'/working_dir'))
+    else: # Otherwise perform calculation for all q
+        q_start = 1
+        q_keys = unique_q.keys()
 
+        tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1))
+        tot_bin_weights = np.zeros(bin_centers.shape[0]+N_ang_bins)
+
+        tot_bin_eps_re = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1))
+        tot_bin_weights_re = np.zeros(bin_centers.shape[0]+N_ang_bins)
+
+    for i_q, q in enumerate(q_keys, start=q_start):
         k_pairs = np.array(unique_q[q])
         q = np.array(q)
-        logger.info('\ti_q: {}\n\t\tq = {},'.format(i_q+1, np.array2string(q, precision=5)))
+        logger.info('\ti_q: {}\n\t\tq = {},'.format(i_q, np.array2string(q, precision=5)))
         start_time = time.time()
         
         # Finding relevant G vectors
@@ -240,6 +270,11 @@ def get_RPA_dielectric_LFE(dark_objects: dict):
         #Bin real and imaginary parts - modify binning so both parts done at same time
         tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, np.imag(eps_lfe), bin_centers, tot_bin_eps_im, tot_bin_weights)
         tot_bin_eps_re, tot_bin_weights_re = bin.bin_eps_q(q, G_q, np.real(eps_lfe), bin_centers, tot_bin_eps_re, tot_bin_weights_re)
+
+        if parmt.save_temp_eps:
+            np.save(parmt.store + '/working_dir/tot_bin_eps_im.npy', tot_bin_eps_im)
+            np.save(parmt.store + '/working_dir/tot_bin_eps_re.npy', tot_bin_eps_re)
+            np.save(parmt.store + '/working_dir/tot_bin_weights.npy', tot_bin_weights)
         
         logger.info('\t\tcomplete. Time taken = {:.2f} s.'.format(time.time() - start_time))
 
@@ -396,7 +431,7 @@ def get_Nk(unique_Ri, blocks, N_AO):
     N_uniqueRi = sum([Ri.shape[0] for Ri in unique_Ri])
     N_PG = max(np.concatenate([k1 for k in blocks.keys() for k1 in k])) + 1
     N_max_block = max([len(k1) for k in blocks.keys() for k1 in k])
-    N_Rid = np.load('test_resources/R_ids/-1.npy').shape[1]
+    N_Rid = np.load(parmt.store+'/R_ids/-1.npy').shape[1]
     overlaps_memory = (N_uniqueRi*N_PG**2 + N_AO**2 + N_uniqueRi*N_PG*N_max_block + N_Rid*N_max_block**2 + N_uniqueRi*N_max_block**2) * 16
     
     Nk = int((max_memory - init_memory*N_cpus) / overlaps_memory / N_cpus)
