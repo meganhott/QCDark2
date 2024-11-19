@@ -16,7 +16,10 @@ def get_RPA_dielectric(dark_objects: dict):
     if parmt.include_lfe:
         get_RPA_dielectric_LFE(dark_objects)
     else:
-        get_RPA_dielectric_no_LFE_alt_binning(dark_objects)
+        if parmt.alt_binning: #Temporary
+            get_RPA_dielectric_no_LFE_alt_binning(dark_objects)
+        else:
+            get_RPA_dielectric_no_LFE(dark_objects)
 
 @time_wrapper
 def get_RPA_dielectric_no_LFE(dark_objects: dict):

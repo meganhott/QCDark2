@@ -13,6 +13,8 @@ import os
 system_name = 'test'
 res_filename = system_name + '_eps.hdf5'
 
+alt_binning = False #Temporary: set to True to use alternate binning technique, where interpolation and binning happen at end only. Do not use for large q since epsilon is kept in memory for all q+G vectors.
+
 """Build the periodic system, all units in angstrom"""
 lattice_vectors = [[2.715,    2.715,    0. ], 
                    [0.,       2.715,    2.715], 
