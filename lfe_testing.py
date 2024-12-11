@@ -4,7 +4,8 @@ import os
 import psutil
 import multiprocessing as mp
 from functools import partial
-from numba import njit, prange
+from numba import njit
+import numba as nb
 from scipy.interpolate import LinearNDInterpolator
 
 from routines import logger, time_wrapper, load_unique_R, makedir, alpha, me
@@ -14,6 +15,8 @@ import binning as bin
 from epsilon_routines import delta_energy
 from epsilon_helper import get_3D_overlaps_blocks, kramerskronig_im2re, kramerskronig_re2im
 from dielectric_functions import *
+
+#from line_profiler import profile
 
 def get_RPA_dielectric_LFE(dark_objects: dict):
     # Reading all relevant data
@@ -99,6 +102,8 @@ def get_RPA_dielectric_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.nda
     mo_coeff_f_conj = mo_coeff_f_conj[k_pairs[:,1]] #(k_pair,b,j)
     k_f = k_f[k_pairs[:,1]]
 
+    einsum_path = np.einsum_path('kbj,kba,kai->kij', mo_coeff_f_conj, np.ones((k_f.shape[0],N_AO,N_AO)), mo_coeff_i)[0] #generate optimal path for 3D overlaps calculation
+
     # Calculating the delta function in energy
     im_delE = delta_energy(mo_en_i, mo_en_f) #(k,i,j,2)
     del mo_en_i, mo_en_f
@@ -132,13 +137,26 @@ def get_RPA_dielectric_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.nda
         #Load coefficients for k
         mo_coeff_i = np.load(working_dir + 'mo_coeff_i.npy')[i_k]
         mo_coeff_f_conj = np.load(working_dir + 'mo_coeff_f_conj.npy')[i_k]
+
         #Calculate eta_qG for one k
         start_time = time.time()
-        with mp.get_context('fork').Pool(mp.cpu_count()) as p:
-            eta_qG = p.map(partial(get_3D_overlaps_k, k_f=k, blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i, mo_coeff_f_conj=mo_coeff_f_conj, unique_Ri=unique_Ri, q_cuts=q_cuts), qG) #might want to run this in chunks so less initialization time
-        eta_qG = np.array(eta_qG).transpose((1,2,0)) #(G,i,j) -> (i,j,G)
-        print(f'eta_qG(k) calculated in {time.time() - start_time}s')
+        with mp.get_context('fork').Pool(mp.cpu_count()-4) as p:
+            eta_qG = p.map(partial(get_3D_overlaps_k, k_f=k, blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i, mo_coeff_f_conj=mo_coeff_f_conj, unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path), qG) #might want to run this in chunks so less initialization time
+        print(f'eta_qG(k) calculated in {time.time() - start_time}s, multiprocessing')
+        
+        #numba experiment - does not work with multiprocessing
+        """
+        blocks = blocks_typed_dict(blocks) #convert to numba typed dictionary
+        eta_qG = np.empty((qG.shape[0], mo_coeff_i.shape[1], mo_coeff_f_conj.shape[1]), dtype='complex128')
+        start_time = time.time()
+        for i, qG_i in enumerate(qG):
+            eta_qG[i] = get_3D_overlaps_k_numba(qG_i, k_f=k, blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i, mo_coeff_f_conj=mo_coeff_f_conj, unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path)
+        print(f'eta_qG(k) calculated in {time.time() - start_time}s, numba')
+        """
+        
+        #eta_qG = np.array(eta_qG).transpose((1,2,0)) #(G,i,j) -> (i,j,G)
 
+        exit()
         #Collapse (i,j) 
         eta_qG = np.stack([eta_qG[i,j] for i in range(eta_qG.shape[0]) for j in range(eta_qG.shape[1])]) #collapsing i,j indices #((i,j),G) #rewrite so don't have to transpose above
 
@@ -153,7 +171,7 @@ def get_RPA_dielectric_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.nda
     
     return prefactor*eps_delta
 
-def get_3D_overlaps_k(qG: np.ndarray, k_f: np.ndarray, blocks: dict, N_AO: int, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray, unique_Ri:list[np.ndarray], q_cuts: np.ndarray): #, path = None) -> np.ndarray:
+def get_3D_overlaps_k(qG: np.ndarray, k_f: np.ndarray, blocks: dict, N_AO: int, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray, unique_Ri:list[np.ndarray], q_cuts: np.ndarray, path) -> np.ndarray:
     """
     Calculates all 3D overlaps eta = <jk'|exp(i(q+G)r)|ik> for a given 1BZ q-vector and given G-vector using stored 1D overlaps
 
@@ -183,6 +201,7 @@ def get_3D_overlaps_k(qG: np.ndarray, k_f: np.ndarray, blocks: dict, N_AO: int, 
         for p2 in blocks:
             d2 = blocks[p2]
             p2 = np.array(p2)
+
             tot = np.ones((R_id.shape[1], p2.shape[1], p1.shape[1]), dtype = np.complex128)
             for d in range(3):
                 ints_ij = ints_i[d][:,p2[d]]
@@ -191,11 +210,8 @@ def get_3D_overlaps_k(qG: np.ndarray, k_f: np.ndarray, blocks: dict, N_AO: int, 
             for i in d1:
                 for j in d2:
                     ovlp[i,j] = (tot@d1[i])@d2[j]
-    """
-    if path is None:
-        path = np.einsum_path('kbj,kba,kai->kij', mo_coeff_f_conj[None,:,:], ovlp[None,:,:], mo_coeff_i[None,:,:], optimize = 'optimal')[0]
-    """
-    return np.einsum('bj,ba,ai->ij', mo_coeff_f_conj, ovlp, mo_coeff_i) #, optimize = path)[0], path
+            
+    return np.einsum('kbj,kba,kai->kij', mo_coeff_f_conj[None,:,:], ovlp[None,:,:], mo_coeff_i[None,:,:], optimize = path)[0] #This is faster with added k index for some reason??
 
 def get_eps_delta_LFE(eta_qG_kij, im_delE_kij):
     """
@@ -359,6 +375,72 @@ def get_mp_N(unique_Ri, blocks, N_AO, Nk_tot, N_val, N_con, N_qG):
     eps_delta_memory = (Nk_tot*N_val*N_con*N_qG + N_val*N_con*N_qG**2 + 2*N_qG**2*int(parmt.E_max/parmt.dE + 1)) * 16 + init_memory
     Np = int(max_memory/eps_delta_memory)
     return Nk, Np
+
+# numba experiments vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+
+def get_3D_overlaps_k_numba(qG: np.ndarray, k_f: np.ndarray, blocks: dict, N_AO: int, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray, unique_Ri:list[np.ndarray], q_cuts: np.ndarray, path) -> np.ndarray:
+    """
+    Calculates all 3D overlaps eta = <jk'|exp(i(q+G)r)|ik> for a given 1BZ q-vector and given G-vector using stored 1D overlaps
+
+    Notes:
+    - Calculating ovlp with numba speeds up this function by ~30-40% but we cannot have a numba-typed blocks dict sent to multiprocessing, so this must be run in serial since it takes way to long to convert blocks each time. Overall, multiprocessing without numba is faster
+
+    Inputs:
+        qG:             np.ndarray of shape (3,): q+G
+        k_f:            np.ndarray of shape (3, ): a single k' corresponding to q
+        blocks:         dict: atomic orbital blocks generated by get_basis_blocks 
+        N_AO:           int: number of atomic orbitals
+        mo_coeff_i:     np.ndarray of shape (N_AO, N_valbands)
+        mo_coeff_f:     np.ndarray of shape (N_AO, N_conbands)
+        unique_Ri:      list of [R_unique_x, R_unique_y, R_unique_z)
+        q_cuts:         np.ndarray of shape (N_q, ): |q+G| at which R_cutoff change
+    Outputs:
+        eta_qG:         np.ndarray of shape (N_val_bands (i), N_cond_bands (j)): all 3D overlaps <jk'|exp(i(q+G)r)|ik>
+    """
+    R_id = np.load(parmt.store + '/R_ids/{}.npy'.format(np.sum(q_cuts < np.linalg.norm(qG)) - 1))
+    ints = []
+    for d in range(3): 
+        ints.append(np.load(parmt.store + '/primgauss_1d_integrals/dim_{}/{:.5f}.npy'.format(d, qG[d]))[:,:,:] * np.exp(-1.j*unique_Ri[d][:]*k_f[None,d])[:,None,None])
+    ovlp = np.empty((N_AO, N_AO), dtype = np.complex128) 
+    for p1 in blocks:
+        d1 = blocks[p1]
+        p1 = np.array(p1)
+        ints_i = []
+        for d in range(3):
+            ints_i.append(ints[d][:,:,p1[d]])
+        for p2 in blocks:
+            d2 = blocks[p2]
+            p2 = np.array(p2)
+            ovlp = ovlp_sum(ovlp, d1, p1, d2, p2, ints_i[0], ints_i[1], ints_i[2], R_id) #numba optimized function
+            
+    return np.einsum('kbj,kba,kai->kij', mo_coeff_f_conj[None,:,:], ovlp[None,:,:], mo_coeff_i[None,:,:], optimize = path)[0] #This is faster with added k index for some reason??
+
+#make dicts within blocks into numba typed dicts
+def blocks_typed_dict(blocks):
+    for p in blocks:
+        d = blocks[p] #untyped dict
+        typed_d = nb.typed.Dict.empty(key_type=nb.types.int64, value_type=nb.types.Array(dtype=nb.types.complex128, ndim=1, layout='C'))
+        for p1 in d:
+            typed_d[p1] = d[p1].astype('complex128') #need to be complex when multiplying against 1D integrals for numba optimization
+        blocks[p] = typed_d #replace with typed dict
+    return blocks
+
+#njit main part of 3D overlaps code
+@njit(nb.types.Array(nb.types.complex128, 2, 'C')(nb.types.Array(nb.types.complex128, 2, 'C'), nb.types.DictType(nb.types.int64, nb.types.Array(nb.types.complex128, 1, 'C')), nb.types.Array(nb.types.int64, 2, 'C'), nb.types.DictType(nb.types.int64, nb.types.Array(nb.types.complex128, 1, 'C')), nb.types.Array(nb.types.int64, 2, 'C'), nb.types.Array(nb.types.complex128, 3, 'A'), nb.types.Array(nb.types.complex128, 3, 'A'), nb.types.Array(nb.types.complex128, 3, 'A'), nb.types.Array(nb.types.int64, 2, 'F')))
+def ovlp_sum(ovlp, d1, p1, d2, p2, ints_i_x, ints_i_y, ints_i_z, R_id): #have to split up ints_i because numba hates lists
+    tot = np.ones((R_id.shape[1], p2.shape[1], p1.shape[1]), dtype = np.complex128)
+    for d, ints_i in enumerate([ints_i_x, ints_i_y, ints_i_z]):
+        ints_ij = ints_i[:,p2[d]]
+        tot *= ints_ij[R_id[d]]
+    tot = tot.sum(axis = 0)
+
+    for i in d1:
+        for j in d2:
+            ovlp[i,j] = (tot@d1[i])@d2[j]
+    return ovlp
+
+# numba experiments ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 
 def main():
     cell, dark_objects = initialize_cell()
