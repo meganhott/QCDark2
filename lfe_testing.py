@@ -136,6 +136,13 @@ def get_RPA_dielectric_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.nda
         p.map(partial(get_eps_delta_k, k_f=k_f, qG=qG, mo_coeff_i=mo_coeff_i, mo_coeff_f_conj=mo_coeff_f_conj, blocks=blocks, unique_Ri=unique_Ri, q_cuts=q_cuts, einsum_path=einsum_path, im_delE=im_delE, N_AO=N_AO, N_E=N_E), range(k_f.shape[0]))
     """
     #get_eps_delta_k(0, k_f=k_f, qG=qG, mo_coeff_i=mo_coeff_i, mo_coeff_f_conj=mo_coeff_f_conj, blocks=blocks, unique_Ri=unique_Ri, q_cuts=q_cuts, einsum_path=einsum_path, im_delE=im_delE, N_AO=N_AO, N_E=N_E)
+
+    start_time = time.time()
+    eta_qG = np.empty((qG.shape[0], mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2]), dtype='complex128')
+    get_eps_delta_k(0, k_f, qG, mo_coeff_i, mo_coeff_f_conj, blocks, unique_Ri, q_cuts, einsum_path, im_delE, N_AO, N_E)
+    #eta_qG = np.array(eta_qG).transpose((1,2,0)) #(G,i,j) -> (i,j,G)
+    print('old 3D overlaps: ', time.time() - start_time)
+
     start_time = time.time()
     blocks = blocks_typed_dict2(blocks)
     print('blocks conversion: ', time.time() - start_time)
@@ -148,6 +155,8 @@ def get_RPA_dielectric_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.nda
         eta_qG[i] = get_3D_overlaps_k_full_numba(qG_i, k_f=k_f[0], blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i[0], mo_coeff_f_conj=mo_coeff_f_conj[0], unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path)
     eta_qG = np.array(eta_qG).transpose((1,2,0)) #(G,i,j) -> (i,j,G)
     print('numba 3D overlaps: ', time.time() - start_time)
+
+
     exit()
 
     #read and add together all delta_eps(k) for given q
@@ -658,15 +667,22 @@ def get_3D_overlaps_k_full_numba(qG: np.ndarray, k_f: np.ndarray, blocks: dict, 
 
     return np.einsum('kbj,kba,kai->kij', mo_coeff_f_conj[None,:,:], ovlp[None,:,:], mo_coeff_i[None,:,:], optimize = path)[0] #This is faster with added k index for some reason??
 
+
 @njit(nb.types.Array(nb.types.complex128, 2, 'C')(nb.types.DictType(nb.types.unicode_type, nb.types.DictType(nb.types.int64, nb.types.Array(nb.types.complex128, 1, 'C'))), nb.types.Array(nb.types.complex128, 3, 'C'), nb.types.Array(nb.types.complex128, 3, 'C'), nb.types.Array(nb.types.complex128, 3, 'C'), nb.types.Array(nb.types.int64, 2, 'F'), nb.types.int64))
 def ovlp_sum_full(blocks, ints_x, ints_y, ints_z, R_id, N_AO):
+    def str_to_int(s): #https://github.com/numba/numba/issues/5650
+        final_index, result = len(s) - 1, 0
+        for i,v in enumerate(s):
+            result += (ord(v) - 48) * (10 ** (final_index - i))
+        return result
+
     ovlp = np.empty((N_AO, N_AO), dtype = np.complex128) 
+
     for p1 in blocks:
         d1 = blocks[p1]
-        p1 = np.array([[int(c) for c in re.findall('\d+', b)] for b in p1.split('),')]) #now have to transform this from string 
-        # but numba won't compile re.findall :(
-        # p1.split('),') works fine, have to get p1 without using re. str.isnumeric()? 
-        print(p1)
+        p1 = [[b.replace(',', '') for b in p1.split('), ')[i].replace('(', '').replace(')', '').split(', ')] for i in range(3)] #now have to transform this from string 
+        p1 = [[str_to_int(b)for b in p1[i]] for i in range(3)]
+        p1 = np.array(p1) #have to do this is multiple steps for numba otherwise memory issues
 
         ints_i_x = ints_x[:,:,p1[0]] #numba hates lists
         ints_i_y = ints_y[:,:,p1[1]]
@@ -674,8 +690,9 @@ def ovlp_sum_full(blocks, ints_x, ints_y, ints_z, R_id, N_AO):
 
         for p2 in blocks:
             d2 = blocks[p2]
-            p2 = np.array([[int(c) for c in re.findall('\d+', b)] for b in p2.split('),')])
-            print(p2)
+            p2 = [[b.replace(',', '') for b in p2.split('), ')[i].replace('(', '').replace(')', '').split(', ')] for i in range(3)] #now have to transform this from string 
+            p2 = [[str_to_int(b)for b in p2[i]] for i in range(3)]
+            p2 = np.array(p2)
 
             tot = np.ones((R_id.shape[1], p2.shape[1], p1.shape[1]), dtype = np.complex128)
             for d, ints_i in enumerate([ints_i_x, ints_i_y, ints_i_z]):
