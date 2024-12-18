@@ -176,7 +176,7 @@ def RPA_dielectric_lfe(q, G_vectors, k_pairs, mo_en_i, mo_en_f, eta_q):
     return eps_lfe
 
 @njit()
-def kramerskronig_im2re(im):
+def kramerskronig_im2re(im, dE = parmt.dE, E_max=parmt.E_max):
     """
     Computes the Kramers-Kronig transformation of the input imaginary part to obtain the real part.
 
@@ -185,7 +185,7 @@ def kramerskronig_im2re(im):
     Output:
         re: np.ndarray (N_E, N_G), Note that Re(eps) = eps_re + 1 
     """
-    E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
+    E = np.arange(0, E_max+dE, dE)
     re = np.empty_like(im)
     N_G, N_E = im.shape
     for nE in range(N_E):
@@ -198,11 +198,11 @@ def kramerskronig_im2re(im):
             for ns in range(N_E-1):
                 s += E_pv[ns]*im_pv[ns]/(E_pv[ns]**2 - En**2)
 
-            re[nG,nE] = 2/np.pi*parmt.dE*(s - 0.5*(E_pv[0]*im_pv[0]/(E_pv[0]**2-En**2) + E_pv[-1]*im_pv[-1]/(E_pv[-1]**2-En**2))) #trapezoid rule
+            re[nG,nE] = 2/np.pi*dE*(s - 0.5*(E_pv[0]*im_pv[0]/(E_pv[0]**2-En**2) + E_pv[-1]*im_pv[-1]/(E_pv[-1]**2-En**2))) #trapezoid rule
     return re
 
 @njit()
-def kramerskronig_re2im(re):
+def kramerskronig_re2im(re, dE = parmt.dE, E_max=parmt.E_max):
     """
     Computes the Kramers-Kronig transformation of the input real part to obtain the imaginary part.
 
@@ -211,7 +211,7 @@ def kramerskronig_re2im(re):
     Output:
         im: np.ndarray (N_E, N_G)
     """
-    E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
+    E = np.arange(0, E_max+dE, dE)
     im = np.empty_like(re)
     N_G, N_E = re.shape
     for nE in range(N_E):
@@ -224,5 +224,5 @@ def kramerskronig_re2im(re):
             for ns in range(N_E-1):
                 s += re_pv[ns]/(E_pv[ns]**2 - En**2)
 
-            im[nG,nE] = -2/np.pi*parmt.dE*En*(s - 0.5*(re_pv[0]/(E_pv[0]**2-En**2) + re_pv[-1]/(E_pv[-1]**2-En**2))) #trapezoid rule
+            im[nG,nE] = -2/np.pi*dE*En*(s - 0.5*(re_pv[0]/(E_pv[0]**2-En**2) + re_pv[-1]/(E_pv[-1]**2-En**2))) #trapezoid rule
     return im
