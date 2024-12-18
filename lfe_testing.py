@@ -11,8 +11,8 @@ from routines import logger, time_wrapper, load_unique_R, makedir, alpha, me
 import input_parameters as parmt
 import binning as bin
 
-from epsilon_routines import kramerskronig_im2re, kramerskronig_re2im, delta_energy
-from epsilon_helper import get_3D_overlaps_blocks
+from epsilon_routines import delta_energy
+from epsilon_helper import get_3D_overlaps_blocks, kramerskronig_im2re, kramerskronig_re2im
 from dielectric_functions import *
 
 def get_RPA_dielectric_LFE(dark_objects: dict):
@@ -139,13 +139,14 @@ def RPA_Im_eps_external_prefactor_LFE(qG, blocks, N_AO, q_cuts, unique_Ri):
     mo_coeff_f_conj = np.load(working_dir + 'mo_coeff_f_conj.npy')
     mo_coeff_i = np.load(working_dir + 'mo_coeff_i.npy')
 
-    nE = int(parmt.E_max/parmt.dE + 1)
-    eps_delta = np.zeros((qG.shape[0], qG.shape[0], int(parmt.E_max/parmt.dE + 1)), dtype='complex')
-
-    Nk = get_Nk(unique_Ri, blocks, N_AO) #number of k such that calculation of eta(G,k,i,j) can be run in parallel without exceeding memory  
-    partitions = np.append(np.arange(0, k_f.shape[0], Nk), [k_f.shape[0]])
-    start_time = time.time()
     eta_qG = np.empty((k_f.shape[0], mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2], qG.shape[0]), dtype='complex') #(k,i,j,G)
+
+    Nk, Np = get_mp_N(unique_Ri, blocks, N_AO, mo_coeff_i.shape[0], mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2], qG.shape[0]) #number of k such that calculation of eta(G,k,i,j) can be run in parallel without exceeding memory  
+
+    #print(psutil.Process(os.getpid()).memory_info()[0]/2**20)
+    """
+    start_time = time.time()
+    partitions = np.append(np.arange(0, k_f.shape[0], Nk), [k_f.shape[0]])
     for p in range(len(partitions) - 1):
         i, f = partitions[p], partitions[p+1]
         with mp.get_context('fork').Pool(mp.cpu_count()) as p:
@@ -154,8 +155,12 @@ def RPA_Im_eps_external_prefactor_LFE(qG, blocks, N_AO, q_cuts, unique_Ri):
     eta_qG = eta_qG / np.linalg.norm(qG, axis=1)[None,None,None,:] #(k,i,j,G)
 
     logger.info('\t\t\t3D overlaps loaded with {} k partitions. Time taken = {:.2f} s.'.format(len(partitions)-1, time.time()-start_time))
-    
+    """
+    eta_qG = np.load(parmt.store+'/eta_qG.npy')
     start_time = time.time()
+    """
+    nE = int(parmt.E_max/parmt.dE + 1)
+    eps_delta = np.zeros((qG.shape[0], qG.shape[0], int(parmt.E_max/parmt.dE + 1)), dtype='complex')
     for i_k in range(k_f.shape[0]):
         eta_qG_sq = np.einsum('ijg, ijh -> ijgh', eta_qG[i_k], eta_qG[i_k].conj())
         for a in range(mo_coeff_i.shape[2]):
@@ -165,10 +170,53 @@ def RPA_Im_eps_external_prefactor_LFE(qG, blocks, N_AO, q_cuts, unique_Ri):
                     eps_delta[:,:,int(ind)] += rem*eta_qG_sq[a, b]
                 if ind < nE - 1:
                     eps_delta[:,:,int(ind+1)] += (1. - rem)*eta_qG_sq[a, b]
+    """
+    """
+    Np = min(Np, mp.cpu_count())
+    print(Np)
+    partitions = np.append(np.arange(0, k_f.shape[0], Np), [k_f.shape[0]])
+    eps_delta_tot = np.zeros((eta_qG.shape[3], eta_qG.shape[3], int(parmt.E_max/parmt.dE + 1)), dtype='complex')
+    for p in [0]: #range(len(partitions) - 1):
+        i, f = partitions[p], partitions[p+1]
+        start_time = time.time()
+        with mp.get_context('fork').Pool(Np) as p:
+            eps_delta = p.map(partial(get_eps_delta, eta_qG=eta_qG, energy_arr=energy_arr), range(8))
+        #eps_delta = np.sum(eps_delta, axis=0)
+        #eps_delta_tot += eps_delta
+    """
+    #Rewrite
+    
+    Np = min(Np, mp.cpu_count())
+    partitions = np.append(np.arange(0, k_f.shape[0], int(k_f.shape[0]/Np)), [k_f.shape[0]])
+    partitions = np.array([partitions[:-1], partitions[1:]]).transpose() #(k_ni, k_n(i+1))
 
+    start_time = time.time()
+    with mp.get_context('fork').Pool(Np) as p:
+        eps_delta = p.map(partial(get_eps_delta, eta_qG=eta_qG, energy_arr=energy_arr), partitions)
+    print(time.time()-start_time)
+    start_time = time.time()
+    eps_delta = np.array(eps_delta)
+    eps_delta = np.sum(eps_delta, axis=0)
+    print(time.time()-start_time)
     logger.info('\t\t\tDelta part of epsilon calculated. Time taken = {:.2f} s.'.format(time.time()-start_time))
+    exit()
 
     return eps_delta #(G,G',E)
+
+#@profile
+def get_eps_delta(k_range, eta_qG, energy_arr):
+    nE = int(parmt.E_max/parmt.dE + 1)
+    eps_delta = np.zeros((eta_qG.shape[3], eta_qG.shape[3], int(parmt.E_max/parmt.dE + 1)), dtype='complex')
+    for i_k in range(k_range[0], k_range[1]):
+        eta_qG_sq = np.einsum('ijg, ijh -> ijgh', eta_qG[i_k], eta_qG[i_k].conj())
+        for a in range(eta_qG.shape[0]):
+            for b in range(eta_qG.shape[1]):
+                ind, rem = tuple(energy_arr[i_k, a, b])
+                if ind < nE:
+                    eps_delta[:,:,int(ind)] += rem*eta_qG_sq[a, b]
+                if ind < nE - 1:
+                    eps_delta[:,:,int(ind+1)] += (1. - rem)*eta_qG_sq[a, b]
+    return eps_delta
 
 @time_wrapper(n_tabs=2)
 def kramerskronig_lfe(eps_delta):
@@ -184,9 +232,9 @@ def kramerskronig_lfe(eps_delta):
     eps_ta = np.array(eps_re_ta) - 1j*np.array(eps_im_ta)
     return eps_ta
 
-def get_Nk(unique_Ri, blocks, N_AO):
+def get_mp_N(unique_Ri, blocks, N_AO, Nk_tot, N_val, N_con, N_qG):
     """
-    Returns number of k pairs to include in 3D overlaps multiprocessing based on the available memory and number of cores
+    Returns number of k pairs to include in 3D overlaps multiprocessing and number of simultaneous processes to run for eps_delta calculation based on the available memory and number of cores
     """
     max_memory = psutil.virtual_memory().available*0.9
     init_memory = psutil.Process(os.getpid()).memory_info()[0] #memory currently used 
@@ -195,15 +243,19 @@ def get_Nk(unique_Ri, blocks, N_AO):
     N_uniqueRi = sum([Ri.shape[0] for Ri in unique_Ri])
     N_PG = max(np.concatenate([k1 for k in blocks.keys() for k1 in k])) + 1
     N_max_block = max([len(k1) for k in blocks.keys() for k1 in k])
-    N_Rid = np.load('test_resources/R_ids/-1.npy').shape[1]
+    N_Rid = np.load(parmt.store + '/R_ids/-1.npy').shape[1]
     overlaps_memory = (N_uniqueRi*N_PG**2 + N_AO**2 + N_uniqueRi*N_PG*N_max_block + N_Rid*N_max_block**2 + N_uniqueRi*N_max_block**2) * 16
     
     Nk = int((max_memory - init_memory*N_cpus) / overlaps_memory / N_cpus)
-    return Nk
+
+    eps_delta_memory = (Nk_tot*N_val*N_con*N_qG + N_val*N_con*N_qG**2 + 2*N_qG**2*int(parmt.E_max/parmt.dE + 1)) * 16 + init_memory
+    Np = int(max_memory/eps_delta_memory)
+    return Nk, Np
 
 def main():
     cell, dark_objects = initialize_cell()
-    dark_objects = dielectric_RPA(cell, dark_objects)
+    new_dft, dft_params = dft_routines.save_dft()
+    dark_objects = dielectric_RPA(cell, dark_objects, dft_params)
     get_RPA_dielectric_LFE(dark_objects)
 
 if __name__ == '__main__':
