@@ -75,14 +75,25 @@ def make_kpts(cell: pbcgto.cell.Cell, dft_params: dict, with_gamma: bool = True)
     Inputs:
         cell:   pyscf.pbc.gto.cell.Cell object, initialized in build_cell_from_input routine.
     Returns:
-        k_grid: np.ndarray of shape (N, 3), k vectors generated from the cell.
+        k_i, k_f: np.ndarrays of shape (N, 3), initial and final k vectors generated from the cell.
     """
+    #save k_i
     dft_path = 'DFT_resources/' + dft_params['dft_instance']
     k_grid = parmt.k_grid
-    kpts = cell.make_kpts(k_grid, wrap_around=True, with_gamma_point=with_gamma, space_group_symmetry=True)
-    np.save(dft_path + '/k-pts_i', kpts.kpts)
-    logger.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k-pts_i.npy', k_grid[0], k_grid[1], k_grid[2]))
-    return kpts
+    kpts_i = cell.make_kpts(k_grid, wrap_around=True, with_gamma_point=with_gamma, space_group_symmetry=True)
+    np.save(dft_path + '/k-pts_i', kpts_i.kpts)
+    logger.info("{} initial k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts_i.nkpts, kpts_i.nkpts_ibz, parmt.store + '/k-pts_i.npy', k_grid[0], k_grid[1], k_grid[2]))
+
+    # save k_f
+    q_shift_dir = np.array(dft_params['q_shift_dir'])
+    q_shift = dft_params['q_shift']*q_shift_dir/np.linalg.norm(q_shift_dir)
+    scaled_center = cell.get_scaled_kpts(q_shift)
+    kpts_f = cell.make_kpts(dft_params['k_grid'], space_group_symmetry=True, wrap_around = True, scaled_center = scaled_center)
+    np.save(dft_path + '/k-pts_f', kpts_f.kpts)
+    logger.info("Selected q shift = {}".format(np.array2string(q_shift, precision = 5)))
+    logger.info("{} final k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts_f.nkpts, kpts_f.nkpts_ibz, parmt.store + '/k-pts_f.npy', dft_params['k_grid'][0], dft_params['k_grid'][1], dft_params['k_grid'][2]))
+
+    return kpts_i, kpts_f
 
 @time_wrapper
 def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict) -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
@@ -98,7 +109,7 @@ def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict) -> pbcdft.
     """
     dft_path = 'DFT_resources/' + dft_params['dft_instance']
     logger.info('Initial state calculation:')
-    kpts = make_kpts(cell, dft_params, True)
+    kpts = make_kpts(cell, dft_params, True)[0]
     kmf = pbcdft.KRKS(cell, kpts).density_fit()
     kmf.xc = parmt.xcfunc
     kmf.kernel()
@@ -120,17 +131,11 @@ def KS_non_self_consistent_field(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS, dft_par
         dft_params: dict, DFT parameters
     """
     logger.info("Final State Calculation:")
-    dft_path = 'DFT_resources/' + dft_params['dft_instance']
-    q_shift_dir = np.array(dft_params['q_shift_dir'])
-    q_shift = dft_params['q_shift']*q_shift_dir/np.linalg.norm(q_shift_dir)
-    scaled_center = kmf.cell.get_scaled_kpts(q_shift)
-    kpts = kmf.cell.make_kpts(dft_params['k_grid'], space_group_symmetry=True, wrap_around = True, scaled_center = scaled_center)
-    np.save(dft_path + '/k-pts_f', kpts.kpts)
-    logger.info("Selected q shift = {}".format(np.array2string(q_shift, precision = 5)))
-    logger.info("{} k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts.nkpts, kpts.nkpts_ibz, parmt.store + '/k-pts_f.npy', dft_params['k_grid'][0], dft_params['k_grid'][1], dft_params['k_grid'][2]))
+    kpts = make_kpts(kmf.cell, dft_params, True)[1]
     ek , ck = kmf.get_bands(kpts.kpts_ibz)
     ek = kpts.transform_mo_energy(ek)
     ck = kpts.transform_mo_coeff(ck)
+    dft_path = 'DFT_resources/' + dft_params['dft_instance']
     np.save(dft_path + '/mo_en_f_dft', ek)
     np.save(dft_path + '/mo_coeff_f', ck)
     logger.info('Non self consistent field equations solved for final state k-points. Data is stored to {}.'.format(dft_path))
