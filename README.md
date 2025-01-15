@@ -4,3 +4,11 @@ Dielectric function calculation with Pyscf, analytical calculation of exact RPA 
 Requirements:
  - python version, > 3.9.6
  - pyscf version, > 2.5.0
+
+ To execute code from terminal:
+ python3 -m dielectric_pyscf
+ (This executes dielectric_pyscf/__main__.py)
+
+ Can also execute within python instance:
+    import dielectric_pyscf
+    dielectric_pyscf.dielectric_functions.main()
