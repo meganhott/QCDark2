@@ -308,14 +308,14 @@ def primgauss_1D_overlaps(dark_objects: dict) -> list[np.ndarray]:
         val = []
         for q, res in zip(qG, results):
             np.save(dir + '{:.5f}'.format(q), res)
-            loc = np.where(np.abs(np.einsum('Rab,a,b->Rab', res, norms, norms, optimize = False)).max(axis = (1,2)) > parmt.precision)[0]
+            loc = np.where(np.abs(np.einsum('Rab,a,b->Rab', res, norms, norms, optimize = False)).max(axis = (1,2)) > parmt.precision_R)[0]
             val.append([q, min(np.abs(Ru[loc.min()]), np.abs(Ru[loc.max()]))])
         return np.array(val)
     def get_R_cutoffs(vals: np.ndarray) -> np.ndarray:
         uns = get_all_unique_nums_in_array(vals[:,1])
         v = []
         for u in uns:
-            v.append([min(np.abs(vals[vals[:,1] == u, 0])), u*(1+parmt.precision)])
+            v.append([min(np.abs(vals[vals[:,1] == u, 0])), u*(1+parmt.precision_R)])
         v.reverse()
         return np.array(v)
     norms = dark_objects['primitive_gaussians'][:,-1]**(1./3.)
