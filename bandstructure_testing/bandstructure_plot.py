@@ -22,7 +22,7 @@ cell.build()
 
 
 band_kpts, kpath, sp_points, sp_labels = initialize_kpts_fcc(initialize_cell()[0])
-energy = np.load('bandstructure_testing/Ge_cc-pvdz_8k_pbe_p-12.npy') #(k, band)
+energy = np.load('/gpfs/scratch/mhott/dielectric_pyscf/bandstructure_testing/Ge_cc-pvdz_8k_pbe_p-12.npy') #(k, band)
 energy = energy*27.2113862 #Hartrees to eV
 
 energy = energy - energy[:,:32].max() #setting top of valence band to 0 eV
@@ -30,10 +30,13 @@ gap = min(energy[:,32]) - max(energy[:,31])
 energy[:,32:] = energy[:,32:] - gap + bg
 
 for i in range(energy.shape[1]):
-    plt.plot(kpath, energy[:,i], 'k')
+    if i==0:
+        plt.plot(kpath, energy[:,i], 'k', label='pyscf 8k PBE cc-pvdz')
+    else:
+        plt.plot(kpath, energy[:,i], 'k')
 
 #QE
-bands_qe = np.loadtxt('bandstructure_testing/Ge_bands.dat.gnu')
+bands_qe = np.loadtxt('/gpfs/home/mhott/q-e/Ge/Ge_bands_pbe_standard.dat.gnu')
 
 k = np.unique(bands_qe[:, 0])
 bands_qe = np.reshape(bands_qe[:, 1], (-1, len(k)))
@@ -42,15 +45,36 @@ gap = min(bands_qe[14]) - max(bands_qe[13])
 bands_qe[14:] = bands_qe[14:] - gap + bg #scissor correction
 
 for band in range(len(bands_qe)):
-    plt.plot(k * kpath[-1]/k[-1], bands_qe[band, :], 'b')
+    if band==0:
+        plt.plot(k * kpath[-1]/k[-1], bands_qe[band, :], 'b', label='QE standard PBE')
+    else:
+        plt.plot(k * kpath[-1]/k[-1], bands_qe[band, :], 'b')
 
+
+
+bands_qe = np.loadtxt('/gpfs/home/mhott/q-e/Ge/Ge_bands_pbe_stringent.dat.gnu')
+
+k = np.unique(bands_qe[:, 0])
+bands_qe = np.reshape(bands_qe[:, 1], (-1, len(k)))
+
+bands_qe = bands_qe - max(bands_qe[21]) #setting top of valence to 0eV
+gap = min(bands_qe[22]) - max(bands_qe[21])
+bands_qe[22:] = bands_qe[22:] - gap + bg #scissor correction
+
+for band in range(len(bands_qe)):
+    if band==0:
+        plt.plot(k * kpath[-1]/k[-1], bands_qe[band, :], 'r', label='QE stringent PBE')
+    else:
+        plt.plot(k * kpath[-1]/k[-1], bands_qe[band, :], 'r')
 
 for h in sp_points:
     plt.axvline(h, color='k', alpha=0.5)
 plt.xticks(ticks=sp_points, labels=sp_labels)
 plt.xlim([min(kpath), max(kpath)])
 
-plt.ylim([-15,15])
+plt.ylim([-20,30])
+plt.title('Germanium')
+plt.legend()
 
-
-plt.show()
+plt.savefig('bandstructure_testing/Ge_plot')
+#plt.show()
