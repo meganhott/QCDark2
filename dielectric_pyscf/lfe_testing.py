@@ -17,6 +17,8 @@ from dielectric_pyscf.epsilon_routines import delta_energy
 from dielectric_pyscf.epsilon_helper import get_3D_overlaps_blocks, kramerskronig_im2re, kramerskronig_re2im
 from dielectric_pyscf.dielectric_functions import *
 
+#from cython_testing.cython_testing import ovlp_cython
+
 #from line_profiler import profile
 #from memory_profiler import profile
 
@@ -128,40 +130,58 @@ def get_RPA_dielectric_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.nda
     #im_delE = np.hstack([im_delE[:,i] for i in range(im_delE.shape[1])]) #(k,(i,j),2)
 
     N_E = int(parmt.E_max/parmt.dE + 1)
-    
-    #Determine number of processes to run in parallel based on memory limitations
-    N_p = get_mp_N(N_AO, k_f.shape[0], mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2], G_q.shape[0], N_E)
-    """
-    with mp.get_context('fork').Pool(N_p) as p:
-        p.map(partial(get_eps_delta_k, k_f=k_f, qG=qG, mo_coeff_i=mo_coeff_i, mo_coeff_f_conj=mo_coeff_f_conj, blocks=blocks, unique_Ri=unique_Ri, q_cuts=q_cuts, einsum_path=einsum_path, im_delE=im_delE, N_AO=N_AO, N_E=N_E), range(k_f.shape[0]))
-    """
-    #get_eps_delta_k(0, k_f=k_f, qG=qG, mo_coeff_i=mo_coeff_i, mo_coeff_f_conj=mo_coeff_f_conj, blocks=blocks, unique_Ri=unique_Ri, q_cuts=q_cuts, einsum_path=einsum_path, im_delE=im_delE, N_AO=N_AO, N_E=N_E)
-
-    start_time = time.time()
-    eta_qG = np.empty((qG.shape[0], mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2]), dtype='complex128')
-    get_eps_delta_k(0, k_f, qG, mo_coeff_i, mo_coeff_f_conj, blocks, unique_Ri, q_cuts, einsum_path, im_delE, N_AO, N_E)
-    #eta_qG = np.array(eta_qG).transpose((1,2,0)) #(G,i,j) -> (i,j,G)
-    print('old 3D overlaps: ', time.time() - start_time)
 
     #blocks array
     primgauss_arr, AO_arr, coeff_arr = make_blocks_arrays(blocks)
-    start_time = time.time()
 
+    
+    #old overlaps
+    start_time = time.time()
+    eta_qG = np.empty((qG.shape[0], mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2]), dtype='complex128')
+    eta_qG_0 = get_eps_delta_k(0, k_f, qG, mo_coeff_i, mo_coeff_f_conj, blocks, unique_Ri, q_cuts, einsum_path, im_delE, N_AO, N_E)
+    print('old 3D overlaps: ', time.time() - start_time)
+    
+    start_time = time.time()
     eta_qG = np.empty((qG.shape[0], mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2]), dtype='complex128')
     for i, qG_i in enumerate(qG):
         eta_qG[i] = get_3D_overlaps_k_arrays(qG_i, k_f=k_f[0], primgauss_arr=primgauss_arr, AO_arr=AO_arr, coeff_arr=coeff_arr, N_AO=N_AO, mo_coeff_i=mo_coeff_i[0], mo_coeff_f_conj=mo_coeff_f_conj[0], unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path)
-    eta_qG = np.array(eta_qG).transpose((1,2,0)) #(G,i,j) -> (i,j,G)
-    print('array numba 3D overlaps 1: ', time.time() - start_time)
-
+    eta_qG_1 = np.array(eta_qG).transpose((1,2,0)) #(G,i,j) -> (i,j,G)
+    print('blocks array, numba function 1 (trial 1): ', time.time() - start_time)
+    
     start_time = time.time()
     eta_qG = np.empty((qG.shape[0], mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2]), dtype='complex128')
     for i, qG_i in enumerate(qG):
-        eta_qG[i] = get_3D_overlaps_k_arrays(qG_i, k_f=k_f[0], primgauss_arr=primgauss_arr, AO_arr=AO_arr, coeff_arr=coeff_arr, N_AO=N_AO, mo_coeff_i=mo_coeff_i[0], mo_coeff_f_conj=mo_coeff_f_conj[0], unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path)
+        eta_qG[i] = get_3D_overlaps_k_arrays2(qG_i, k_f[0], primgauss_arr, AO_arr, coeff_arr, mo_coeff_i[0], mo_coeff_f_conj[0], unique_Ri, q_cuts, einsum_path)
+    eta_qG_2 = np.array(eta_qG).transpose((1,2,0)) #(G,i,j) -> (i,j,G)
+    print('blocks array, numba function 2 (trial 1): ', time.time() - start_time)
+    #print((np.round(eta_qG_1, 5) == np.round(eta_qG_2,5)).all())
+    print((np.round(eta_qG_1, 5) == np.round(eta_qG_0,5)).all())
+    print((np.round(eta_qG_2, 5) == np.round(eta_qG_0,5)).all())
+    #print(qG.shape[0]*mo_coeff_i.shape[2]*mo_coeff_f_conj.shape[2])
+    #print(np.count_nonzero(np.invert(np.round(eta_qG_1, 5) == np.round(eta_qG_2,5))))
+    
+    """
+    eta_qG_0 = get_eps_delta_k(0, k_f, qG, mo_coeff_i, mo_coeff_f_conj, blocks, unique_Ri, q_cuts, einsum_path, im_delE, N_AO, N_E)[:,:,0]
+    
+    eta_qG_1 = get_3D_overlaps_k_arrays(qG[0], k_f=k_f[0], primgauss_arr=primgauss_arr, AO_arr=AO_arr, coeff_arr=coeff_arr, N_AO=N_AO, mo_coeff_i=mo_coeff_i[0], mo_coeff_f_conj=mo_coeff_f_conj[0], unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path)
+
+    eta_qG_2 = get_3D_overlaps_k_arrays2(qG[0], k_f[0], primgauss_arr, AO_arr, coeff_arr, mo_coeff_i[0], mo_coeff_f_conj[0], unique_Ri, q_cuts, einsum_path)    
+
+    print((np.round(eta_qG_0, 5) == np.round(eta_qG_1, 5)).all())
+    print((np.round(eta_qG_0, 5) == np.round(eta_qG_2, 5)).all())
+    """
+
+    #Cython
+    """
+    start_time = time.time()
+    eta_qG = np.empty((qG.shape[0], mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2]), dtype='complex128')
+    for i, qG_i in enumerate(qG):
+        eta_qG[i] = get_3D_overlaps_k_cython(qG_i, k_f=k_f[0], primgauss_arr=primgauss_arr, AO_arr=AO_arr, coeff_arr=coeff_arr, N_AO=N_AO, mo_coeff_i=mo_coeff_i[0], mo_coeff_f_conj=mo_coeff_f_conj[0], unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path)
     eta_qG = np.array(eta_qG).transpose((1,2,0)) #(G,i,j) -> (i,j,G)
-    print('array numba 3D overlaps 2: ', time.time() - start_time)
+    print('Cython 3D overlaps: ', time.time() - start_time)
+    """
 
-
-
+    """
     start_time = time.time()
     blocks = blocks_typed_dict2(blocks)
     print('blocks conversion: ', time.time() - start_time)
@@ -174,7 +194,7 @@ def get_RPA_dielectric_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.nda
         eta_qG[i] = get_3D_overlaps_k_full_numba(qG_i, k_f=k_f[0], blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i[0], mo_coeff_f_conj=mo_coeff_f_conj[0], unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path)
     eta_qG = np.array(eta_qG).transpose((1,2,0)) #(G,i,j) -> (i,j,G)
     print('numba 3D overlaps: ', time.time() - start_time)
-
+    """
     exit()
 
     #read and add together all delta_eps(k) for given q
@@ -264,6 +284,8 @@ def get_eps_delta_k(i_k, k_f, qG, mo_coeff_i, mo_coeff_f_conj, blocks, unique_Ri
                 eps_delta[:,:,int(ind+1)] += (1. - rem)*eta_qG_sq[a, b]
     np.save(parmt.store + '/working_dir/eps_delta/k_{}.npy'.format(i_k), eps_delta)
     print(f'eps_delta(k) calculated in {time.time() - start_time}s, serial')
+
+    return eta_qG
 
 def get_3D_overlaps_k(qG: np.ndarray, k_f: np.ndarray, blocks: dict, N_AO: int, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray, unique_Ri:list[np.ndarray], q_cuts: np.ndarray, path) -> np.ndarray:
     """
@@ -864,8 +886,104 @@ def ovlp_sum_full_arrays(primgauss_arr, AO_arr, coeff_arr, ints_x, ints_y, ints_
 
     return ovlp
 
+def get_3D_overlaps_k_arrays2(qG: np.ndarray, k_f: np.ndarray, primgauss_arr, AO_arr, coeff_arr, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray, unique_Ri:list[np.ndarray], q_cuts: np.ndarray, path) -> np.ndarray:
+    """
+    Calculates all 3D overlaps eta = <jk'|exp(i(q+G)r)|ik> for a given 1BZ q-vector and given G-vector using stored 1D overlaps
+
+    Notes:
+    - 7 times faster than other numba implementation! Changes how R_id and ints are indexed.
+    Possible improvements:
+    - change how R_id and ints are stored in the first place so we don't have to transpose them in this function
+    - build blocks arrays intially instead of making the blocks dict and then writing the arrays from the dict
+
+    Inputs:
+        qG:             np.ndarray of shape (3,): q+G
+        k_f:            np.ndarray of shape (3, ): a single k' corresponding to q
+        blocks:         dict: atomic orbital blocks generated by get_basis_blocks 
+        N_AO:           int: number of atomic orbitals
+        mo_coeff_i:     np.ndarray of shape (N_AO, N_valbands)
+        mo_coeff_f:     np.ndarray of shape (N_AO, N_conbands)
+        unique_Ri:      list of [R_unique_x, R_unique_y, R_unique_z)
+        q_cuts:         np.ndarray of shape (N_q, ): |q+G| at which R_cutoff change
+    Outputs:
+        eta_qG:         np.ndarray of shape (N_val_bands (i), N_cond_bands (j)): all 3D overlaps <jk'|exp(i(q+G)r)|ik>
+    """
+    R_id = np.load(parmt.store + '/R_ids/{}.npy'.format(np.sum(q_cuts < np.linalg.norm(qG)) - 1))
+    ints = []
+    for d in range(3): 
+        ints.append(np.load(parmt.store + '/primgauss_1d_integrals/dim_{}/{:.5f}.npy'.format(d, qG[d]))[:,:,:] * np.exp(-1.j*unique_Ri[d][:]*k_f[None,d])[:,None,None])
+        ints[-1] = np.copy(np.transpose(ints[-1], (1,2,0)), order='C')
+    R_id = R_id.T
+    ovlp = ovlp_sum_full_arrays2(primgauss_arr, AO_arr, coeff_arr, ints[0], ints[1], ints[2], R_id) #numba optimized function
+
+    return np.einsum('kbj,kba,kai->kij', mo_coeff_f_conj[None,:,:], ovlp[None,:,:], mo_coeff_i[None,:,:], optimize = path)[0] #This is faster with added k index for some reason??
+
+@nb.njit(nb.complex128[:,::1]( nb.boolean[:,:,::1], nb.boolean[:,::1], nb.complex128[:,::1], nb.complex128[:,:,::1], nb.complex128[:,:,::1], nb.complex128[:,:,::1], nb.int64[:,::1] ))
+def ovlp_sum_full_arrays2(primgauss_arr, AO_arr, coeff_arr, ints_x, ints_y, ints_z, R_id):
+
+    N_blocks = primgauss_arr.shape[0] #68
+    #N_primgauss = primgauss_arr.shape[1] #86
+    N_AO = coeff_arr.shape[0] #78
+    #N_maxcoeff = coeff_arr.shape[1] #13
+
+    ovlp = np.empty((N_AO, N_AO), dtype=np.complex128)
+
+    for block1 in range(N_blocks):
+        pgauss1 = primgauss_arr[block1] #(pgauss,3) boolean
+        N_pg1 = np.count_nonzero(pgauss1[:,0])
+
+        AO1 = AO_arr[block1] #(N_AO) boolean
+        ints_i_x = ints_x[:,pgauss1[:,0],:]
+        ints_i_y = ints_y[:,pgauss1[:,1],:]
+        ints_i_z = ints_z[:,pgauss1[:,2],:]
+
+        for block2 in range(N_blocks):
+            pgauss2 = primgauss_arr[block2] #(pgauss,3) boolean
+            N_pg2 = np.count_nonzero(pgauss2[:,0])
+            AO2 = AO_arr[block2] #(N_AO) boolean
+
+            tot = np.sum(ints_i_x[pgauss2[:,0]][:,:,R_id[:,0]] * ints_i_y[pgauss2[:,1]][:,:,R_id[:,1]] * ints_i_z[pgauss2[:,2]][:,:,R_id[:,2]], axis=2)
+            #tot_s = np.sum(tot, axis=2)
+
+            for i in np.nonzero(AO1)[0]: #AO for block1
+                for j in np.nonzero(AO2)[0]: #AO for block2
+                    coeff1 = coeff_arr[i,:N_pg1] #(pgauss1)
+                    coeff2 = coeff_arr[j,:N_pg2] #(pgauss2)
+                    ovlp[i,j] = (tot@coeff1)@coeff2
+    return ovlp
+
 # numba experiments ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+# Cython experiments vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+def get_3D_overlaps_k_cython(qG: np.ndarray, k_f: np.ndarray, primgauss_arr, AO_arr, coeff_arr, N_AO: int, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray, unique_Ri:list[np.ndarray], q_cuts: np.ndarray, path) -> np.ndarray:
+    """
+    Calculates all 3D overlaps eta = <jk'|exp(i(q+G)r)|ik> for a given 1BZ q-vector and given G-vector using stored 1D overlaps
+
+    Notes:
+    - Calculating ovlp with numba speeds up this function by ~30-40% but we cannot have a numba-typed blocks dict sent to multiprocessing, so this must be run in serial since it takes way to long to convert blocks each time. Overall, multiprocessing without numba is faster
+
+    Inputs:
+        qG:             np.ndarray of shape (3,): q+G
+        k_f:            np.ndarray of shape (3, ): a single k' corresponding to q
+        blocks:         dict: atomic orbital blocks generated by get_basis_blocks 
+        N_AO:           int: number of atomic orbitals
+        mo_coeff_i:     np.ndarray of shape (N_AO, N_valbands)
+        mo_coeff_f:     np.ndarray of shape (N_AO, N_conbands)
+        unique_Ri:      list of [R_unique_x, R_unique_y, R_unique_z)
+        q_cuts:         np.ndarray of shape (N_q, ): |q+G| at which R_cutoff change
+    Outputs:
+        eta_qG:         np.ndarray of shape (N_val_bands (i), N_cond_bands (j)): all 3D overlaps <jk'|exp(i(q+G)r)|ik>
+    """
+    R_id = np.load(parmt.store + '/R_ids/{}.npy'.format(np.sum(q_cuts < np.linalg.norm(qG)) - 1))
+    ints = []
+    for d in range(3): 
+        ints.append(np.load(parmt.store + '/primgauss_1d_integrals/dim_{}/{:.5f}.npy'.format(d, qG[d]))[:,:,:] * np.exp(-1.j*unique_Ri[d][:]*k_f[None,d])[:,None,None])
+
+    ovlp = ovlp_cython(primgauss_arr, AO_arr, coeff_arr, ints[0], ints[1], ints[2], R_id) #cython optimized function
+
+    return np.einsum('kbj,kba,kai->kij', mo_coeff_f_conj[None,:,:], ovlp[None,:,:], mo_coeff_i[None,:,:], optimize = path)[0] #This is faster with added k index for some reason??
+
+# Cython experiments ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 def main():
     cell, dark_objects = initialize_cell()
