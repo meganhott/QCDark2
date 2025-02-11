@@ -4,6 +4,7 @@ import numpy as np
 import multiprocessing as mp
 from functools import partial
 import pyscf.pbc.gto as pbcgto
+import pyscf.lib.exceptions
 
 from dielectric_pyscf.routines import logger, time_wrapper, makedir, load_unique_R, get_all_unique_nums_in_array
 import dielectric_pyscf.input_parameters as parmt
@@ -20,17 +21,37 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
     if (parmt.pseudo is not None) and (parmt.effective_core_potential is not None):
         raise ValueError("Can only specify effective_core_potential or pseudo. Set one of these parameters to None.")
 
-    cell = pbcgto.M(
-        a = np.asarray(parmt.lattice_vectors),
-        atom = parmt.atomloc,
-        basis = parmt.mybasis,
-        cart = True,
-        verbose = parmt.pyscf_outlev,
-        output = parmt.pyscf_outfile,
-        ecp = parmt.effective_core_potential,
-        precision = parmt.precision,
-        pseudo = parmt.pseudo
-        )
+    try:
+        cell = pbcgto.M(
+            a = np.asarray(parmt.lattice_vectors),
+            atom = parmt.atomloc,
+            basis = parmt.mybasis,
+            cart = True,
+            verbose = parmt.pyscf_outlev,
+            output = parmt.pyscf_outfile,
+            ecp = parmt.effective_core_potential,
+            precision = parmt.precision,
+            pseudo = parmt.pseudo
+            )
+    except pyscf.lib.exceptions.BasisNotFoundError: 
+        #If basis set is not loaded in pyscf, check basis set exchange
+        import basis_set_exchange
+
+        basis_bse = {}
+        for item in parmt.mybasis.items():
+            basis_bse[item[0]] = pbcgto.load(basis_set_exchange.api.get_basis(item[1], elements=item[0], fmt='nwchem'), item[0])
+
+        cell = pbcgto.M(
+            a = np.asarray(parmt.lattice_vectors),
+            atom = parmt.atomloc,
+            basis = basis_bse,
+            cart = True,
+            verbose = parmt.pyscf_outlev,
+            output = parmt.pyscf_outfile,
+            ecp = parmt.effective_core_potential,
+            precision = parmt.precision,
+            pseudo = parmt.pseudo
+            )
     
     max_memory = psutil.virtual_memory().available/(2**20)*.9
     rcut = pbcgto.cell.estimate_rcut(cell, precision=cell.precision)
