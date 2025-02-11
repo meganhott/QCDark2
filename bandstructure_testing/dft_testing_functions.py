@@ -23,10 +23,7 @@ def initialize_kpts_fcc(cell):
 def run_scf():
     cell = initialize_cell()[0]
     new_dft, dft_params = save_dft()
-    if new_dft:
-        return KS_electronic_structure(cell, dft_params)
-    else:
-        return None
+    return KS_electronic_structure(cell, dft_params, CholOrth=True)
 
 def get_bands(kmf, filename):
     cell = initialize_cell()[0]
@@ -43,8 +40,7 @@ def plot_bands(filename):
 
 def main(filename):
     kmf = run_scf()
-    energy = get_bands(filename)
-"""
+    energy = get_bands(kmf, filename)
+
 if __name__ == '__main__':
     main(parmt.system_name)
-"""
