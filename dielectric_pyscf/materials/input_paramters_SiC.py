@@ -10,18 +10,18 @@ Authors: Megan Hott, Aman Singal
 import os
 
 """Naming-parameters: system_name & name of final file"""
-system_name = 'Si_cc-pvtz_pbe_8k'
+system_name = 'SiC_cc-pvdz_pbe_8k'
 res_filename = system_name + '_eps.hdf5'
 
 alt_binning = False #Temporary: set to True to use alternate binning technique, where interpolation and binning happen at end only. Do not use for large q since epsilon is kept in memory for all q+G vectors.
 
 """Build the periodic system, all units in angstrom"""
-lattice_vectors = [[2.715,    2.715,    0. ], 
-                   [0.,       2.715,    2.715], 
-                   [2.715,    0.,       2.715]]
+lattice_vectors = [[2.1798,    2.1798,    0. ], 
+                   [0.,       2.1798,    2.1798], 
+                   [2.1798,    0.,       2.1798]]
 atomloc =  ''' Si	0.	     0.	     0.    
-		     Si	1.3575	1.3575	1.3575'''
-mybasis = {'Si': 'cc-pvtz'}                            # Recommended to keep all basis sets same, however can be made different
+		     C	1.0899	1.0899	1.0899'''
+mybasis = {'Si': 'cc-pvdz', 'C': 'cc-pvdz'}                            # Recommended to keep all basis sets same, however can be made different
                                                        # We follow pyscf notations, see pyscf documentation
 effective_core_potential = None                        # All electron basis sets mandate the use of no ECPs,
                                                        # basis sets and ECPS must be chosen consistently
@@ -35,14 +35,14 @@ xcfunc = 'pbe'                                         # Exchange-Correlation Fu
 k_grid = [8,8,8]                                       # k-grid: resolution of grid points in reciprocal space
 q_shift_dir = [1,1,1]                                  # Direction for q-shift
 q_shift = 0.01                                         # In units of alpha*(mass of electron) 
-scissor_bandgap = 1.1                                  # If None, scissor correction is not applied, generally float in eV
-include_lfe = True                                    # If False, does not incorporate local field effects into the calculation of 
+scissor_bandgap = 2.36                                  # If None, scissor correction is not applied, generally float in eV
+include_lfe = False                                    # If False, does not incorporate local field effects into the calculation of 
                                                        # epsilon. If True, LFEs will be calculated by inverting eps_{GG'} 
 
 """parameters for dielectric function calculations,
      including q_max, bin widths, number of bands, etc"""
 dq = 0.02                                              # In units of alpha*(mass of electron) 
-q_max = 3                                              # In units of alpha*(mass of electron)
+q_max = 1                                              # In units of alpha*(mass of electron)
 q_min = 0                                              # In units of alpha*(mass of electron)
 N_theta = 9                                            # Number of theta bins
 N_phi = 16                                             # Number of phi bins

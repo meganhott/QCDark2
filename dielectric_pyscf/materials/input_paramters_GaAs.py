@@ -10,7 +10,7 @@ Authors: Megan Hott, Aman Singal
 import os
 
 """Naming-parameters: system_name & name of final file"""
-system_name = 'GaAs_cc-pvdz_pbe_8k'
+system_name = 'GaAs_cc-pvdz_pbe_10k'
 res_filename = system_name + '_eps.hdf5'
 
 alt_binning = False #Temporary: set to True to use alternate binning technique, where interpolation and binning happen at end only. Do not use for large q since epsilon is kept in memory for all q+G vectors.
@@ -32,7 +32,7 @@ pseudo = None                                          # Similar to ECPs, slight
 precision = 1e-12                                      # DFT precision parameter, fed to pyscf only
 precision_R = 1e-9                                     # R cutoff precision
 xcfunc = 'pbe'                                         # Exchange-Correlation Functional
-k_grid = [8,8,8]                                       # k-grid: resolution of grid points in reciprocal space
+k_grid = [10,10,10]                                       # k-grid: resolution of grid points in reciprocal space
 q_shift_dir = [1,1,1]                                  # Direction for q-shift
 q_shift = 0.01                                         # In units of alpha*(mass of electron) 
 scissor_bandgap = 1.424                                  # If None, scissor correction is not applied, generally float in eV
