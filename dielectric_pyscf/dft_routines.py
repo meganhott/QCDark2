@@ -4,6 +4,7 @@ import json
 import pyscf.pbc.gto as pbcgto
 import pyscf.pbc.dft as pbcdft
 import pyscf.pbc
+import pyscf.scf.addons #for basis sets with linear dependencies
 
 import dielectric_pyscf.input_parameters as parmt
 from dielectric_pyscf.routines import logger, time_wrapper, makedir
@@ -96,12 +97,13 @@ def make_kpts(cell: pbcgto.cell.Cell, dft_params: dict, with_gamma: bool = True)
     return kpts_i, kpts_f
 
 @time_wrapper
-def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict) -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
+def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict, CholOrth=False) -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
     """
     Function to do density functional theory. Solves the RKS if only one kpoint in kgrid, otherwise solves RKS at each k-point and constructs density matrix from integrating over 1BZ. 
     Inputs:
         cell:       pyscf.pbc.gto.cell.Cell object, initialized in build_cell_from_input routine.
         dft_params: dict, DFT parameters
+        CholOrth:   bool: determines if scf calculation will eliminate linear dependencies with Cholesky orthogonalization - useful for basis sets with diffuse functions
     Returns:
         kmf
     Saves:
@@ -112,7 +114,12 @@ def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict) -> pbcdft.
     kpts = make_kpts(cell, dft_params, True)[0]
     kmf = pbcdft.KRKS(cell, kpts).density_fit()
     kmf.xc = parmt.xcfunc
-    kmf.kernel()
+
+    if CholOrth: #eventually catch linear dependency errors automatically and run this?
+        kmf = pyscf.scf.addons.remove_linear_dep_(kmf).run()
+    else:
+        kmf.kernel()
+    
     if kmf.converged:
         np.save(dft_path + '/mo_en_i_dft', kpts.transform_mo_energy(kmf.mo_energy))
         np.save(dft_path + '/mo_coeff_i', kpts.transform_mo_coeff(kmf.mo_coeff))
