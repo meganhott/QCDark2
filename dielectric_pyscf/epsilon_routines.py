@@ -334,7 +334,8 @@ def get_RPA_dielectric_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.nda
     k_f = k_f[k_pairs[:,1]]
 
     # Calculating the delta function in energy
-    im_delE = delta_energy(mo_en_i, mo_en_f)
+    im_delE = delta_energy(mo_en_i, mo_en_f) #change shape in future!
+    im_delE = np.copy(np.transpose(im_delE, (0,3,1,2))) #(k,2,a,b)
 
     # store relevant quantities, perhaps faster to load in each iteration than supply 
     working_dir = parmt.store + '/working_dir/'
@@ -365,13 +366,14 @@ def RPA_Im_eps_external_prefactor_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q_cu
     """
     # Load data
     working_dir = parmt.store + '/working_dir/'
-    energy_arr = np.load(working_dir + 'im_energy.npy')
+    im_delE = np.load(working_dir + 'im_energy.npy')
+
+
     k_f = np.load(working_dir + 'k_f.npy')
     mo_coeff_f_conj = np.load(working_dir + 'mo_coeff_f_conj.npy')
     mo_coeff_i = np.load(working_dir + 'mo_coeff_i.npy')
 
-    nE = int(parmt.E_max/parmt.dE + 1)
-    eps_delta = np.zeros((qG.shape[0], qG.shape[0], int(parmt.E_max/parmt.dE + 1)), dtype='complex')
+    N_E = int(parmt.E_max/parmt.dE + 1)
 
     start_time = time.time()
     #make k_f, coeff tuples for starmap
@@ -383,32 +385,51 @@ def RPA_Im_eps_external_prefactor_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q_cu
     with mp.get_context('fork').Pool(mp.cpu_count()) as p: #parallelize over k
         p.starmap(partial(eps.get_3D_overlaps_k, qG=qG, primgauss_arr=primgauss_arr, AO_arr=AO_arr, coeff_arr=coeff_arr, unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path), k_tup) #(G,k,i,j)
 
-    logger.info('\t\t\t3D overlaps calculated for all G. Time taken = {:.2f} s.'.format(time.time()-start_time))
+    logger.info('\t\t\teta_qG calculated for all k and G. Time taken = {:.2f} s.'.format(time.time()-start_time))
 
-    #load eta_qG for each k
     start_time = time.time()
     eta_qG = np.empty((k_f.shape[0], mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2], qG.shape[0]), dtype='complex128')
     for i_k in range(k_f.shape[0]):
         eta_qG[i_k] = np.load(parmt.store + f'/working_dir/eta_qG/eta_qG_k{i_k}.npy')
-    eta_qG = eta_qG / np.linalg.norm(qG, axis=1)[None,None,None,:] #(k,i,j,G)
+    eta_qG = eta_qG / np.linalg.norm(qG, axis=1)[None,None,None,:]
 
     logger.info('\t\t\t3D overlaps loaded from memory for all G. Time taken = {:.2f} s.'.format(time.time()-start_time))
 
-    
-    start_time = time.time() #also calculate this in parallel since loop over k? might be limited by size of eta_qG^2 and this function is pretty quick anyway
+    start_time = time.time()
+    eps_delta = np.zeros((N_E, qG.shape[0], qG.shape[0]), dtype='complex')
     for i_k in range(k_f.shape[0]):
-        eta_qG_sq = np.einsum('ijg, ijh -> ijgh', eta_qG[i_k], eta_qG[i_k].conj())
-        for a in range(mo_coeff_i.shape[2]):
-            for b in range(mo_coeff_f_conj.shape[2]):
-                ind, rem = tuple(energy_arr[i_k, a, b])
-                if ind < nE:
-                    eps_delta[:,:,int(ind)] += rem*eta_qG_sq[a, b]
-                if ind < nE - 1:
-                    eps_delta[:,:,int(ind+1)] += (1. - rem)*eta_qG_sq[a, b]
+        a_ind, b_ind = np.nonzero(im_delE[i_k,0] < N_E)
+        eta_qG_ab = eta_qG[i_k, a_ind, b_ind] #(a,b,G) -> (ab,G) #only keeps a,b pairs relevent to delta calculation
+        im_delE_ab = im_delE[i_k, :, a_ind, b_ind] #(2, ab)
+        eta_qG_sq = np.einsum('ag, ah -> agh', eta_qG_ab, eta_qG_ab.conj()) #(ab,G,G')
+
+        for i in range(eta_qG_sq.shape[0]):
+            ind, rem = im_delE_ab[i]
+            eps_delta[int(ind)] += rem*eta_qG_sq[i] #already checked ind < nE
+            if ind < N_E - 1:
+                eps_delta[int(ind+1)] += (1. - rem)*eta_qG_sq[i]
 
     logger.info('\t\t\tDelta part of epsilon calculated. Time taken = {:.2f} s.'.format(time.time()-start_time))
 
-    return eps_delta #(G,G',E)
+
+    #too slow to load all eps_delta from memory, will only get worse with larger N_G
+    """
+    #save eta for each k, then load and combine after calculating for all k
+    with mp.get_context('fork').Pool(mp.cpu_count()) as p: #parallelize over k
+        p.starmap(partial(eps.get_eps_delta_k, qG=qG, primgauss_arr=primgauss_arr, AO_arr=AO_arr, coeff_arr=coeff_arr, unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path, im_delE=im_delE), k_tup) #(G,k,i,j)
+
+    logger.info('\t\t\teps_delta calculated for all k and G. Time taken = {:.2f} s.'.format(time.time()-start_time))
+
+    #load and add eps_delta for all k
+    start_time = time.time()
+    eps_delta = np.zeros((N_E, qG.shape[0], qG.shape[0]), dtype='complex')
+    for i_k in range(k_f.shape[0]):
+        eps_delta += np.load(parmt.store + f'/working_dir/eps_delta/eps_delta_k{i_k}.npy')
+
+    logger.info('\t\t\teps_delta loaded from memory and summed for all k. Time taken = {:.2f} s.'.format(time.time()-start_time))
+    """
+
+    return np.copy(np.transpose(eps_delta, (1,2,0))) #(G,G',E)
 
 @njit
 def delta_energy(mo_en_i, mo_en_f):

@@ -124,17 +124,13 @@ def get_RPA_dielectric_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.nda
 
     qG = q[None, :] + G_q
 
-    #create list of band ids -> eta_qG, im_delE
-    # np.hstack([b[:,i] for i in range(b.shape[1])])
-    #eta_qG = np.hstack([eta_qG[:,i] for i in range(eta_qG.shape[1])]) #collapsing i,j indices #(k,(i,j),G)
-    #im_delE = np.hstack([im_delE[:,i] for i in range(im_delE.shape[1])]) #(k,(i,j),2)
-
     N_E = int(parmt.E_max/parmt.dE + 1)
 
     #blocks array
     primgauss_arr, AO_arr, coeff_arr = make_blocks_arrays(blocks)
 
-    
+    #overlaps testing
+    """
     #old overlaps
     start_time = time.time()
     eta_qG = np.empty((qG.shape[0], mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2]), dtype='complex128')
@@ -154,47 +150,14 @@ def get_RPA_dielectric_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.nda
         eta_qG[i] = get_3D_overlaps_k_arrays2(qG_i, k_f[0], primgauss_arr, AO_arr, coeff_arr, mo_coeff_i[0], mo_coeff_f_conj[0], unique_Ri, q_cuts, einsum_path)
     eta_qG_2 = np.array(eta_qG).transpose((1,2,0)) #(G,i,j) -> (i,j,G)
     print('blocks array, numba function 2 (trial 1): ', time.time() - start_time)
-    #print((np.round(eta_qG_1, 5) == np.round(eta_qG_2,5)).all())
-    print((np.round(eta_qG_1, 5) == np.round(eta_qG_0,5)).all())
-    print((np.round(eta_qG_2, 5) == np.round(eta_qG_0,5)).all())
-    #print(qG.shape[0]*mo_coeff_i.shape[2]*mo_coeff_f_conj.shape[2])
-    #print(np.count_nonzero(np.invert(np.round(eta_qG_1, 5) == np.round(eta_qG_2,5))))
-    
-    """
-    eta_qG_0 = get_eps_delta_k(0, k_f, qG, mo_coeff_i, mo_coeff_f_conj, blocks, unique_Ri, q_cuts, einsum_path, im_delE, N_AO, N_E)[:,:,0]
-    
-    eta_qG_1 = get_3D_overlaps_k_arrays(qG[0], k_f=k_f[0], primgauss_arr=primgauss_arr, AO_arr=AO_arr, coeff_arr=coeff_arr, N_AO=N_AO, mo_coeff_i=mo_coeff_i[0], mo_coeff_f_conj=mo_coeff_f_conj[0], unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path)
-
-    eta_qG_2 = get_3D_overlaps_k_arrays2(qG[0], k_f[0], primgauss_arr, AO_arr, coeff_arr, mo_coeff_i[0], mo_coeff_f_conj[0], unique_Ri, q_cuts, einsum_path)    
-
-    print((np.round(eta_qG_0, 5) == np.round(eta_qG_1, 5)).all())
-    print((np.round(eta_qG_0, 5) == np.round(eta_qG_2, 5)).all())
     """
 
-    #Cython
-    """
-    start_time = time.time()
-    eta_qG = np.empty((qG.shape[0], mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2]), dtype='complex128')
-    for i, qG_i in enumerate(qG):
-        eta_qG[i] = get_3D_overlaps_k_cython(qG_i, k_f=k_f[0], primgauss_arr=primgauss_arr, AO_arr=AO_arr, coeff_arr=coeff_arr, N_AO=N_AO, mo_coeff_i=mo_coeff_i[0], mo_coeff_f_conj=mo_coeff_f_conj[0], unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path)
-    eta_qG = np.array(eta_qG).transpose((1,2,0)) #(G,i,j) -> (i,j,G)
-    print('Cython 3D overlaps: ', time.time() - start_time)
-    """
-
-    """
-    start_time = time.time()
-    blocks = blocks_typed_dict2(blocks)
-    print('blocks conversion: ', time.time() - start_time)
-
-    start_time = time.time()
-
-    #testing for first k
-    eta_qG = np.empty((qG.shape[0], mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2]), dtype='complex128')
-    for i, qG_i in enumerate(qG):
-        eta_qG[i] = get_3D_overlaps_k_full_numba(qG_i, k_f=k_f[0], blocks=blocks, N_AO=N_AO, mo_coeff_i=mo_coeff_i[0], mo_coeff_f_conj=mo_coeff_f_conj[0], unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path)
-    eta_qG = np.array(eta_qG).transpose((1,2,0)) #(G,i,j) -> (i,j,G)
-    print('numba 3D overlaps: ', time.time() - start_time)
-    """
+    #delta testing
+    N_G = 500
+    eta_qG_sq = np.ones((N_G, N_G, mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2]), dtype='complex128')
+    eps_delta = np.zeros((N_G, N_G, 501), dtype='complex')
+    delta_old(eta_qG_sq, im_delE, eps_delta)
+  
     exit()
 
     #read and add together all delta_eps(k) for given q
@@ -261,6 +224,22 @@ def get_RPA_dielectric_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.nda
     eps_delta = prefactor*eps_delta
     
     return eps_delta
+
+
+def delta_old(eta_qG_sq, im_delE, eps_delta):
+    i_k = 0
+    nE = 501
+    for a in range(14):
+        for b in range(64):
+            ind, rem = tuple(im_delE[i_k, a, b])
+            print(ind, rem)
+            exit()
+            if ind < nE:
+                eps_delta[:,:,int(ind)] += rem*eta_qG_sq[a, b]
+            if ind < nE - 1:
+                eps_delta[:,:,int(ind+1)] += (1. - rem)*eta_qG_sq[a, b]
+
+
 
 def get_eps_delta_k(i_k, k_f, qG, mo_coeff_i, mo_coeff_f_conj, blocks, unique_Ri, q_cuts, einsum_path, im_delE, N_AO, N_E):
     #Calculate eta_qG for one k
