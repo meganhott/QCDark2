@@ -37,7 +37,7 @@ def initialize_cell() -> tuple[do_routines.pbcgto.cell.Cell, dict]:
     return cell, dark_objects
 
 def electronic_structure(cell: do_routines.pbcgto.cell.Cell, dft_params: dict):
-    kmf = dft_routines.KS_electronic_structure(cell, dft_params)
+    kmf = dft_routines.KS_electronic_structure(cell, dft_params, CholOrth=parmt.CholOrth)
     dft_routines.KS_non_self_consistent_field(kmf, dft_params)
 
 def dielectric_RPA(cell: do_routines.pbcgto.cell.Cell, dark_objects: dict, dft_params: dict) -> dict:

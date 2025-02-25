@@ -34,8 +34,12 @@ def save_dft():
         dft_dict = json.load(open('DFT_resources/' + d + '/dft_params.txt', 'r'))
         if all(dft_dict[key] == dft_params[key] for key in dft_dict.keys() if key not in ['dft_instance']): #compare everything except dft_instance
             dft_params['dft_instance'] = d
-            if len(os.listdir('DFT_resources/' + d)) < 2: #Something went wrong with previously calculated DFT, calculation should be started again
+            dft_files = os.listdir('DFT_resources/' + d)
+            if len(dft_files) < 4: #Something went wrong with previously calculated DFT, calculation should be started again
                 logger.info('There is not a stored DFT cacluation for these input parameters, a new calculation will be performed and stored as {}.'.format(d))
+                new_dft = True
+            elif ('mo_en_i_dft.npy' in dft_files) and ('mo_en_f_dft.npy' not in dft_files):
+                logger.info('A SCF calculation has been performed for these input parameters as stored as {} but must be redone for the NSCF calculation'.format(d))
                 new_dft = True
             else:
                 logger.info('DFT already calculated for these input parameters and stored as {}'.format(d))
@@ -116,7 +120,7 @@ def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict, CholOrth=F
     kmf.xc = parmt.xcfunc
 
     if CholOrth: #eventually catch linear dependency errors automatically and run this?
-        kmf = pyscf.scf.addons.remove_linear_dep_(kmf).run()
+        kmf = pyscf.scf.addons.remove_linear_dep_(kmf).run() #threshold=1e-7
     else:
         kmf.kernel()
     
