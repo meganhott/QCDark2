@@ -328,7 +328,11 @@ def primgauss_1D_overlaps(dark_objects: dict) -> list[np.ndarray]:
         results = np.transpose(results, axes = (3, 0, 1, 2))
         val = []
         for q, res in zip(qG, results):
-            np.save(dir + '{:.5f}'.format(q), res)
+            if np.round(q, 5) == 0: #save 0.0 and -0.0
+                np.save(dir + '{:.5f}'.format(q), res)
+                np.save(dir + '{:.5f}'.format(-1*q), res)
+            else:
+                np.save(dir + '{:.5f}'.format(q), res)
             loc = np.where(np.abs(np.einsum('Rab,a,b->Rab', res, norms, norms, optimize = False)).max(axis = (1,2)) > parmt.precision_R)[0]
             val.append([q, min(np.abs(Ru[loc.min()]), np.abs(Ru[loc.max()]))])
         return np.array(val)
