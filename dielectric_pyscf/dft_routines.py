@@ -28,13 +28,14 @@ def save_dft():
         'dft_instance': None
     }
 
-    makedir('DFT_resources') #makes DFT_routines directory if it does not already exist
-    dft_instances = os.listdir('DFT_resources')
+    dft_path = parmt.DFT_resources_path + '/DFT_resources'
+    makedir(dft_path) #makes DFT_routines directory if it does not already exist
+    dft_instances = os.listdir(dft_path)
     for d in dft_instances:
-        dft_dict = json.load(open('DFT_resources/' + d + '/dft_params.txt', 'r'))
+        dft_dict = json.load(open(dft_path + '/' + d + '/dft_params.txt', 'r'))
         if all(dft_dict[key] == dft_params[key] for key in dft_dict.keys() if key not in ['dft_instance']): #compare everything except dft_instance
             dft_params['dft_instance'] = d
-            dft_files = os.listdir('DFT_resources/' + d)
+            dft_files = os.listdir(dft_path + '/' + d)
             if len(dft_files) < 4: #Something went wrong with previously calculated DFT, calculation should be started again
                 logger.info('There is not a stored DFT cacluation for these input parameters, a new calculation will be performed and stored as {}.'.format(d))
                 new_dft = True
@@ -52,16 +53,17 @@ def save_dft():
         else:
             dft_params['dft_instance'] = 'DFT_' + str(max([int(d.split('_')[1]) for d in dft_instances]) + 1)
         logger.info('There is not a stored DFT cacluation for these input parameters, a new calculation will be performed and stored as {}.'.format(dft_params['dft_instance']))
-        makedir('DFT_resources/' + dft_params['dft_instance'])
-        json.dump(dft_params, open('DFT_resources/' + dft_params['dft_instance'] + '/dft_params.txt', 'w')) #save dft parameters
+        makedir(dft_path + '/' + dft_params['dft_instance'])
+        json.dump(dft_params, open(dft_path + '/' + dft_params['dft_instance'] + '/dft_params.txt', 'w')) #save dft parameters
         new_dft = True
 
     return new_dft, dft_params
 
 def list_saved_dft():
-    dft_instances = os.listdir('DFT_resources')
+    dft_path = parmt.DFT_resources_path + '/DFT_resources'
+    dft_instances = os.listdir(dft_path)
     for d in dft_instances:
-        dft_dict = json.load(open('DFT_resources/' + d + '/dft_params.txt', 'r'))
+        dft_dict = json.load(open(dft_path + '/' + d + '/dft_params.txt', 'r'))
         print('DFT Instance: {}'.format(dft_dict['dft_instance']))
         print('\tLattice vectors: {}'.format(dft_dict['lattice_vectors']))
         print('\tAtom Locations: {}'.format(dft_dict['atomloc']))
@@ -83,7 +85,7 @@ def make_kpts(cell: pbcgto.cell.Cell, dft_params: dict, with_gamma: bool = True)
         k_i, k_f: np.ndarrays of shape (N, 3), initial and final k vectors generated from the cell.
     """
     #save k_i
-    dft_path = 'DFT_resources/' + dft_params['dft_instance']
+    dft_path = parmt.DFT_resources_path + '/DFT_resources/' + dft_params['dft_instance']
     k_grid = parmt.k_grid
     kpts_i = cell.make_kpts(k_grid, wrap_around=True, with_gamma_point=with_gamma, space_group_symmetry=True)
     np.save(dft_path + '/k-pts_i', kpts_i.kpts)
@@ -113,7 +115,7 @@ def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict, CholOrth=F
     Saves:
         molecular energies, molecular coefficients and molecular occupation numbers.
     """
-    dft_path = 'DFT_resources/' + dft_params['dft_instance']
+    dft_path = parmt.DFT_resources_path + '/DFT_resources/' + dft_params['dft_instance']
     logger.info('Initial state calculation:')
     kpts = make_kpts(cell, dft_params, True)[0]
     kmf = pbcdft.KRKS(cell, kpts).density_fit()
@@ -146,7 +148,7 @@ def KS_non_self_consistent_field(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS, dft_par
     ek , ck = kmf.get_bands(kpts.kpts_ibz)
     ek = kpts.transform_mo_energy(ek)
     ck = kpts.transform_mo_coeff(ck)
-    dft_path = 'DFT_resources/' + dft_params['dft_instance']
+    dft_path = parmt.DFT_resources_path + '/DFT_resources/' + dft_params['dft_instance']
     np.save(dft_path + '/mo_en_f_dft', ek)
     np.save(dft_path + '/mo_coeff_f', ck)
     logger.info('Non self consistent field equations solved for final state k-points. Data is stored to {}.'.format(dft_path))
@@ -167,7 +169,7 @@ def convert_to_eV_and_scissor(cell: pbcgto.cell.Cell, dft_params: dict):
         parmt.store + '/DFT/mo_en_f.npy':   np.ndarray object, stored to disk
     """
     occ_orb = cell.tot_electrons()//2
-    dft_path = 'DFT_resources/' + dft_params['dft_instance']
+    dft_path = parmt.DFT_resources_path + '/DFT_resources/' + dft_params['dft_instance']
     en_i = np.load(dft_path + '/mo_en_i_dft.npy')*alpha*alpha*me #convert to eV
     en_f = np.load(dft_path + '/mo_en_f_dft.npy')*alpha*alpha*me
     homo = max(en_i[:,:occ_orb].max(), en_f[:,:occ_orb].max())
@@ -201,7 +203,7 @@ def get_band_indices(dft_params: dict):
     """
     Saves indices of lowest and highest valence and conduction bands to be used in calculations.
     """
-    dft_path = 'DFT_resources/' + dft_params['dft_instance']
+    dft_path = parmt.DFT_resources_path + '/DFT_resources/' + dft_params['dft_instance']
     mo_occ_i = np.load(dft_path + '/mo_occ_i.npy')
 
     if not (mo_occ_i == mo_occ_i[0]).all():

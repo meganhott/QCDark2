@@ -8,8 +8,9 @@ Authors: Megan Hott, Aman Singal
 """
 
 """Naming-parameters: system_name and name of final file"""
-system_name = 'Si_cc-pvtz_pbe_10k'
+system_name = '/gpfs/scratch/mhott/dielectric_pyscf/Si_cc-pvtz_pbe_10k'
 res_filename = system_name + '_eps.hdf5'
+DFT_resources_path = '/gpfs/scratch/mhott/dielectric_pyscf'
 
 alt_binning = True                 #Temporary: set to True to use alternate binning technique, where interpolation and binning happen at end only. Do not use for large q since epsilon is kept in memory for all q+G vectors.
 
