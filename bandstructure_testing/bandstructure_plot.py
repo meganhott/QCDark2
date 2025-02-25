@@ -145,6 +145,7 @@ def plot_GaAs():
     gap = min(energy[:,val]) - max(energy[:,(val-1)])
     energy[:,val:] = energy[:,val:] - gap + bg
 
+    plt.figure()
     for i in range(energy.shape[1]):
         if i==0:
             plt.plot(kpath, energy[:,i], 'b', label='pyscf 10k PBE cc-pvdz')
@@ -199,8 +200,9 @@ def plot_Si():
     val = 14
     band_kpts, kpath, sp_points, sp_labels = initialize_kpts_fcc(initialize_cell()[0])
 
-    colors = ['b', 'g', 'r']
-    for j, b in enumerate(['cc-pvtz', 'cc-pvqz', 'cc-pwcvtz']):
+    """
+    colors = ['b','r']
+    for j, b in enumerate(['cc-pvtz', 'cc-pvqz']):
         energy = np.load(f'/gpfs/scratch/mhott/dielectric_pyscf/bandstructure_testing/bands_data/Si_{b}_pbe_8k_bands.npy') #(k, band)
         energy = energy*27.2113862 #Hartrees to eV
 
@@ -213,7 +215,25 @@ def plot_Si():
                 plt.plot(kpath, energy[:,i], color=colors[j], label=b)
             else:
                 plt.plot(kpath, energy[:,i], color=colors[j])
+    """
 
+    #lattice constant
+    colors = ['b','r']
+    labels = ['a = 5.43A', 'a = 5.4877A']
+    for j, b in enumerate(['Si_cc-pvtz_pbe_8k', 'Si_cc-pvtz_pbe_8k_a5.4877']):
+        energy = np.load(f'/gpfs/scratch/mhott/dielectric_pyscf/bandstructure_testing/bands_data/{b}_bands.npy') #(k, band)
+        energy = energy*27.2113862 #Hartrees to eV
+
+        energy = energy - energy[:,:val].max() #setting top of valence band to 0 eV
+        gap = min(energy[:,val]) - max(energy[:,(val-1)])
+        #energy[:,val:] = energy[:,val:] - gap + bg
+
+        for i in range(energy.shape[1]):
+            if i==0:
+                plt.plot(kpath, energy[:,i], color=colors[j], label=labels[j])
+            else:
+                plt.plot(kpath, energy[:,i], color=colors[j])
+    
     for h in sp_points:
         plt.axvline(h, color='k', alpha=0.5)
     plt.xticks(ticks=sp_points, labels=sp_labels)
@@ -225,8 +245,45 @@ def plot_Si():
 
     plt.savefig('bandstructure_testing/bands_plots/Si_plot')
 
+def plot_Si_sc():
+    #cc-pvtz
+    val = 14
+    band_kpts, kpath, sp_points, sp_labels = initialize_kpts_fcc(initialize_cell()[0])
+
+    energy = np.load(f'/gpfs/scratch/mhott/dielectric_pyscf/bandstructure_testing/bands_data/Si_cc-pvtz_pbe_8k_bands.npy') #(k, band)
+    energy = energy*27.2113862 #Hartrees to eV
+
+    energy = energy - energy[:,:val].max() #setting top of valence band to 0 eV
+    gap = min(energy[:,val]) - max(energy[:,(val-1)])
+
+    bg = 1.1
+    energy_sc = energy[:,val:] - gap + bg
+
+    for i in range(18):
+        if i == 0:
+            plt.plot(kpath, energy[:,i], color='b', label=r'$E_g = 0.65$ eV')
+        else:
+            plt.plot(kpath, energy[:,i], color='b')
+    for i in range(4):
+        if i == 0:
+            plt.plot(kpath, energy_sc[:,i], color='r', label=r'$E_g = 1.1$ eV')
+        else:
+            plt.plot(kpath, energy_sc[:,i], color='r')
+
+    for h in sp_points:
+        plt.axvline(h, color='k', alpha=0.5)
+    plt.xticks(ticks=sp_points, labels=sp_labels)
+    plt.xlim([min(kpath), max(kpath)])
+    
+    plt.axhline(0, linestyle='--', color='k')
+    plt.ylim([-15,12])
+    plt.title('Si with Scissor Correction')
+    plt.legend()
+
+    plt.savefig('bandstructure_testing/bands_plots/Si_sc')
+
 
 if __name__ == '__main__':
     #plot_Ge()
     #plot_GaAs()
-    plot_Si()
+    plot_Si_sc()
