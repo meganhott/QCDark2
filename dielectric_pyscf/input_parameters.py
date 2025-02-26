@@ -8,7 +8,7 @@ Authors: Megan Hott, Aman Singal
 """
 
 """Naming-parameters: system_name and name of final file"""
-system_name = '/gpfs/scratch/mhott/dielectric_pyscf/Si_cc-pvtz_pbe_10k'
+system_name = '/gpfs/scratch/mhott/dielectric_pyscf/Si_cc-pvtz_pbe_8k'
 res_filename = system_name + '_eps.hdf5'
 DFT_resources_path = '/gpfs/scratch/mhott/dielectric_pyscf'
 
@@ -30,7 +30,7 @@ pseudo = None                      # Similar to ECPs, slight differences (uses C
 precision = 1e-9                   # DFT precision parameter, fed to pyscf only
 precision_R = 1e-9                 # R cutoff precision, used for dielectric function precision
 xcfunc = 'pbe'                     # Exchange-Correlation Functional
-k_grid = [10,10,10]                # k-grid: resolution of grid points in reciprocal space
+k_grid = [8,8,8]                # k-grid: resolution of grid points in reciprocal space
 q_shift_dir = [1,1,1]              # Direction for q-shift (gets normalized automatically)
 q_shift = 0.01                     # In units of alpha*(mass of electron), magnitude of q shift 
 scissor_bandgap = 1.1              # If float in eV, the scissor correction is applied to meet the specified bandgap. If None, scissor correction is not applied

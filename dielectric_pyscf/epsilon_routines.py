@@ -23,7 +23,6 @@ def get_RPA_dielectric(dark_objects: dict):
 
 @time_wrapper
 def get_RPA_dielectric_no_LFE(dark_objects: dict):
-
     # Reading all relevant data
     N_AO = len(dark_objects['aos'])
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
@@ -47,6 +46,12 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict):
     # Generating bins
     bin_centers = bin.gen_bin_centers()
     N_ang_bins = (parmt.N_phi*(parmt.N_theta-2)+2)
+
+    # Generate arrays from blocks dict (temporary)
+    primgauss_arr, AO_arr, coeff_arr = make_blocks_arrays(blocks)
+
+    # Generate optimal path for 3D overlaps calculation
+    einsum_path = np.einsum_path('kbj,kba,kai->kij', mo_coeff_f_conj, np.ones((k_f.shape[0],N_AO,N_AO)), mo_coeff_i)[0]
     
     # Make working directory
     makedir(parmt.store + '/working_dir')
@@ -79,9 +84,12 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict):
         G_q = G_q[np.linalg.norm(q[None, :]+G_q, axis=1) > parmt.q_min - 0.5*parmt.dq]
         logger.info('\t\tnumber of G vectors = {},'.format(len(G_q)))
 
-        eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, blocks, N_AO, q_cuts, VCell, G_q, unique_Ri)
+        eps_q_im = get_RPA_dielectric_no_LFE_q_new(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path)
+        #eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, blocks, N_AO, q_cuts, VCell, G_q, unique_Ri)
 
+        start_time1 = time.time()
         tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, eps_q_im, bin_centers, tot_bin_eps_im, tot_bin_weights)
+        logger.info('\t\t\tIm(eps) binned. Time taken = {:.2f} s.'.format(time.time() - start_time1))
 
         if parmt.save_temp_eps:
             np.save(parmt.store + '/working_dir/tot_bin_eps_im.npy', tot_bin_eps_im)
@@ -92,7 +100,7 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict):
     binned_eps_im = tot_bin_eps_im[:-N_ang_bins, :]/tot_bin_weights[:-N_ang_bins, None] #removing extra bins 
 
     #Interpolating missing Im(eps) bins and then performing Kramers-Kronig transformation to get Re(eps)
-    binned_eps_im_interp = interp_eps(bin_centers, binned_eps_im)
+    #binned_eps_im_interp = interp_eps(bin_centers, binned_eps_im)
     
     np.save(parmt.store+'/binned_eps.npy', eps.kramerskronig_im2re(binned_eps_im) + 1. + 1j*binned_eps_im) #no interpolation 
 
@@ -120,14 +128,14 @@ def get_RPA_dielectric_no_LFE_alt_binning(dark_objects: dict):
 
     unique_Ri = load_unique_R()
 
-    # Generating energy centers & bins
-    E = np.arange(0, parmt.E_max+parmt.dE, parmt.dE)
-    #bin_centers = bin.gen_bin_centers(cartesian=True)
-    #N_ang_bins = (parmt.N_phi*(parmt.N_theta-2)+2)
-    #tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1))
-    #tot_bin_weights = np.zeros(bin_centers.shape[0]+N_ang_bins)
     eps_im = []
     qG = []
+
+    # Generate arrays from blocks dict (temporary)
+    primgauss_arr, AO_arr, coeff_arr = make_blocks_arrays(blocks)
+
+    # Generate optimal path for 3D overlaps calculation
+    einsum_path = np.einsum_path('kbj,kba,kai->kij', mo_coeff_f_conj, np.ones((k_f.shape[0],N_AO,N_AO)), mo_coeff_i)[0]
     
     # Make working directory
     makedir(parmt.store + '/working_dir')
@@ -145,11 +153,10 @@ def get_RPA_dielectric_no_LFE_alt_binning(dark_objects: dict):
         logger.info('\t\tnumber of G vectors = {},'.format(len(G_q)))
         qG.append(q + G_q)
 
-        eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, blocks, N_AO, q_cuts, VCell, G_q, unique_Ri)
+        #eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, blocks, N_AO, q_cuts, VCell, G_q, unique_Ri)
+        eps_q_im = get_RPA_dielectric_no_LFE_q_new(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path)
 
         eps_im.append(eps_q_im)
-
-        #tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, eps_q_im, bin_centers, tot_bin_eps_im, tot_bin_weights)
         
         logger.info('\t\tcomplete. Time taken = {:.2f} s.'.format(time.time() - start_time))
 
@@ -195,6 +202,114 @@ def get_RPA_dielectric_no_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.
     epsilon_im = prefactor*np.array(epsilon_im)
 
     return epsilon_im
+
+def get_RPA_dielectric_no_LFE_q_new(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.ndarray, mo_coeff_f_conj: np.ndarray, mo_coeff_i: np.ndarray, k_f: np.ndarray, k_pairs: np.ndarray, primgauss_arr, AO_arr, coeff_arr, q_cuts: np.ndarray, VCell: float, G_q: np.ndarray, unique_Ri: list[np.ndarray], einsum_path) -> np.ndarray:
+    
+    # Prepare computation
+    prefactor = 8.*(np.pi**2)*(alpha**2)*me/(VCell*len(k_pairs))/parmt.dE
+
+    mo_en_i = mo_en_i[k_pairs[:,0]] #(k_pair,i)
+    mo_en_f = mo_en_f[k_pairs[:,1]] #(k_pair,j)
+    mo_coeff_i = mo_coeff_i[k_pairs[:,0]] #(k_pair,a,i)
+    mo_coeff_f_conj = mo_coeff_f_conj[k_pairs[:,1]] #(k_pair,b,j)
+    k_f = k_f[k_pairs[:,1]]
+
+    # Calculating the delta function in energy
+    im_delE = delta_energy(mo_en_i, mo_en_f)
+    im_delE = np.copy(np.transpose(im_delE, (0,3,1,2))) #(k,2,a,b)
+
+    # store relevant quantities, perhaps faster to load in each iteration than supply 
+    working_dir = parmt.store + '/working_dir/'
+    np.save(working_dir + 'im_energy', im_delE)
+    np.save(working_dir + 'k_f', k_f)
+    np.save(working_dir + 'mo_coeff_i', mo_coeff_i)
+    np.save(working_dir + 'mo_coeff_f_conj', mo_coeff_f_conj)
+
+    qG = q[None, :] + G_q
+
+    epsilon_im = prefactor*RPA_Im_eps_external_prefactor_no_LFE_new(qG, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path)
+
+    return epsilon_im
+
+def RPA_Im_eps_external_prefactor_no_LFE_new(qG, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path):
+    """
+    Returns imaginary part of lim_{n->0} |<j(k+q)|exp(i(q+G)r)|ik>|^2/|q+G|^2/(E - (E_{j(k+q)} - E_{ik} + i n)), summed over i,j,k. 
+
+    Inputs: 
+        qG:         np.ndarray, shape = (N_G, 3), q+G vectors
+        blocks:     dict, atomic orbital blocks generated by get_basis_blocks
+        N_AO:       int, number of atomic orbitals
+        q_cuts:     np.ndarray, cut-off points in q for different R_ids.
+    Outputs:
+        eps_delta:  delta function part of epsilon: Re(eps_delta) corresponds to Im(eps)
+                                                    Im(eps_delta) corresponds to Re(eps) 
+                    shape = (N_G, N_G, int(parmt.E_max/parmt.dE + 1)), prefactor multiplied later.
+    """
+    # Load data
+    working_dir = parmt.store + '/working_dir/'
+    im_delE = np.load(working_dir + 'im_energy.npy')
+
+    k_f = np.load(working_dir + 'k_f.npy')
+    mo_coeff_f_conj = np.load(working_dir + 'mo_coeff_f_conj.npy')
+    mo_coeff_i = np.load(working_dir + 'mo_coeff_i.npy')
+
+    N_E = int(parmt.E_max/parmt.dE + 1)
+
+    start_time = time.time()
+    #make k_f, coeff tuples for starmap
+    k_tup = []
+    for i_k in range(k_f.shape[0]):
+        k_tup.append( (i_k, k_f[i_k], mo_coeff_i[i_k], mo_coeff_f_conj[i_k]) )
+
+    """
+    #save eta for each k, then load and combine after calculating for all k
+    with mp.get_context('fork').Pool(mp.cpu_count()) as p: #parallelize over k
+        p.starmap(partial(eps.get_3D_overlaps_k, qG=qG, primgauss_arr=primgauss_arr, AO_arr=AO_arr, coeff_arr=coeff_arr, unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path), k_tup) #(G,k,i,j)
+
+    logger.info('\t\t\teta_qG calculated for all k and G. Time taken = {:.2f} s.'.format(time.time()-start_time))
+
+    start_time = time.time()
+    eta_qG = np.empty((k_f.shape[0], mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2], qG.shape[0]), dtype='complex128')
+    for i_k in range(k_f.shape[0]):
+        eta_qG[i_k] = np.load(parmt.store + f'/working_dir/eta_qG/eta_qG_k{i_k}.npy')
+    eta_qG = eta_qG / np.linalg.norm(qG, axis=1)[None,None,None,:]
+
+    logger.info('\t\t\t3D overlaps loaded from memory for all G. Time taken = {:.2f} s.'.format(time.time()-start_time))
+
+    start_time = time.time()
+    eps_delta = np.zeros((N_E, qG.shape[0], qG.shape[0]), dtype='complex')
+    for i_k in range(k_f.shape[0]):
+        a_ind, b_ind = np.nonzero(im_delE[i_k,0] < N_E)
+        eta_qG_ab = eta_qG[i_k, a_ind, b_ind] #(a,b,G) -> (ab,G) #only keeps a,b pairs relevent to delta calculation
+        im_delE_ab = im_delE[i_k, :, a_ind, b_ind] #(2, ab)
+        eta_qG_sq = np.einsum('ag, ah -> agh', eta_qG_ab, eta_qG_ab.conj()) #(ab,G,G')
+
+        for i in range(eta_qG_sq.shape[0]):
+            ind, rem = im_delE_ab[i]
+            eps_delta[int(ind)] += rem*eta_qG_sq[i] #already checked ind < nE
+            if ind < N_E - 1:
+                eps_delta[int(ind+1)] += (1. - rem)*eta_qG_sq[i]
+
+    logger.info('\t\t\tDelta part of epsilon calculated. Time taken = {:.2f} s.'.format(time.time()-start_time))
+    """
+
+    #save eta for each k, then load and combine after calculating for all k
+    with mp.get_context('fork').Pool(mp.cpu_count()) as p: #parallelize over k
+        eps_im = p.starmap(partial(eps.get_eps_im_k, qG=qG, primgauss_arr=primgauss_arr, AO_arr=AO_arr, coeff_arr=coeff_arr, unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path, im_delE=im_delE), k_tup)
+    eps_im = np.sum(np.array(eps_im), axis=0) #(E,G): sum over k
+
+    logger.info('\t\t\tIm(eps) calculated for all k and G. Time taken = {:.2f} s.'.format(time.time()-start_time))
+    """
+    #load and add Im(eps) for all k
+    start_time = time.time()
+    eps_delta = np.zeros((N_E, qG.shape[0]), dtype='complex')
+    for i_k in range(k_f.shape[0]):
+        eps_delta += np.load(parmt.store + f'/working_dir/eps_delta/eps_delta_k{i_k}.npy')
+
+    logger.info('\t\t\teps_delta loaded from memory and summed for all k. Time taken = {:.2f} s.'.format(time.time()-start_time))
+    """
+
+    return np.copy(np.transpose(eps_im, (1,0))) #(G,E)
 
 def make_blocks_arrays(blocks):
     block_keys = list(blocks.keys())

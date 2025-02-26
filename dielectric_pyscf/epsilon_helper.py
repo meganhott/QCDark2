@@ -102,30 +102,34 @@ def RPA_Im_eps_external_prefactor_no_LFE(qG, blocks, N_AO, q_cuts, unique_Ri):
                         im_eps[int(ind+1)] += (1. - rem)*eta_qG_sq[k, a, b]
     return im_eps/(qG[0]**2 + qG[1]**2 + qG[2]**2)
 
-def get_eps_delta_k(i_k: int, k_f: np.ndarray, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray, qG: np.ndarray, primgauss_arr, AO_arr, coeff_arr, unique_Ri:list[np.ndarray], q_cuts: np.ndarray, path, im_delE):
+def get_eps_im_k(i_k: int, k_f: np.ndarray, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray, qG: np.ndarray, primgauss_arr, AO_arr, coeff_arr, unique_Ri:list[np.ndarray], q_cuts: np.ndarray, path, im_delE):
+    """
+    For non-LFE code
+    """
     N_E = int(parmt.E_max/parmt.dE + 1)
 
     #Calculating 3D overlaps
-    eta_qG = get_3D_overlaps_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path) #(a,b,G)
+    eta_qG = get_3D_overlaps_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path, store=False) #(a,b,G)
     eta_qG = eta_qG / np.linalg.norm(qG, axis=1)[None,None,:] #(a,b,G)
 
-    eps_delta = np.zeros((N_E, qG.shape[0], qG.shape[0]), dtype='complex')
+    eps_im = np.zeros((N_E, qG.shape[0]), dtype='float64')
 
     a_ind, b_ind = np.nonzero(im_delE[i_k,0] < N_E)
     eta_qG_ab = eta_qG[a_ind, b_ind] #(a,b,G) -> (ab,G) #only keeps a,b pairs relevent to delta calculation
+    eta_qG_sq = (eta_qG_ab*eta_qG_ab.conj()).real #(ab,G)
     im_delE_ab = im_delE[i_k, :, a_ind, b_ind] #(2, ab)
-    eta_qG_sq = np.einsum('ag, ah -> agh', eta_qG_ab, eta_qG_ab.conj()) #(ab,G,G')
 
     for i in range(eta_qG_sq.shape[0]):
         ind, rem = im_delE_ab[i]
-        eps_delta[int(ind)] += rem*eta_qG_sq[i] #already checked ind < nE
+        eps_im[int(ind)] += rem*eta_qG_sq[i] #already checked ind < nE
         if ind < N_E - 1:
-            eps_delta[int(ind+1)] += (1. - rem)*eta_qG_sq[i]
+            eps_im[int(ind+1)] += (1. - rem)*eta_qG_sq[i]
 
-    np.save(parmt.store + f'/working_dir/eps_delta/eps_delta_k{i_k}.npy', eps_delta)
+    #np.save(parmt.store + f'/working_dir/eps_delta/eps_delta_k{i_k}.npy', eps_delta)
+    return eps_im
 
 
-def get_3D_overlaps_k(i_k: int, k_f: np.ndarray, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray, qG: np.ndarray, primgauss_arr, AO_arr, coeff_arr, unique_Ri:list[np.ndarray], q_cuts: np.ndarray, path):
+def get_3D_overlaps_k(i_k: int, k_f: np.ndarray, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray, qG: np.ndarray, primgauss_arr, AO_arr, coeff_arr, unique_Ri:list[np.ndarray], q_cuts: np.ndarray, path, store=True):
     """
     Calculates all 3D overlaps eta = <jk'|exp(i(q+G)r)|ik> for a given 1BZ q-vector and given G-vector using stored 1D overlaps
 
@@ -159,8 +163,9 @@ def get_3D_overlaps_k(i_k: int, k_f: np.ndarray, mo_coeff_i: np.ndarray, mo_coef
         eta_qG[i] = np.einsum('kbj,kba,kai->kij', mo_coeff_f_conj[None,:,:], ovlp[None,:,:], mo_coeff_i[None,:,:], optimize = path)[0]
         #eta_qG[i] = get_3D_overlaps_k_arrays2(qG_i, k_f[0], primgauss_arr, AO_arr, coeff_arr, mo_coeff_i[0], mo_coeff_f_conj[0], unique_Ri, q_cuts, einsum_path)
     eta_qG = np.transpose(eta_qG, axes=(1,2,0)) #(G,i,j) -> (i,j,G)
-    np.save(parmt.store + f'/working_dir/eta_qG/eta_qG_k{i_k}.npy', eta_qG)
-    #return eta_qG
+    if store:
+        np.save(parmt.store + f'/working_dir/eta_qG/eta_qG_k{i_k}.npy', eta_qG)
+    return eta_qG
 
 @nb.njit(nb.complex128[:,::1]( nb.boolean[:,:,::1], nb.boolean[:,::1], nb.complex128[:,::1], nb.complex128[:,:,::1], nb.complex128[:,:,::1], nb.complex128[:,:,::1], nb.int64[:,::1] ))
 def ovlp_sum(primgauss_arr, AO_arr, coeff_arr, ints_x, ints_y, ints_z, R_id):
