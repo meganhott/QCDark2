@@ -59,22 +59,38 @@ def save_dft():
 
     return new_dft, dft_params
 
-def list_saved_dft():
+def list_saved_dft(df=False):
     dft_path = parmt.DFT_resources_path + '/DFT_resources'
     dft_instances = os.listdir(dft_path)
-    for d in dft_instances:
-        dft_dict = json.load(open(dft_path + '/' + d + '/dft_params.txt', 'r'))
-        print('DFT Instance: {}'.format(dft_dict['dft_instance']))
-        print('\tLattice vectors: {}'.format(dft_dict['lattice_vectors']))
-        print('\tAtom Locations: {}'.format(dft_dict['atomloc']))
-        print('\tBasis: {}'.format(dft_dict['mybasis']))
-        print('\tEffective Core Potential: {}'.format(dft_dict['effective_core_potential']))
-        print('\tPseudopotential: {}'.format(dft_dict['pseudo']))
-        print('\tPrecision: {}'.format(dft_dict['precision']))
-        print('\tExchange Correlation Functional: {}'.format(dft_dict['xcfunc']))
-        print('\tk-grid: {}'.format(dft_dict['k_grid']))
-        print('\tq Shift Direction: {}'.format(dft_dict['q_shift_dir']))
-        print('\tq shift: {}'.format(dft_dict['q_shift']))
+    if df: #return pandas dataframe
+        import pandas as pd
+        #Work on making this look better
+        for i, d in enumerate(dft_instances):
+            dft_dict = json.load(open(dft_path + '/' + d + '/dft_params.txt', 'r'))
+            dft_dict['lattice_vectors'] = str(dft_dict['lattice_vectors'])
+            dft_dict['mybasis'] = str(dft_dict['mybasis'])
+            dft_dict['k_grid'] = str(dft_dict['k_grid'])
+            dft_dict['q_shift_dir'] = str(dft_dict['q_shift_dir'])
+
+            if i == 0:
+                df = pd.DataFrame(data=dft_dict)
+            else:
+                df = pd.concat([df, pd.DataFrame(data=dft_dict)], ignore_index=True)
+
+    else: #print all dft params
+        for d in dft_instances:
+            dft_dict = json.load(open(dft_path + '/' + d + '/dft_params.txt', 'r'))
+            print('DFT Instance: {}'.format(dft_dict['dft_instance']))
+            print('\tLattice vectors: {}'.format(dft_dict['lattice_vectors']))
+            print('\tAtom Locations: {}'.format(dft_dict['atomloc']))
+            print('\tBasis: {}'.format(dft_dict['mybasis']))
+            print('\tEffective Core Potential: {}'.format(dft_dict['effective_core_potential']))
+            print('\tPseudopotential: {}'.format(dft_dict['pseudo']))
+            print('\tPrecision: {}'.format(dft_dict['precision']))
+            print('\tExchange Correlation Functional: {}'.format(dft_dict['xcfunc']))
+            print('\tk-grid: {}'.format(dft_dict['k_grid']))
+            print('\tq Shift Direction: {}'.format(dft_dict['q_shift_dir']))
+            print('\tq shift: {}'.format(dft_dict['q_shift']))
 
 def make_kpts(cell: pbcgto.cell.Cell, dft_params: dict, with_gamma: bool = True) -> pyscf.pbc.lib.kpts.KPoints:
     """
