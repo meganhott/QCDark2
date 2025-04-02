@@ -119,7 +119,7 @@ def make_kpts(cell: pbcgto.cell.Cell, dft_params: dict, with_gamma: bool = True)
     return kpts_i, kpts_f
 
 @time_wrapper
-def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict, CholOrth=False) -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
+def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict, with_gamma=True, CholOrth=False, cderi_save_file=None, density_fitting='GDF') -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
     """
     Function to do density functional theory. Solves the RKS if only one kpoint in kgrid, otherwise solves RKS at each k-point and constructs density matrix from integrating over 1BZ. 
     Inputs:
@@ -133,9 +133,19 @@ def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict, CholOrth=F
     """
     dft_path = parmt.DFT_resources_path + '/DFT_resources/' + dft_params['dft_instance']
     logger.info('Initial state calculation:')
-    kpts = make_kpts(cell, dft_params, True)[0]
-    kmf = pbcdft.KRKS(cell, kpts).density_fit()
+    kpts = make_kpts(cell, dft_params, with_gamma=with_gamma)[0]
+
+    if density_fitting == 'GDF': #Gaussian density fitting
+        kmf = pbcdft.KRKS(cell, kpts).density_fit()
+    elif density_fitting == 'MDF': #Mixed density fitting
+        kmf = pbcdft.KRKS(cell, kpts).mix_density_fit()
+    else:
+        raise(ValueError('density_fitting must be "GDF" for Gaussian Density Fitting, or "MDF" for Mixed Density Fitting. FFTDF is not supported for all-electron calculations due to memory constraints.'))
+
     kmf.xc = parmt.xcfunc
+
+    if cderi_save_file is not None:
+        kmf.with_df._cderi_to_save = cderi_save_file
 
     if CholOrth: #eventually catch linear dependency errors automatically and run this?
         kmf = pyscf.scf.addons.remove_linear_dep_(kmf).run() #threshold=1e-7

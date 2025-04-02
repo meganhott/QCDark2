@@ -23,7 +23,7 @@ def initialize_kpts_fcc(cell):
 def run_scf():
     cell = initialize_cell()[0]
     new_dft, dft_params = save_dft()
-    return KS_electronic_structure(cell, dft_params, CholOrth=parmt.CholOrth)
+    return KS_electronic_structure(cell, dft_params, with_gamma=False, CholOrth=parmt.CholOrth, cderi_save_file='/gpfs/scratch/mhott/cderi', density_fitting='MDF') #no gamma for PBE0
 
 def get_bands(kmf, filename):
     cell = initialize_cell()[0]

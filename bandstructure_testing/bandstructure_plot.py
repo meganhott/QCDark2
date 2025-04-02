@@ -42,7 +42,7 @@ def plot_Ge():
     """
 
     #pyscf 10k
-    energy = np.load('/gpfs/scratch/mhott/dielectric_pyscf/bandstructure_testing/bands_data/Ge_cc-pvdz_pbe_10k_bands.npy') #(k, band)
+    energy = np.load('/gpfs/home/mhott/dielectric_pyscf/bandstructure_testing/bands_data/Ge_cc-pvdz_pbe_10k_bands.npy') #(k, band)
     energy = energy*27.2113862 #Hartrees to eV
 
     energy = energy - energy[:,:32].max() #setting top of valence band to 0 eV
@@ -112,7 +112,7 @@ def plot_Ge():
     plt.xticks(ticks=sp_points, labels=sp_labels)
     plt.xlim([min(kpath), max(kpath)])
 
-    plt.ylim([-20,30])
+    #plt.ylim([-20,30])
     plt.title('Germanium')
     plt.legend()
 
@@ -138,7 +138,7 @@ def plot_GaAs():
     #pyscf 10k
     val = 32
     band_kpts, kpath, sp_points, sp_labels = initialize_kpts_fcc(initialize_cell()[0])
-    energy = np.load('/gpfs/scratch/mhott/dielectric_pyscf/bandstructure_testing/bands_data/GaAs_cc-pvdz_pbe_10k_bands.npy') #(k, band)
+    energy = np.load('/gpfs/home/mhott/dielectric_pyscf/bandstructure_testing/bands_data/GaAs_cc-pvdz_pbe_10k_bands.npy') #(k, band)
     energy = energy*27.2113862 #Hartrees to eV
 
     energy = energy - energy[:,:val].max() #setting top of valence band to 0 eV
@@ -221,7 +221,7 @@ def plot_Si():
     colors = ['b','r']
     labels = ['a = 5.43A', 'a = 5.4877A']
     for j, b in enumerate(['Si_cc-pvtz_pbe_8k', 'Si_cc-pvtz_pbe_8k_a5.4877']):
-        energy = np.load(f'/gpfs/scratch/mhott/dielectric_pyscf/bandstructure_testing/bands_data/{b}_bands.npy') #(k, band)
+        energy = np.load(f'/gpfs/home/mhott/dielectric_pyscf/bandstructure_testing/bands_data/{b}_bands.npy') #(k, band)
         energy = energy*27.2113862 #Hartrees to eV
 
         energy = energy - energy[:,:val].max() #setting top of valence band to 0 eV
@@ -250,7 +250,7 @@ def plot_Si_sc():
     val = 14
     band_kpts, kpath, sp_points, sp_labels = initialize_kpts_fcc(initialize_cell()[0])
 
-    energy = np.load(f'/gpfs/scratch/mhott/dielectric_pyscf/bandstructure_testing/bands_data/Si_cc-pvtz_pbe_8k_bands.npy') #(k, band)
+    energy = np.load(f'/gpfs/home/mhott/dielectric_pyscf/bandstructure_testing/bands_data/Si_cc-pvtz_pbe_8k_bands.npy') #(k, band)
     energy = energy*27.2113862 #Hartrees to eV
 
     energy = energy - energy[:,:val].max() #setting top of valence band to 0 eV
@@ -284,6 +284,6 @@ def plot_Si_sc():
 
 
 if __name__ == '__main__':
-    #plot_Ge()
+    plot_Ge()
     #plot_GaAs()
-    plot_Si_sc()
+    #plot_Si_sc()
