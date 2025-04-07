@@ -48,7 +48,18 @@ def time_wrapper(func=None, *, n_tabs=0):
         logger.info('\t'*n_tabs + 'Exiting function {}. Time taken = {:.2f} s.\n'.format(func.__name__, end - start))
         return val
 
-    return wrap
+    # When using MPI, only log for rank 0
+    if parmt.mpi:
+        from mpi4py import MPI
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank
+
+        if rank == 0:
+            return wrap
+        else:
+            return None
+    else: # Not using MPI
+        return wrap
 
 def makedir(dirname: str, log = False) -> None:
     """

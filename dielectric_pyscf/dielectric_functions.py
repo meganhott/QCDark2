@@ -48,18 +48,26 @@ def dielectric_RPA(cell: do_routines.pbcgto.cell.Cell, dark_objects: dict, dft_p
     dark_objects['R_cutoff_q_points'] = do_routines.store_R_ids(dark_objects)
     return dark_objects
 
-def main():
+def main_setup() -> dict:
     cell, dark_objects = initialize_cell()
 
     new_dft, dft_params = dft_routines.save_dft()
     if new_dft:
         electronic_structure(cell, dft_params)
     dark_objects = dielectric_RPA(cell, dark_objects, dft_params)
+    return dark_objects
 
+def main_eps(dark_objects: dict):
     #Calculate and save interpolated 3D binned epsilon
     eps_routines.get_RPA_dielectric(dark_objects)
+
+def main_eps_mpi(dark_objects: dict, rank: int, q_start: int, q_stop: int):
+    bin_eps_im, bin_weights, bin_centers = eps_routines.get_RPA_dielectric(dark_objects, rank=rank, q_start=q_start, q_stop=q_stop)
+    return bin_eps_im, bin_weights, bin_centers
 
 if __name__ == '__main__':
     utils.check_requirements() # Check requirements
     utils.patch() # Patch required for some versions, see function for details
-    main()
+    dark_objects = main_setup()
+    main_eps(dark_objects)
+

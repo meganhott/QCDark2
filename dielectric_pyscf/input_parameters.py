@@ -12,6 +12,8 @@ system_name = '/gpfs/scratch/mhott/dielectric_pyscf/Si_cc-pvtz_pbe_8k'
 res_filename = system_name + '_eps.hdf5'
 DFT_resources_path = '/gpfs/scratch/mhott/dielectric_pyscf'
 
+mpi = False                         # If True, MPI parallelization will be implemented
+
 alt_binning = True                 #Temporary: set to True to use alternate binning technique, where interpolation and binning happen at end only. Do not use for large q since epsilon is kept in memory for all q+G vectors.
 
 """Build the periodic system, all units in angstrom"""
@@ -48,7 +50,6 @@ numval = 'all'                     # Number of valence bands to include in the c
 numcon = 'all'                     # Number of conduction bands to include in the calculation, use 'all' for all available conduction bands
 
 """Logging and calculation parameters"""
-save_temp_eps = True               # Save calculations after each q is completed
 q_start = None                     # If None, calculation is performed for all q vectors. If set to an integer, the 
                                    # calculations are started at that q vector. Only use if previous calculation was interrupted.
 

@@ -109,7 +109,7 @@ def get_eps_im_k(i_k: int, k_f: np.ndarray, mo_coeff_i: np.ndarray, mo_coeff_f_c
     N_E = int(parmt.E_max/parmt.dE + 1)
 
     #Calculating 3D overlaps
-    eta_qG = get_3D_overlaps_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path, store=False) #(a,b,G)
+    eta_qG = get_3D_overlaps_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path) #(a,b,G)
     eta_qG = eta_qG / np.linalg.norm(qG, axis=1)[None,None,:] #(a,b,G)
 
     eps_im = np.zeros((N_E, qG.shape[0]), dtype='float64')
@@ -129,7 +129,7 @@ def get_eps_im_k(i_k: int, k_f: np.ndarray, mo_coeff_i: np.ndarray, mo_coeff_f_c
     return eps_im
 
 
-def get_3D_overlaps_k(i_k: int, k_f: np.ndarray, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray, qG: np.ndarray, primgauss_arr, AO_arr, coeff_arr, unique_Ri:list[np.ndarray], q_cuts: np.ndarray, path, store=True):
+def get_3D_overlaps_k(i_k: int, k_f: np.ndarray, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray, qG: np.ndarray, primgauss_arr, AO_arr, coeff_arr, unique_Ri:list[np.ndarray], q_cuts: np.ndarray, path):
     """
     Calculates all 3D overlaps eta = <jk'|exp(i(q+G)r)|ik> for a given 1BZ q-vector and given G-vector using stored 1D overlaps
 
@@ -163,8 +163,6 @@ def get_3D_overlaps_k(i_k: int, k_f: np.ndarray, mo_coeff_i: np.ndarray, mo_coef
         eta_qG[i] = np.einsum('kbj,kba,kai->kij', mo_coeff_f_conj[None,:,:], ovlp[None,:,:], mo_coeff_i[None,:,:], optimize = path)[0]
         #eta_qG[i] = get_3D_overlaps_k_arrays2(qG_i, k_f[0], primgauss_arr, AO_arr, coeff_arr, mo_coeff_i[0], mo_coeff_f_conj[0], unique_Ri, q_cuts, einsum_path)
     eta_qG = np.transpose(eta_qG, axes=(1,2,0)) #(G,i,j) -> (i,j,G)
-    if store:
-        np.save(parmt.store + f'/working_dir/eta_qG/eta_qG_k{i_k}.npy', eta_qG)
     return eta_qG
 
 @nb.njit(nb.complex128[:,::1]( nb.boolean[:,:,::1], nb.boolean[:,::1], nb.complex128[:,::1], nb.complex128[:,:,::1], nb.complex128[:,:,::1], nb.complex128[:,:,::1], nb.int64[:,::1] ))
