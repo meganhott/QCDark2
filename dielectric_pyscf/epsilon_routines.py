@@ -19,7 +19,9 @@ def get_RPA_dielectric(dark_objects: dict, rank=None, q_start=parmt.q_start, q_s
         if parmt.alt_binning: #Temporary
             get_RPA_dielectric_no_LFE_alt_binning(dark_objects)
         else:
-            get_RPA_dielectric_no_LFE(dark_objects, rank, q_start, q_stop)
+            tot_bin_eps_im, tot_bin_weights, bin_centers = get_RPA_dielectric_no_LFE(dark_objects, rank, q_start, q_stop)
+
+    return tot_bin_eps_im, tot_bin_weights, bin_centers
 
 @time_wrapper
 def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=None):
@@ -104,13 +106,10 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
     tot_bin_eps_im = tot_bin_eps_im[:-N_ang_bins, :]
     tot_bin_weights = tot_bin_weights[:-N_ang_bins]
 
-    if rank is not None: #Using MPI
-        return tot_bin_eps_im, tot_bin_weights, bin_centers
-    
-    else:
-        #No MPI: dielectric function has been calculated for all q and can be saved
+    if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(tot_bin_eps_im, tot_bin_weights, bin_centers)
-        return None
+
+    return tot_bin_eps_im, tot_bin_weights, bin_centers
 
 def get_total_eps_mpi(bin_eps_im_all, bin_weights_all, bin_centers):
     #Used for MPI calculation
