@@ -8,13 +8,13 @@ Authors: Megan Hott, Aman Singal
 """
 
 """Naming-parameters: system_name and name of final file"""
-system_name = '/gpfs/scratch/mhott/dielectric_pyscf/Si_cc-pvtz_pbe_8k'
+system_name = '/gpfs/scratch/mhott/dielectric_pyscf_results/Si_cc-pvtz_pbe_8k'
 res_filename = system_name + '_eps.hdf5'
-DFT_resources_path = '/gpfs/scratch/mhott/dielectric_pyscf'
+DFT_resources_path = '/gpfs/scratch/mhott/dielectric_pyscf_results'
 
-mpi = False                         # If True, MPI parallelization will be implemented
+mpi = True                         # If True, MPI parallelization will be implemented
 
-alt_binning = True                 #Temporary: set to True to use alternate binning technique, where interpolation and binning happen at end only. Do not use for large q since epsilon is kept in memory for all q+G vectors.
+alt_binning = False                 #Temporary: set to True to use alternate binning technique, where interpolation and binning happen at end only. Do not use for large q since epsilon is kept in memory for all q+G vectors.
 
 """Build the periodic system, all units in angstrom"""
 a = 5.43 #5.4877                   # Crystal lattice constant
@@ -40,7 +40,7 @@ include_lfe = False                # If False, does not incorporate local field 
 
 """Parameters for dielectric function calculations"""
 dq = 0.02                          # In units of alpha*(mass of electron), size of momentum bins 
-q_max = 1                          # In units of alpha*(mass of electron), maximum momentum
+q_max = 2                          # In units of alpha*(mass of electron), maximum momentum
 q_min = 0                          # In units of alpha*(mass of electron), minimum momentum
 N_theta = 9                        # Number of theta bins
 N_phi = 16                         # Number of phi bins

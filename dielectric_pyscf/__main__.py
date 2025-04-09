@@ -15,22 +15,35 @@ if parmt.mpi:
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
-    rank = comm.Get_rank
+    rank = comm.Get_rank()
     N_nodes = comm.Get_size()
 
-    print(f'MPI = on. Dielectric function calculations for each q will be split among {N_nodes} nodes after initial pyscf DFT calculations.')
-
     if rank == 0: #pyscf calculations and dark_objects setup done on one node
+        from dielectric_pyscf.routines import logger
+        logger.info(f'MPI = on. Dielectric function calculations for each q will be split among {N_nodes} nodes after initial pyscf DFT calculations.')
+
         dark_objects = main_setup()
 
         N_q = len(dark_objects['unique_q'])
         q_start, q_stop = get_q_start_stop(N_q, N_nodes)
+
+        #testing
+        print(f'q_start = {q_start}')
+        print(f'q_stop = {q_stop}')
+
+        logger.info('\nMPI begins here vvv\n')
     else:
         dark_objects = None
+        q_start = np.empty((N_nodes), dtype='int')
+        q_stop = np.empty((N_nodes), dtype='int')
+
 
     dark_objects = comm.bcast(dark_objects, root=0) #broadcast dark_objects to all nodes
-    q_start = comm.bcast(q_start, root=0)[rank]
-    q_stop = comm.bcast(q_stop, root=0)[rank]
+    comm.Bcast(q_start, root=0)
+    comm.Bcast(q_stop, root=0)
+
+    q_start = q_start[rank]
+    q_stop = q_stop[rank]
 
     bin_eps_im, bin_weights, bin_centers = main_eps_mpi(dark_objects, rank=rank, q_start=q_start, q_stop=q_stop)
 
@@ -52,6 +65,8 @@ if parmt.mpi:
         get_total_eps_mpi(bin_eps_im_rec, bin_weights_rec, bin_centers)
 
 else:
-    print('MPI = off. All calculations will be done on one node.')
+    from dielectric_pyscf.routines import logger
+    logger.info('MPI = off. All calculations will be done on one node.')
+
     dark_objects = main_setup()
     main_eps(dark_objects)

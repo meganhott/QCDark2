@@ -12,14 +12,14 @@ import dielectric_pyscf.input_parameters as parmt
 import dielectric_pyscf.epsilon_helper as eps
 import dielectric_pyscf.binning as bin
 
-def get_RPA_dielectric(dark_objects: dict):
+def get_RPA_dielectric(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=None):
     if parmt.include_lfe:
         get_RPA_dielectric_LFE(dark_objects)
     else:
         if parmt.alt_binning: #Temporary
             get_RPA_dielectric_no_LFE_alt_binning(dark_objects)
         else:
-            get_RPA_dielectric_no_LFE(dark_objects)
+            get_RPA_dielectric_no_LFE(dark_objects, rank, q_start, q_stop)
 
 @time_wrapper
 def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=None):

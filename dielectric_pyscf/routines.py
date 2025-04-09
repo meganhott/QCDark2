@@ -47,6 +47,11 @@ def time_wrapper(func=None, *, n_tabs=0):
         end = time.time()
         logger.info('\t'*n_tabs + 'Exiting function {}. Time taken = {:.2f} s.\n'.format(func.__name__, end - start))
         return val
+    
+    @wraps(func) #for MPI so we only log rank 0
+    def wrap_nolog(*args, **kwargs):
+        val = func(*args, **kwargs)
+        return val
 
     # When using MPI, only log for rank 0
     if parmt.mpi:
@@ -57,7 +62,8 @@ def time_wrapper(func=None, *, n_tabs=0):
         if rank == 0:
             return wrap
         else:
-            return None
+            return wrap_nolog
+        
     else: # Not using MPI
         return wrap
 
