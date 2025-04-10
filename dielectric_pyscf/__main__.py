@@ -3,7 +3,7 @@
 import numpy as np
 import dielectric_pyscf.input_parameters as parmt
 from dielectric_pyscf.dielectric_functions import main_setup, main_eps, main_eps_mpi
-from dielectric_pyscf.epsilon_routines import get_total_eps_mpi
+from dielectric_pyscf.epsilon_routines import save_eps
 
 def get_q_start_stop(N_q, N_nodes):
     q_per_node = int(np.ceil(N_q/N_nodes))
@@ -62,7 +62,7 @@ if parmt.mpi:
         bin_eps_im_rec = np.sum(bin_eps_im_rec, axis=0)
         bin_weights_rec = np.sum(bin_weights_rec, axis=0)
 
-        get_total_eps_mpi(bin_eps_im_rec, bin_weights_rec, bin_centers)
+        save_eps(bin_eps_im_rec, bin_weights_rec, bin_centers)
 
 else:
     from dielectric_pyscf.routines import logger

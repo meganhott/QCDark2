@@ -111,13 +111,6 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
 
     return tot_bin_eps_im, tot_bin_weights, bin_centers
 
-def get_total_eps_mpi(bin_eps_im_all, bin_weights_all, bin_centers):
-    #Used for MPI calculation
-    bin_eps_im_all = np.sum(bin_eps_im_all, axis=0)
-    bin_weights_all = np.sum(bin_weights_all, axis=0)
-
-    save_eps(bin_eps_im_all, bin_weights_all, bin_centers)
-
 def save_eps(bin_eps_im, bin_weights, bin_centers):
     binned_eps_im = bin_eps_im/bin_weights[:, None]
     binned_eps = eps.kramerskronig_im2re(binned_eps_im) + 1. + 1j*binned_eps_im
