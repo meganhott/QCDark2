@@ -51,7 +51,7 @@ if parmt.mpi:
     bin_eps_im_rec = None
     bin_weights_rec = None
     if rank == 0:
-        bin_eps_im_rec = np.empty([i for j in [(N_nodes,), bin_eps_im.shape] for i in j], dtype='complex')
+        bin_eps_im_rec = np.empty([i for j in [(N_nodes,), bin_eps_im.shape] for i in j], dtype='float')
         bin_weights_rec = np.empty([i for j in [(N_nodes,), bin_weights.shape] for i in j], dtype='float')
 
     comm.Gather(bin_eps_im, bin_eps_im_rec, root=0)
