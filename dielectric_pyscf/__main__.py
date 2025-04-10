@@ -60,7 +60,7 @@ if parmt.mpi:
     #Add together contributions from all nodes and save
     if rank == 0:
         bin_eps_im_rec = np.sum(bin_eps_im_rec, axis=0)
-        bin_weights_rec = np.sum(bin_weights, axis=0)
+        bin_weights_rec = np.sum(bin_weights_rec, axis=0)
 
         get_total_eps_mpi(bin_eps_im_rec, bin_weights_rec, bin_centers)
 
