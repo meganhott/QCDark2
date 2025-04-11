@@ -62,8 +62,8 @@ def main_eps(dark_objects: dict):
     eps_routines.get_RPA_dielectric(dark_objects)
 
 def main_eps_mpi(dark_objects: dict, rank: int, q_start: int, q_stop: int):
-    bin_eps_im, bin_weights, bin_centers = eps_routines.get_RPA_dielectric(dark_objects, rank=rank, q_start=q_start, q_stop=q_stop)
-    return bin_eps_im, bin_weights, bin_centers
+    bin_eps, bin_weights, bin_centers = eps_routines.get_RPA_dielectric(dark_objects, rank=rank, q_start=q_start, q_stop=q_stop)
+    return bin_eps, bin_weights, bin_centers
 
 if __name__ == '__main__':
     utils.check_requirements() # Check requirements

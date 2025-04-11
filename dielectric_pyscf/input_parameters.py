@@ -36,7 +36,7 @@ k_grid = [8,8,8]                # k-grid: resolution of grid points in reciproca
 q_shift_dir = [1,1,1]              # Direction for q-shift (gets normalized automatically)
 q_shift = 0.01                     # In units of alpha*(mass of electron), magnitude of q shift 
 scissor_bandgap = 1.1              # If float in eV, the scissor correction is applied to meet the specified bandgap. If None, scissor correction is not applied
-include_lfe = False                # If False, does not incorporate local field effects into the calculation of epsilon. If True, LFEs will be calculated by inverting eps_{GG'}
+include_lfe = True                # If False, does not incorporate local field effects into the calculation of epsilon. If True, LFEs will be calculated by inverting eps_{GG'}
 
 """Parameters for dielectric function calculations"""
 dq = 0.02                          # In units of alpha*(mass of electron), size of momentum bins 

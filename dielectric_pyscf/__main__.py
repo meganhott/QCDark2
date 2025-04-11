@@ -45,24 +45,24 @@ if parmt.mpi:
     q_start = q_start[rank]
     q_stop = q_stop[rank]
 
-    bin_eps_im, bin_weights, bin_centers = main_eps_mpi(dark_objects, rank=rank, q_start=q_start, q_stop=q_stop)
+    bin_eps, bin_weights, bin_centers = main_eps_mpi(dark_objects, rank=rank, q_start=q_start, q_stop=q_stop)
 
     #gather Im(eps) and weights from all nodes
-    bin_eps_im_rec = None
+    bin_eps_rec = None
     bin_weights_rec = None
     if rank == 0:
-        bin_eps_im_rec = np.empty([i for j in [(N_nodes,), bin_eps_im.shape] for i in j], dtype='float')
+        bin_eps_rec = np.empty([i for j in [(N_nodes,), bin_eps.shape] for i in j], dtype='complex')
         bin_weights_rec = np.empty([i for j in [(N_nodes,), bin_weights.shape] for i in j], dtype='float')
 
-    comm.Gather(bin_eps_im, bin_eps_im_rec, root=0)
+    comm.Gather(bin_eps, bin_eps_rec, root=0)
     comm.Gather(bin_weights, bin_weights_rec, root=0)
 
     #Add together contributions from all nodes and save
     if rank == 0:
-        bin_eps_im_rec = np.sum(bin_eps_im_rec, axis=0)
+        bin_eps_rec = np.sum(bin_eps_rec, axis=0)
         bin_weights_rec = np.sum(bin_weights_rec, axis=0)
 
-        save_eps(bin_eps_im_rec, bin_weights_rec, bin_centers)
+        save_eps(bin_eps_rec, bin_weights_rec, bin_centers)
 
 else:
     from dielectric_pyscf.routines import logger
