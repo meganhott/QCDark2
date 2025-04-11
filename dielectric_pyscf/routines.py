@@ -47,8 +47,25 @@ def time_wrapper(func=None, *, n_tabs=0):
         end = time.time()
         logger.info('\t'*n_tabs + 'Exiting function {}. Time taken = {:.2f} s.\n'.format(func.__name__, end - start))
         return val
+    
+    @wraps(func) #for MPI so we only log rank 0
+    def wrap_nolog(*args, **kwargs):
+        val = func(*args, **kwargs)
+        return val
 
-    return wrap
+    # When using MPI, only log for rank 0
+    if parmt.mpi:
+        from mpi4py import MPI
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank
+
+        if rank == 0:
+            return wrap
+        else:
+            return wrap_nolog
+        
+    else: # Not using MPI
+        return wrap
 
 def makedir(dirname: str, log = False) -> None:
     """
