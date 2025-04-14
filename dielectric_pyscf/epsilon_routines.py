@@ -124,7 +124,7 @@ def save_eps(bin_eps, bin_weights, bin_centers):
 
     binned_eps_im_interp = interp_eps(bin_centers, binned_eps_im)
     binned_eps_interp = eps.kramerskronig_im2re(binned_eps_im_interp) + 1. + 1j*binned_eps_im_interp
-    np.save(parmt.store+'/binned_eps_interp_kk.npy', binned_eps_interp) # Interpolation and then KK
+    np.save(parmt.store+'/binned_eps_interp_kk.npy', binned_eps_interp) # Interpolation and then KK # This slightly reduces noise in ELF compared to KK then interpolation
 
     #eps_r = epsilon_r(bin_centers, binned_eps_interp)
     #np.save(parmt.store+'/eps_r.npy', eps_r) #angular average
@@ -450,7 +450,7 @@ def RPA_Im_eps_external_prefactor_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q_cu
 
     #save eta for each k, then load and combine after calculating for all k
     with mp.get_context('fork').Pool(mp.cpu_count()) as p: #parallelize over k
-        p.starmap(partial(eps.get_3D_overlaps_k, qG=qG, primgauss_arr=primgauss_arr, AO_arr=AO_arr, coeff_arr=coeff_arr, unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path), k_tup) #(G,k,i,j)
+        p.starmap(partial(eps.get_3D_overlaps_k, qG=qG, primgauss_arr=primgauss_arr, AO_arr=AO_arr, coeff_arr=coeff_arr, unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path, working_dir=working_dir), k_tup) #(G,k,i,j)
 
     if rank == None or rank == 0:
         logger.info('\t\t\teta_qG calculated for all k and G. Time taken = {:.2f} s.'.format(time.time()-start_time))
