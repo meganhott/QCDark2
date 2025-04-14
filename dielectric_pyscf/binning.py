@@ -87,7 +87,7 @@ def construct_all_solid_angles() -> np.ndarray:
         logger.info('Raising exception, in input_parameters.py, N_theta and N_phi must be of the type int.')
         raise Exception('In input_parameters.py, N_theta and N_phi must be of the type int.')
     if not parmt.N_theta%2:
-        logger.info('! WARNING: Given N_theta = {} is even and will not contain points in the x-y plane.\nThe accuracy of the dielectric function will remain unaffected.'.format(parmt.N_theta))
+        logger.info(f'! WARNING: Given N_theta = {parmt.N_theta} is even and will not contain points in the x-y plane.\nThe accuracy of the dielectric function will remain unaffected.')
     theta_bins = construct_theta_bins()
     phi_bins = np.arange(-0.5, 0.5, 1./parmt.N_phi)*2*np.pi #-pi <= phi <pi
     solid_angles = []

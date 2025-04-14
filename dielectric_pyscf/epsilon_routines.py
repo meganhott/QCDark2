@@ -65,7 +65,7 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
     makedir(working_dir)
 
     if rank == 0 or rank == None:
-        logger.info('Total number of q: {}.'.format(N_q))
+        logger.info(f'Total number of q: {N_q}.')
     if rank == 0: #MPI
         logger.info(f'{q_stop - q_start} q will be calculated per node. Only rank 0 will be logged.')
 
@@ -84,7 +84,7 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
         q = np.array(q)
 
         if rank == 0 or rank == None:
-            logger.info('\ti_q: {}\n\t\tq = {},'.format(i_q + 1, np.array2string(q, precision=5)))
+            logger.info(f'\ti_q: {i_q + 1}\n\t\tq = {np.array2string(q, precision=5)},')
 
         start_time = time.time()
         
@@ -93,7 +93,7 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
         G_q = G_q[np.linalg.norm(q[None, :]+G_q, axis=1) > parmt.q_min - 0.5*parmt.dq]
 
         if rank == 0 or rank == None:
-            logger.info('\t\tnumber of G vectors = {},'.format(len(G_q)))
+            logger.info(f'\t\tnumber of G vectors = {len(G_q)},')
 
         eps_q_im = get_RPA_dielectric_no_LFE_q_new(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
 
@@ -101,8 +101,8 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
         tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, eps_q_im, bin_centers, tot_bin_eps_im, tot_bin_weights)
 
         if rank == 0 or rank == None:
-            logger.info('\t\t\tIm(eps) binned. Time taken = {:.2f} s.'.format(time.time() - start_time1))
-            logger.info('\t\tcomplete. Time taken = {:.2f} s.'.format(time.time() - start_time))
+            logger.info(f'\t\t\tIm(eps) binned. Time taken = {(time.time() - start_time1):.2f} s.')
+            logger.info(f'\t\tcomplete. Time taken = {(time.time() - start_time):.2f} s.')
 
     # Removing extra bins
     tot_bin_eps_im = tot_bin_eps_im[:-N_ang_bins, :]
@@ -151,6 +151,8 @@ def save_eps(bin_eps, bin_weights, bin_centers):
 
     f.close() # Close hdf5 file
 
+    logger.info(f'Calculation done: dielectric function and input parameters stored as hdf5 file at {parmt.system_name}/epsilon.hdf5')
+
 #Still needs to be updated for MPI
 @time_wrapper
 def get_RPA_dielectric_no_LFE_alt_binning(dark_objects: dict):
@@ -188,17 +190,17 @@ def get_RPA_dielectric_no_LFE_alt_binning(dark_objects: dict):
     # Make working directory
     makedir(parmt.store + '/working_dir')
 
-    logger.info('Total number of q: {}.'.format(n_q))
+    logger.info(f'Total number of q: {n_q}.')
     for i_q, q in enumerate(list(unique_q.keys())):
         k_pairs = np.array(unique_q[q])
         q = np.array(q)
-        logger.info('\ti_q: {}\n\t\tq = {},'.format(i_q+1, np.array2string(q, precision=5)))
+        logger.info(f'\ti_q: {i_q + 1}\n\t\tq = {np.array2string(q, precision=5)},')
         start_time = time.time()
         
         # Finding relevant G vectors
         G_q = G_vectors[np.linalg.norm(q[None, :]+G_vectors, axis=1) < parmt.q_max + 1.5*parmt.dq]
         G_q = G_q[np.linalg.norm(q[None, :]+G_q, axis=1) > parmt.q_min - 0.5*parmt.dq]
-        logger.info('\t\tnumber of G vectors = {},'.format(len(G_q)))
+        logger.info(f'\t\tnumber of G vectors = {len(G_q)},')
         qG.append(q + G_q)
 
         #eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, blocks, N_AO, q_cuts, VCell, G_q, unique_Ri)
@@ -206,21 +208,12 @@ def get_RPA_dielectric_no_LFE_alt_binning(dark_objects: dict):
 
         eps_im.append(eps_q_im)
         
-        logger.info('\t\tcomplete. Time taken = {:.2f} s.'.format(time.time() - start_time))
+        logger.info(f'\t\tcomplete. Time taken = {(time.time() - start_time):.2f} s.')
 
     eps_im = np.concatenate(eps_im, axis=0)
     qG = np.concatenate(qG, axis=0)
     np.save(parmt.store + '/eps_im.npy', eps_im)
     np.save(parmt.store + '/qG.npy', qG)
-
-
-    #binned_eps_im = tot_bin_eps_im[:-N_ang_bins, :]/tot_bin_weights[:-N_ang_bins, None] #removing extra bins 
-
-    #Interpolating missing Im(eps) bins and then performing Kramers-Kronig transformation to get Re(eps)
-    #start_time = time.time()
-    #binned_eps_im = LinearNDInterpolator(qG, eps_im)(bin_centers)
-    #logger.info('Interpolation to bins complete. Time taken = {:.2f} s.'.format(time.time() - start_time))
-    #np.save(parmt.store+'/binned_eps_altbin.npy', eps.kramerskronig_im2re(binned_eps_im) + 1. + 1j*binned_eps_im)
 
 def get_RPA_dielectric_no_LFE_q_new(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.ndarray, mo_coeff_f_conj: np.ndarray, mo_coeff_i: np.ndarray, k_f: np.ndarray, k_pairs: np.ndarray, primgauss_arr, AO_arr, coeff_arr, q_cuts: np.ndarray, VCell: float, G_q: np.ndarray, unique_Ri: list[np.ndarray], einsum_path, working_dir, rank) -> np.ndarray:
     
@@ -281,7 +274,7 @@ def RPA_Im_eps_external_prefactor_no_LFE_new(qG, primgauss_arr, AO_arr, coeff_ar
     eps_im = np.sum(np.array(eps_im), axis=0) #(E,G): sum over k
 
     if rank == None or rank == 0:
-        logger.info('\t\t\tIm(eps) calculated for all k and G. Time taken = {:.2f} s.'.format(time.time()-start_time))
+        logger.info(f'\t\t\tIm(eps) calculated for all k and G. Time taken = {(time.time() - start_time):.2f} s.')
 
     return np.copy(np.transpose(eps_im, (1,0))) #(G,E)
 
@@ -352,7 +345,7 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
     makedir(working_dir + '/eta_qG')
 
     if rank == 0 or rank == None:
-        logger.info('Total number of q: {}.'.format(N_q))
+        logger.info(f'Total number of q: {N_q}.')
     if rank == 0: #MPI
         logger.info(f'{q_stop - q_start} q will be calculated per node. Only rank 0 will be logged.')
 
@@ -374,7 +367,7 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
         q = np.array(q)
 
         if rank == 0 or rank == None:
-            logger.info('\ti_q: {}\n\t\tq = {},'.format(i_q + 1, np.array2string(q, precision=5)))
+            logger.info(f'\ti_q: {i_q + 1}\n\t\tq = {np.array2string(q, precision=5)},')
 
         start_time = time.time()
         
@@ -382,7 +375,7 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
         G_q = G_vectors[np.linalg.norm(q[None, :]+G_vectors, axis=1) < parmt.q_max + 1.5*parmt.dq]
 
         if rank == 0 or rank == None:
-            logger.info('\t\tnumber of G vectors = {},'.format(len(G_q)))
+            logger.info(f'\t\tnumber of G vectors = {len(G_q)},')
 
         eps_delta_q = get_RPA_dielectric_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank) #(G,G',E)
 
@@ -399,7 +392,7 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
         tot_bin_eps_re, tot_bin_weights_re = bin.bin_eps_q(q, G_q, np.real(eps_lfe), bin_centers, tot_bin_eps_re, tot_bin_weights_re)
         
         if rank == 0 or rank == None:
-            logger.info('\t\tcomplete. Time taken = {:.2f} s.'.format(time.time() - start_time))
+            logger.info(f'\t\tcomplete. Time taken = {(time.time() - start_time):.2f} s.')
 
     # Removing extra bins 
     tot_bin_eps_im = tot_bin_eps_im[:-N_ang_bins, :]
@@ -477,7 +470,7 @@ def RPA_Im_eps_external_prefactor_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q_cu
         p.starmap(partial(eps.get_3D_overlaps_k, qG=qG, primgauss_arr=primgauss_arr, AO_arr=AO_arr, coeff_arr=coeff_arr, unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path, working_dir=working_dir), k_tup) #(G,k,i,j)
 
     if rank == None or rank == 0:
-        logger.info('\t\t\teta_qG calculated for all k and G. Time taken = {:.2f} s.'.format(time.time()-start_time))
+        logger.info(f'\t\t\teta_qG calculated for all k and G. Time taken = {(time.time() - start_time):.2f} s.')
 
     start_time = time.time()
     eta_qG = np.empty((k_f.shape[0], mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2], qG.shape[0]), dtype='complex128')
@@ -486,7 +479,7 @@ def RPA_Im_eps_external_prefactor_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q_cu
     eta_qG = eta_qG / np.linalg.norm(qG, axis=1)[None,None,None,:]
 
     if rank == None or rank == 0:
-        logger.info('\t\t\t3D overlaps loaded from memory for all G. Time taken = {:.2f} s.'.format(time.time()-start_time))
+        logger.info(f'\t\t\t3D overlaps loaded from memory for all G. Time taken = {(time.time() - start_time):.2f} s.')
 
     start_time = time.time()
     eps_delta = np.zeros((N_E, qG.shape[0], qG.shape[0]), dtype='complex')
@@ -503,7 +496,7 @@ def RPA_Im_eps_external_prefactor_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q_cu
                 eps_delta[int(ind+1)] += (1. - rem)*eta_qG_sq[i]
 
     if rank == None or rank == 0:
-        logger.info('\t\t\tDelta part of epsilon calculated. Time taken = {:.2f} s.'.format(time.time()-start_time))
+        logger.info(f'\t\t\tDelta part of epsilon calculated. Time taken = {(time.time() - start_time):.2f} s.')
 
 
     #too slow to load all eps_delta from memory, will only get worse with larger N_G

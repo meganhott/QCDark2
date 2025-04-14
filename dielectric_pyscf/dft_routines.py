@@ -32,18 +32,18 @@ def save_dft():
     makedir(dft_path) #makes DFT_routines directory if it does not already exist
     dft_instances = os.listdir(dft_path)
     for d in dft_instances:
-        dft_dict = json.load(open(dft_path + '/' + d + '/dft_params.txt', 'r'))
+        dft_dict = json.load(open(f'{dft_path}/{d}/dft_params.txt', 'r'))
         if all(dft_dict[key] == dft_params[key] for key in dft_dict.keys() if key not in ['dft_instance']): #compare everything except dft_instance
             dft_params['dft_instance'] = d
             dft_files = os.listdir(dft_path + '/' + d)
             if len(dft_files) < 4: #Something went wrong with previously calculated DFT, calculation should be started again
-                logger.info('There is not a stored DFT cacluation for these input parameters, a new calculation will be performed and stored as {}.'.format(d))
+                logger.info(f'There is not a stored DFT cacluation for these input parameters, a new calculation will be performed and stored as {d}.')
                 new_dft = True
             elif ('mo_en_i_dft.npy' in dft_files) and ('mo_en_f_dft.npy' not in dft_files):
-                logger.info('A SCF calculation has been performed for these input parameters as stored as {} but must be redone for the NSCF calculation'.format(d))
+                logger.info(f'A SCF calculation has been performed for these input parameters as stored as {d} but must be redone for the NSCF calculation')
                 new_dft = True
             else:
-                logger.info('DFT already calculated for these input parameters and stored as {}'.format(d))
+                logger.info(f'DFT already calculated for these input parameters and stored as {d}')
                 new_dft = False
             return new_dft, dft_params
     
@@ -52,9 +52,9 @@ def save_dft():
             dft_params['dft_instance'] = 'DFT_0'
         else:
             dft_params['dft_instance'] = 'DFT_' + str(max([int(d.split('_')[1]) for d in dft_instances]) + 1)
-        logger.info('There is not a stored DFT cacluation for these input parameters, a new calculation will be performed and stored as {}.'.format(dft_params['dft_instance']))
-        makedir(dft_path + '/' + dft_params['dft_instance'])
-        json.dump(dft_params, open(dft_path + '/' + dft_params['dft_instance'] + '/dft_params.txt', 'w')) #save dft parameters
+        logger.info(f'There is not a stored DFT cacluation for these input parameters, a new calculation will be performed and stored as {dft_params['dft_instance']}.')
+        makedir(f'{dft_path}/{dft_params['dft_instance']}')
+        json.dump(dft_params, open(f'{dft_path}/{dft_params['dft_instance']}/dft_params.txt', 'w')) #save dft parameters
         new_dft = True
 
     return new_dft, dft_params
@@ -66,7 +66,7 @@ def list_saved_dft(df=False):
         import pandas as pd
         #Work on making this look better
         for i, d in enumerate(dft_instances):
-            dft_dict = json.load(open(dft_path + '/' + d + '/dft_params.txt', 'r'))
+            dft_dict = json.load(open(f'{dft_path}/{d}/dft_params.txt', 'r'))
             dft_dict['lattice_vectors'] = str(dft_dict['lattice_vectors'])
             dft_dict['mybasis'] = str(dft_dict['mybasis'])
             dft_dict['k_grid'] = str(dft_dict['k_grid'])
@@ -79,18 +79,18 @@ def list_saved_dft(df=False):
 
     else: #print all dft params
         for d in dft_instances:
-            dft_dict = json.load(open(dft_path + '/' + d + '/dft_params.txt', 'r'))
-            print('DFT Instance: {}'.format(dft_dict['dft_instance']))
-            print('\tLattice vectors: {}'.format(dft_dict['lattice_vectors']))
-            print('\tAtom Locations: {}'.format(dft_dict['atomloc']))
-            print('\tBasis: {}'.format(dft_dict['mybasis']))
-            print('\tEffective Core Potential: {}'.format(dft_dict['effective_core_potential']))
-            print('\tPseudopotential: {}'.format(dft_dict['pseudo']))
-            print('\tPrecision: {}'.format(dft_dict['precision']))
-            print('\tExchange Correlation Functional: {}'.format(dft_dict['xcfunc']))
-            print('\tk-grid: {}'.format(dft_dict['k_grid']))
-            print('\tq Shift Direction: {}'.format(dft_dict['q_shift_dir']))
-            print('\tq shift: {}'.format(dft_dict['q_shift']))
+            dft_dict = json.load(open(f'{dft_path}/{d}/dft_params.txt', 'r'))
+            print(f'DFT Instance: {dft_dict['dft_instance']}')
+            print(f'\tLattice vectors: {dft_dict['lattice_vectors']}')
+            print(f'\tAtom Locations: {dft_dict['atomloc']}')
+            print(f'\tBasis: {dft_dict['mybasis']}')
+            print(f'\tEffective Core Potential: {dft_dict['effective_core_potential']}')
+            print(f'\tPseudopotential: {dft_dict['pseudo']}')
+            print(f'\tPrecision: {dft_dict['precision']}')
+            print(f'\tExchange Correlation Functional: {dft_dict['xcfunc']}')
+            print(f'\tk-grid: {dft_dict['k_grid']}'.format(dft_dict['k_grid']))
+            print(f'\tq Shift Direction: {dft_dict['q_shift_dir']}')
+            print(f'\tq shift: {dft_dict['q_shift']}')
 
 def make_kpts(cell: pbcgto.cell.Cell, dft_params: dict, with_gamma: bool = True) -> pyscf.pbc.lib.kpts.KPoints:
     """
@@ -105,7 +105,8 @@ def make_kpts(cell: pbcgto.cell.Cell, dft_params: dict, with_gamma: bool = True)
     k_grid = parmt.k_grid
     kpts_i = cell.make_kpts(k_grid, wrap_around=True, with_gamma_point=with_gamma, space_group_symmetry=True)
     np.save(dft_path + '/k-pts_i', kpts_i.kpts)
-    logger.info("{} initial k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts_i.nkpts, kpts_i.nkpts_ibz, parmt.store + '/k-pts_i.npy', k_grid[0], k_grid[1], k_grid[2]))
+
+    logger.info(f'{kpts_i.nkpts} initial k vectors generated, {kpts_i.nkpts_ibz} in irreducible BZ, and stored to {parmt.store}/k-pts_i.npy given k-grid:\n\tnk_x = {k_grid[0]}, nk_y = {k_grid[1]}, nk_z = {k_grid[2]}.')
 
     # save k_f
     q_shift_dir = np.array(dft_params['q_shift_dir'])
@@ -113,8 +114,9 @@ def make_kpts(cell: pbcgto.cell.Cell, dft_params: dict, with_gamma: bool = True)
     scaled_center = cell.get_scaled_kpts(q_shift)
     kpts_f = cell.make_kpts(dft_params['k_grid'], space_group_symmetry=True, wrap_around = True, scaled_center = scaled_center)
     np.save(dft_path + '/k-pts_f', kpts_f.kpts)
-    logger.info("Selected q shift = {}".format(np.array2string(q_shift, precision = 5)))
-    logger.info("{} final k vectors generated, {} in irreducible BZ, and stored to \'{}\' given k-grid:\n\tnk_x = {}, nk_y = {}, nk_z = {}.".format(kpts_f.nkpts, kpts_f.nkpts_ibz, parmt.store + '/k-pts_f.npy', dft_params['k_grid'][0], dft_params['k_grid'][1], dft_params['k_grid'][2]))
+
+    logger.info(f'Selected q shift = {np.array2string(q_shift, precision = 5)}')
+    logger.info(f'{kpts_f.nkpts} final k vectors generated, {kpts_f.nkpts_ibz} in irreducible BZ, and stored to {parmt.store}/k-pts_f.npy given k-grid:\n\tnk_x = {dft_params['k_grid'][0]}, nk_y = {dft_params['k_grid'][1]}, nk_z = {dft_params['k_grid'][2]}.')
 
     return kpts_i, kpts_f
 
@@ -158,7 +160,7 @@ def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict, with_gamma
         np.save(dft_path + '/mo_occ_i', kpts.transform_mo_occ(kmf.mo_occ))
     else:
         raise ValueError('DFT not converged. Might need to orthogonalize basis before continuing (Not Implemented).')
-    logger.info('Electronic structure converged, KS energy is {:.2f} Hartrees.\n\tDFT data is stored to {}.'.format(kmf.e_tot, dft_path))
+    logger.info(f'Electronic structure converged, KS energy is {kmf.e_tot:.2f} Hartrees.\n\tDFT data is stored to {dft_path}.')
     return kmf
 
 @time_wrapper
@@ -177,7 +179,7 @@ def KS_non_self_consistent_field(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS, dft_par
     dft_path = parmt.DFT_resources_path + '/DFT_resources/' + dft_params['dft_instance']
     np.save(dft_path + '/mo_en_f_dft', ek)
     np.save(dft_path + '/mo_coeff_f', ck)
-    logger.info('Non self consistent field equations solved for final state k-points. Data is stored to {}.'.format(dft_path))
+    logger.info(f'Non self consistent field equations solved for final state k-points. Data is stored to {dft_path}.')
 
 @time_wrapper
 def convert_to_eV_and_scissor(cell: pbcgto.cell.Cell, dft_params: dict):
@@ -202,13 +204,13 @@ def convert_to_eV_and_scissor(cell: pbcgto.cell.Cell, dft_params: dict):
     en_i, en_f = en_i - homo, en_f - homo
     homo = 0
     lumo = min(en_i[:,occ_orb:].min(), en_f[:,occ_orb:].min())
-    logger.info("All energies converted to eV. Calculated Bandgap = {:.2f} eV.".format(lumo - homo))
+    logger.info(f'All energies converted to eV. Calculated Bandgap = {(lumo - homo):.2f} eV.')
     if parmt.scissor_bandgap is not None:
         if type(parmt.scissor_bandgap) != float:
-            raise ValueError("Parameter scissor_bandgap in input_parameters.py must be either None or of type float.")
+            raise ValueError('Parameter scissor_bandgap in input_parameters.py must be either None or of type float.')
         correction = parmt.scissor_bandgap - lumo
         en_i[:,occ_orb:], en_f[:,occ_orb:] = en_i[:,occ_orb:] + correction, en_f[:,occ_orb:] + correction
-        logger.info("Scissor Correction applied, new bandgap is {:.2f} eV.".format(parmt.scissor_bandgap))
+        logger.info(f'Scissor Correction applied, new bandgap is {parmt.scissor_bandgap:.2f} eV.')
     
     makedir(parmt.store + '/DFT')
     np.save(parmt.store + '/DFT/mo_en_i.npy', en_i)
@@ -233,10 +235,10 @@ def get_band_indices(dft_params: dict):
     mo_occ_i = np.load(dft_path + '/mo_occ_i.npy')
 
     if not (mo_occ_i == mo_occ_i[0]).all():
-        raise NotImplementedError('Occupancy of bands was found to vary with k. Partially filled bands may cause issues determining occupied and unoccupied states, especially since k_f is different from k_i. Check {}/mo_occ_i.npy.'.format(dft_path))
+        raise NotImplementedError(f'Occupancy of bands was found to vary with k. Partially filled bands may cause issues determining occupied and unoccupied states, especially since k_f is different from k_i. Check {dft_path}/mo_occ_i.npy.')
     
     if mo_occ_i[0][0] != 2:
-        raise NotImplementedError('Occupancy of filled bands is not 2. Spin-dependent DFT has not been implemented. Check {}/mo_occ_i.npy if you expect filled bands to have an occupancy of 2.'.format(dft_path))
+        raise NotImplementedError(f'Occupancy of filled bands is not 2. Spin-dependent DFT has not been implemented. Check {dft_path}/mo_occ_i.npy if you expect filled bands to have an occupancy of 2.')
     
     num_bands = mo_occ_i.shape[1]
     num_all_val = sum(mo_occ_i[0] != 0) #total number of occupied bands from dft calculation
@@ -244,14 +246,14 @@ def get_band_indices(dft_params: dict):
     if parmt.numval == 'all':
         num_val = num_all_val
     elif parmt.numval > num_all_val:
-        raise Exception('The specified number of valence bands to include ({}) is larger than the number of valence bands obtained from the DFT calculation ({}). Check input parameter "numval" and DFT output file {}/mo_occ_i.npy.'.format(parmt.numval, num_all_val, dft_path))
+        raise Exception(f'The specified number of valence bands to include ({parmt.numval}) is larger than the number of valence bands obtained from the DFT calculation ({num_all_val}). Check input parameter "numval" and DFT output file {dft_path}/mo_occ_i.npy.')
     else:
         num_val = parmt.numval
     
     if parmt.numcon == 'all':
         num_con = num_bands - num_all_val
     elif parmt.numcon > num_bands - num_all_val:
-        raise Exception('The specified number of conduction bands to include ({}) is larger than the number of conduction bands obtained from the DFT calculation ({}). To increase the number of conduction bands, consider using a larger basis set. Check input parameters "numcon" and "mybasis", and DFT output file {}/mo_occ_i.npy.'.format(parmt.numcon, num_bands - num_all_val, dft_path))
+        raise Exception(f'The specified number of conduction bands to include ({parmt.numcon}) is larger than the number of conduction bands obtained from the DFT calculation ({num_bands - num_all_val}). To increase the number of conduction bands, consider using a larger basis set. Check input parameters "numcon" and "mybasis", and DFT output file {dft_path}/mo_occ_i.npy.')
     else:
         num_con = parmt.numcon
 

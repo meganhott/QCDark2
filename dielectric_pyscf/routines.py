@@ -41,11 +41,11 @@ def time_wrapper(func=None, *, n_tabs=0):
     
     @wraps(func)
     def wrap(*args, **kwargs):
-        logger.info('\t'*n_tabs + 'Entering function {}'.format(func.__name__))
+        logger.info('\t'*n_tabs + f'Entering function {func.__name__}')
         start = time.time()
         val = func(*args, **kwargs)
         end = time.time()
-        logger.info('\t'*n_tabs + 'Exiting function {}. Time taken = {:.2f} s.\n'.format(func.__name__, end - start))
+        logger.info('\t'*n_tabs + f'Exiting function {func.__name__}. Time taken = {(end - start):.2f} s.\n')
         return val
     
     @wraps(func) #for MPI so we only log rank 0
@@ -78,14 +78,14 @@ def makedir(dirname: str, log = False) -> None:
     try:
         os.mkdir(dirname)
         if log:
-            logger.info('Made directory \'' + dirname + '\'.')
+            logger.info(f'Made directory {dirname}')
     except FileExistsError:
         if os.path.isdir(dirname):
             if log:
-                logger.info('Directory \''+dirname+'\' already exists.')
+                logger.info(f'Directory {dirname} already exists.')
         else:
-            logger.info('File exists with name same as directory, \'' + dirname + '\'. Cannot make directory, raising exception.')
-            raise FileExistsError('Cannot proceed with making directory \'' + dirname + '\', file exists with same name.')
+            logger.info(f'File exists with name same as directory {dirname}. Cannot make directory, raising exception.')
+            raise FileExistsError(f'Cannot proceed with making directory {dirname}, file exists with same name.')
     return None
 
 def get_all_unique_nums_in_array(array: np.ndarray, round_to: int = None, log_name: str = None) -> np.ndarray:
@@ -100,7 +100,7 @@ def get_all_unique_nums_in_array(array: np.ndarray, round_to: int = None, log_na
         array = np.round(array, round_to)
     unq = np.unique(array)
     if not log_name is None:
-        logger.info("Number of unique elements found for {} = {}.".format(log_name, unq.size))
+        logger.info(f'Number of unique elements found for {log_name} is {unq.size}.')
     return unq
 
 @time_wrapper
@@ -119,6 +119,6 @@ def load_unique_R():
     """
     unique_Ri = []
     for dim in range(3):
-        dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
-        unique_Ri.append(np.load(dir+'Ru.npy'))
+        dir = f'{parmt.store}/primgauss_1d_integrals/dim_{dim}/Ru.npy'
+        unique_Ri.append(np.load(dir))
     return unique_Ri

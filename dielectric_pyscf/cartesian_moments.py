@@ -27,7 +27,7 @@ def get_E_ijt(a: float, b: float, i_max: int, j_max: int, Qx: float) -> list[lis
     q = a*b/p
 
     if i_max < 0 or j_max < 0:
-        raise ValueError('i and j must be greater than 0. Given i = {}, j = {}'.format(i_max, j_max))
+        raise ValueError(f'i and j must be greater than 0. Given i = {i_max}, j = {j_max}')
 
     E_ijt = []
     for i in range(i_max + 1):

@@ -19,7 +19,7 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
         cell:   pyscf.pbc.gto.cell.Cell object
     """
     if (parmt.pseudo is not None) and (parmt.effective_core_potential is not None):
-        raise ValueError("Can only specify effective_core_potential or pseudo. Set one of these parameters to None.")
+        raise ValueError('Can only specify effective_core_potential or pseudo. Set one of these parameters to None.')
 
     try:
         cell = pbcgto.M(
@@ -60,39 +60,39 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
     cell.space_group_symmetry = True
     cell.build()
 
-    logger.info("Built cell object. Note that we only use cartesian gaussians.\nWe have set maximum memory available to pyscf = 90% of available memory of system = {:.2f} MB".format(max_memory))
+    logger.info(f'Built cell object. Note that we only use cartesian gaussians.\nWe have set maximum memory available to pyscf = 90% of available memory of system = {max_memory:.2f} MB')
     logger.info("Parameters fed, in atomic units:")
 
     logger.info("\tLattice vectors:")
     for a in cell.lattice_vectors():
-        logger.info("\t\t{:.5f}\t{:.5f}\t{:.5f}".format(a[0], a[1], a[2]))
+        logger.info(f'\t\t{a[0]:.5f}\t{a[1]:.5f}\t{a[2]:.5f}')
 
     logger.info("\tReciprocal Vectors:")
     for a in cell.reciprocal_vectors():
-        logger.info("\t\t{:.5f}\t{:.5f}\t{:.5f}".format(a[0], a[1], a[2]))
+        logger.info(f'\t\t{a[0]:.5f}\t{a[1]:.5f}\t{a[2]:.5f}')
 
     logger.info("\tAtom locations:")
     for a in cell._atom:
-        logger.info("\t\t{}:\t{:.5f}\t{:.5f}\t{:.5f}".format(a[0], a[1][0], a[1][1], a[1][2]))
+        logger.info(f'\t\t{a[0]}:\t{a[1][0]:.5f}\t{a[1][1]:.5f}\t{a[1][2]:.5f}')
     
     logger.info("\tBasis set: ")
     for a in cell.basis:
-        logger.info("\t\t{}: {}".format(a, cell.basis[a]))
+        logger.info(f'\t\t{a}: {cell.basis[a]}')
     
     if len(cell.ecp):
         logger.info("\tEffective core potential:")
         for a in cell.ecp:
-            logger.info("\t\t{}: {}".format(a, cell.ecp[a]))
+            logger.info(f'\t\t{a}: {cell.ecp[a]}')
     elif cell.pseudo is not None:
         logger.info("\tPseudopotential:")
         for a in cell.pseudo:
-            logger.info("\t\t{}: {}".format(a, cell.pseudo[a]))
+            logger.info(f'\t\t{a}: {cell.pseudo[a]}')
     else:
         logger.info("\tAll-electron calculation.")
 
-    logger.info("\tSelected precision: {}".format(cell.precision))
-    logger.info("\tRadial cut-off for basis functions = {:.2f} Bohr.".format(rcut))
-    logger.info("Further information is in {}.".format(cell.output))
+    logger.info(f'\tSelected precision: {cell.precision}')
+    logger.info(f'\tRadial cut-off for basis functions = {rcut:.2f} Bohr.')
+    logger.info(f'Further information is in {cell.output}.')
 
     makedir(parmt.store, log = False)
 
@@ -112,7 +112,7 @@ def construct_R_vectors(cell: pbcgto.cell.Cell) -> np.ndarray:
     Rvecs = cell.get_lattice_Ls()
     Rvecs = Rvecs[np.argsort(np.linalg.norm(Rvecs, axis=1))] #sort by norm
     np.save(parmt.store + '/R_vectors.npy', Rvecs)
-    logger.info('{} R vectors generated for the cell given precision = {}, and saved to {}.'.format(Rvecs.shape[0], cell.precision, parmt.store + '/R_vectors.npy'))
+    logger.info(f'{Rvecs.shape[0]} R vectors generated for the cell given precision = {cell.precision}, and saved to {parmt.store}/R_vectors.npy.')
     return Rvecs
 
 def get_cell_volume(cell: pbcgto.cell.Cell) -> float:
@@ -141,7 +141,7 @@ def gen_G_vectors(cell: pbcgto.cell.Cell) -> np.ndarray:
     lattice = np.sum(mygrid[:,:,np.newaxis]*reciprocal_vectors[np.newaxis,:,:], axis = 1).astype('float')
     lattice = lattice[np.linalg.norm(lattice, axis=1)<=parmt.q_max + np.max(np.linalg.norm(reciprocal_vectors, axis = 1))*(3**.5)]
     sortindx = np.argsort(np.linalg.norm(lattice, axis=1))
-    logger.info('Generated {} G vectors, with maximum q = {:.2f} atomic units.'.format(lattice.shape[0], parmt.q_max))
+    logger.info(f'Generated {lattice.shape[0]} G vectors, with maximum q = {parmt.q_max:.2f} atomic units.')
     lattice = lattice[sortindx]
     np.save(parmt.store + '/G_vectors', lattice)
     return lattice
@@ -190,7 +190,7 @@ def gen_all_1D_prim_gauss(cell: pbcgto.cell.Cell) -> np.ndarray:
                 norm = normalize(element[0], l)
                 for i in range(l+1):
                     primgauss = np.append(primgauss, [[atom_id, l, i, element[0], loc[0], loc[1], loc[2], norm]], axis = 0)
-    logger.info("All 1D primitive gaussians found for the cell.\n\tNumber of unique primitive gaussians = {}.\n\tThis includes all possible angular momentum in one direction.".format(primgauss.shape[0]))
+    logger.info(f'All 1D primitive gaussians found for the cell.\n\tNumber of unique primitive gaussians = {primgauss.shape[0]}.\n\tThis includes all possible angular momentum in one direction.')
     return primgauss
 
 @time_wrapper
@@ -216,7 +216,7 @@ def gen_prim_gauss_indices(primgauss: np.ndarray) -> tuple[np.ndarray, np.ndarra
     for atm_id in unique_atoms:
         locs.append(primgauss[np.where(primgauss[:,0].astype(int) == atm_id)][0, 4:])
 
-    logger.info("Constructed unique exponent for each atom. Total number of exponents at different locations: {}".format(indx_arr.shape[0]))
+    logger.info(f'Constructed unique exponent for each atom. Total number of exponents at different locations: {indx_arr.shape[0]}')
     return indx_arr, np.array(locs)
 
 @time_wrapper
@@ -241,7 +241,7 @@ def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> li
                 ijk = (cart_labs[i_cart].count('x'), cart_labs[i_cart].count('y'), cart_labs[i_cart].count('z'))
                 all_ao.append(cartmoments.AO(atom_index = atm_indx, exps = exps, coeffs = coeffs[:,j], ijk = ijk, primgauss = primgauss))
                 i_cart += 1
-    logger.info("Generated all cartesian contracted gaussians, number of shells = {}.".format(len(all_ao)))
+    logger.info(f'Generated all cartesian contracted gaussians, number of shells = {len(all_ao)}.')
     return all_ao
 
 @time_wrapper
@@ -261,7 +261,7 @@ def get_basis_blocks(aos: list[cartmoments.AO]) -> dict:
             blocks[pg][i] = ao.coef
         else:
             blocks[pg] = {i: ao.coef}
-    logger.info('Generated all blocks in 1D primitive gaussians, number of blocks = {}.'.format(len(blocks)))
+    logger.info(f'Generated all blocks in 1D primitive gaussians, number of blocks = {len(blocks)}.')
     return blocks
 
 def project_vectors_to_1BZ(G: np.ndarray, D: np.ndarray, q: np.ndarray) -> np.ndarray:
@@ -305,7 +305,7 @@ def get_1BZ_q_points(cell: pbcgto.cell.Cell) -> dict:
                 dic[tup] = [[i, j]]
     qu = np.array(list(dic.keys()))
     np.save(parmt.store + '/unique_q', qu)
-    logger.info("{} unique q-vectors found in 1BZ. Storing all unique q-vectors in {}/unique_q.npy.".format(qu.shape[0], parmt.store))
+    logger.info(f'{qu.shape[0]} unique q-vectors found in 1BZ. Storing all unique q-vectors in {parmt.store}/unique_q.npy.')
     return dic
 
 @time_wrapper
@@ -322,15 +322,15 @@ def primgauss_1D_overlaps(dark_objects: dict) -> list[np.ndarray]:
         dark_objects:   dict: equivalent to a class object, except not self-referential.
     """
     def store_primgauss_1D(dim: int, qG: np.ndarray, results: np.ndarray, Ru: np.ndarray, norms: np.ndarray) -> np.ndarray:
-        dir = parmt.store + '/primgauss_1d_integrals/dim_{}/'.format(dim)
+        dir = parmt.store + f'/primgauss_1d_integrals/dim_{dim}/'
         makedir(dir)
         np.save(dir + 'Ru', Ru)
         results = np.transpose(results, axes = (3, 0, 1, 2))
         val = []
         for q, res in zip(qG, results):
             if np.round(q, 5) == 0: #save 0.0 and -0.0
-                np.save(dir + '{:.5f}'.format(q), res)
-                np.save(dir + '{:.5f}'.format(-1*q), res)
+                np.save(dir + f'{q:.5f}', res)
+                np.save(dir + f'{-1*q:.5f}', res)
             else:
                 np.save(dir + '{:.5f}'.format(q), res)
             loc = np.where(np.abs(np.einsum('Rab,a,b->Rab', res, norms, norms, optimize = False)).max(axis = (1,2)) > parmt.precision_R)[0]
@@ -358,7 +358,7 @@ def primgauss_1D_overlaps(dark_objects: dict) -> list[np.ndarray]:
             qG = get_all_unique_nums_in_array(qG, round_to=10)
             qG = qG[np.abs(qG) <= parmt.q_max + 1.5*parmt.dq]
             Ru = get_all_unique_nums_in_array(Rv[:,d], round_to=10)
-            logger.info('\tDimension = {}:\n\t\tNumber of unique q = {};\n\t\tNumber of unique R = {}.'.format(d, qG.size, Ru.size))
+            logger.info(f'\tDimension = {d}:\n\t\tNumber of unique q = {qG.size};\n\t\tNumber of unique R = {Ru.size}.')
             res = p.map(partial(cartmoments.primgauss_1D_overlaps_uR, primindices = primindices, q = qG, atom_locs = atom_locs[:,d]), Ru)
             res = np.array(res)
             vals.append(store_primgauss_1D(d, qG, res, Ru, norms))
@@ -394,12 +394,12 @@ def store_R_ids(dark_objects: dict):
     unique_Ri = load_unique_R()
     R_id = get_R_id(R_vecs, unique_Ri)
     np.save(parmt.store + '/R_ids/{}'.format(-1), R_id)
-    logger.info('\tNumber of R vectors: \t{}.'.format(R_id.shape[1]))
+    logger.info(f'\tNumber of R vectors: \t{R_id.shape[1]}.')
     q_cuts = []
     for i, R_cut in enumerate(R_cutoffs):
         q_cuts.append(R_cut[0])
         tR = R_vecs[abs_R <= R_cut[1]]
         R_id = get_R_id(tR, unique_Ri)
         logger.info('\tq > \t{:.2f} amu, nR = \t{},'.format(q_cuts[-1], R_id.shape[1]))
-        np.save(parmt.store + '/R_ids/{}'.format(i), R_id)
+        np.save(parmt.store + f'/R_ids/{i}', R_id)
     return np.array(q_cuts)
