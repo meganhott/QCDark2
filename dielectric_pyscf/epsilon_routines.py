@@ -1,10 +1,12 @@
 import numpy as np
 import time
 import psutil
+import shutil # for removing working directories after calculation is finished
 from os import getpid
 import multiprocessing as mp
 from functools import partial
-from numba import njit, prange
+from numba import njit
+import h5py
 from scipy.interpolate import LinearNDInterpolator
 
 from dielectric_pyscf.routines import logger, time_wrapper, load_unique_R, makedir, alpha, me
@@ -102,32 +104,52 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
             logger.info('\t\t\tIm(eps) binned. Time taken = {:.2f} s.'.format(time.time() - start_time1))
             logger.info('\t\tcomplete. Time taken = {:.2f} s.'.format(time.time() - start_time))
 
-    #removing extra bins
+    # Removing extra bins
     tot_bin_eps_im = tot_bin_eps_im[:-N_ang_bins, :]
     tot_bin_weights = tot_bin_weights[:-N_ang_bins]
 
     if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
 
+    shutil.rmtree(working_dir) # delete working directory
+
     return 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 
 def save_eps(bin_eps, bin_weights, bin_centers):
+    f = h5py.File(parmt.system_name + '/epsilon.hdf5', 'w') # create and open hdf5 file
+
     binned_eps = bin_eps/bin_weights[:, None]
-    np.save(parmt.store+'/binned_eps.npy', binned_eps) # No KK or interpolation - should save only 0 + iIm(eps) for non-LFE
+    f.create_dataset('binned_epsilon', data=binned_eps) # No KK or interpolation - should save only 0 + iIm(eps) for non-LFE
 
     binned_eps_im = np.imag(binned_eps)
     binned_eps_kk = eps.kramerskronig_im2re(binned_eps_im) + 1. + 1j*binned_eps_im
-    np.save(parmt.store+'/binned_eps_kk.npy', binned_eps_kk) # Only KK, no interpolation
+    f.create_dataset('binned_epsilon_kk', data=binned_eps_kk) # Only KK, no interpolation
 
     binned_eps_kk_interp = interp_eps(bin_centers, binned_eps)
-    np.save(parmt.store+'/binned_eps_kk_interp.npy', binned_eps_kk_interp) # KK then Interpolation
+    f.create_dataset('binned_epsilon_kk_interp', data=binned_eps_kk_interp) # KK then Interpolation
 
     binned_eps_im_interp = interp_eps(bin_centers, binned_eps_im)
     binned_eps_interp = eps.kramerskronig_im2re(binned_eps_im_interp) + 1. + 1j*binned_eps_im_interp
-    np.save(parmt.store+'/binned_eps_interp_kk.npy', binned_eps_interp) # Interpolation and then KK # This slightly reduces noise in ELF compared to KK then interpolation
+    f.create_dataset('binned_epsilon_interp_kk', data=binned_eps_interp) # Interpolation and then KK # This slightly reduces noise in ELF compared to KK then interpolation
 
-    #eps_r = epsilon_r(bin_centers, binned_eps_interp)
-    #np.save(parmt.store+'/eps_r.npy', eps_r) #angular average
+    eps_r = epsilon_r(bin_centers, binned_eps_interp)
+    eps_r = f.create_dataset('epsilon', data=eps_r) # angular average
+
+    f.create_dataset('bin_centers', data=bin_centers)
+
+    # Add attributes from input parameters
+    for name, val in parmt.__dict__.items():
+        if not name.startswith('__'): # ignores dunders
+            f.attrs[name] = val
+
+    # Add q and E arrays
+    q = np.arange(parmt.q_min + 0.5*parmt.dq, parmt.q_max + parmt.dq, parmt.dq)
+    E = np.arange(0, parmt.E_max + parmt.dE, parmt.dE)
+    
+    f.create_dataset('q', data=q)
+    f.create_dataset('E', data=E)
+
+    f.close() # Close hdf5 file
 
 #Still needs to be updated for MPI
 @time_wrapper
@@ -389,6 +411,8 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
 
     if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
+
+    shutil.rmtree(working_dir) # delete working directory
 
     return tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 
