@@ -332,7 +332,7 @@ def primgauss_1D_overlaps(dark_objects: dict) -> list[np.ndarray]:
                 np.save(dir + f'{q:.5f}', res)
                 np.save(dir + f'{-1*q:.5f}', res)
             else:
-                np.save(dir + '{:.5f}'.format(q), res)
+                np.save(dir + f'{q:.5f}', res)
             loc = np.where(np.abs(np.einsum('Rab,a,b->Rab', res, norms, norms, optimize = False)).max(axis = (1,2)) > parmt.precision_R)[0]
             val.append([q, min(np.abs(Ru[loc.min()]), np.abs(Ru[loc.max()]))])
         return np.array(val)
@@ -374,8 +374,8 @@ def get_R_id(R_vectors, unique_Ri):
     for d in range(3):
         nR = np.round(R_vectors[:,d,None] - unique_Ri[d][None,:], 10)
         R_id[:,d] = np.sum(nR > 0, axis=1)
-    R_id = np.transpose(R_id).astype(int) #(dim, R_vec) 
-    return R_id
+    R_id = R_id.astype(int)  
+    return R_id #(R_vec, 3)
 
 @time_wrapper
 def store_R_ids(dark_objects: dict):
@@ -393,13 +393,13 @@ def store_R_ids(dark_objects: dict):
     abs_R = np.linalg.norm(R_vecs, axis = 1)
     unique_Ri = load_unique_R()
     R_id = get_R_id(R_vecs, unique_Ri)
-    np.save(parmt.store + '/R_ids/{}'.format(-1), R_id)
+    np.save(parmt.store + '/R_ids/-1', R_id)
     logger.info(f'\tNumber of R vectors: \t{R_id.shape[1]}.')
     q_cuts = []
     for i, R_cut in enumerate(R_cutoffs):
         q_cuts.append(R_cut[0])
         tR = R_vecs[abs_R <= R_cut[1]]
         R_id = get_R_id(tR, unique_Ri)
-        logger.info('\tq > \t{:.2f} amu, nR = \t{},'.format(q_cuts[-1], R_id.shape[1]))
+        logger.info(f'\tq > \t{q_cuts[-1]:.2f} amu, N_R = \t{R_id.shape[0]},')
         np.save(parmt.store + f'/R_ids/{i}', R_id)
     return np.array(q_cuts)

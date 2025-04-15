@@ -95,7 +95,7 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
         if rank == 0 or rank == None:
             logger.info(f'\t\tnumber of G vectors = {len(G_q)},')
 
-        eps_q_im = get_RPA_dielectric_no_LFE_q_new(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
+        eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
 
         start_time1 = time.time()
         tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, eps_q_im, bin_centers, tot_bin_eps_im, tot_bin_weights)
@@ -204,7 +204,7 @@ def get_RPA_dielectric_no_LFE_alt_binning(dark_objects: dict):
         qG.append(q + G_q)
 
         #eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, blocks, N_AO, q_cuts, VCell, G_q, unique_Ri)
-        eps_q_im = get_RPA_dielectric_no_LFE_q_new(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path)
+        eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path)
 
         eps_im.append(eps_q_im)
         
@@ -215,7 +215,7 @@ def get_RPA_dielectric_no_LFE_alt_binning(dark_objects: dict):
     np.save(parmt.store + '/eps_im.npy', eps_im)
     np.save(parmt.store + '/qG.npy', qG)
 
-def get_RPA_dielectric_no_LFE_q_new(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.ndarray, mo_coeff_f_conj: np.ndarray, mo_coeff_i: np.ndarray, k_f: np.ndarray, k_pairs: np.ndarray, primgauss_arr, AO_arr, coeff_arr, q_cuts: np.ndarray, VCell: float, G_q: np.ndarray, unique_Ri: list[np.ndarray], einsum_path, working_dir, rank) -> np.ndarray:
+def get_RPA_dielectric_no_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.ndarray, mo_coeff_f_conj: np.ndarray, mo_coeff_i: np.ndarray, k_f: np.ndarray, k_pairs: np.ndarray, primgauss_arr, AO_arr, coeff_arr, q_cuts: np.ndarray, VCell: float, G_q: np.ndarray, unique_Ri: list[np.ndarray], einsum_path, working_dir, rank) -> np.ndarray:
     
     # Prepare computation
     prefactor = 8.*(np.pi**2)*(alpha**2)*me/(VCell*len(k_pairs))/parmt.dE
@@ -237,11 +237,11 @@ def get_RPA_dielectric_no_LFE_q_new(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i:
 
     qG = q[None, :] + G_q
 
-    epsilon_im = prefactor*RPA_Im_eps_external_prefactor_no_LFE_new(qG, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank)
+    epsilon_im = prefactor*RPA_Im_eps_external_prefactor_no_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank)
 
     return epsilon_im
 
-def RPA_Im_eps_external_prefactor_no_LFE_new(qG, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank):
+def RPA_Im_eps_external_prefactor_no_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank):
     """
     Returns imaginary part of lim_{n->0} |<j(k+q)|exp(i(q+G)r)|ik>|^2/|q+G|^2/(E - (E_{j(k+q)} - E_{ik} + i n)), summed over i,j,k. 
 
