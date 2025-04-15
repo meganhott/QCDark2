@@ -151,7 +151,7 @@ def save_eps(bin_eps, bin_weights, bin_centers):
 
     f.close() # Close hdf5 file
 
-    logger.info(f'Calculation done: dielectric function and input parameters stored as hdf5 file at {parmt.system_name}/epsilon.hdf5')
+    logger.info(f'Calculation done: dielectric function and input parameters stored as hdf5 file at {parmt.store}/epsilon.hdf5')
 
 #Still needs to be updated for MPI
 @time_wrapper
