@@ -52,9 +52,9 @@ def save_dft():
             dft_params['dft_instance'] = 'DFT_0'
         else:
             dft_params['dft_instance'] = 'DFT_' + str(max([int(d.split('_')[1]) for d in dft_instances]) + 1)
-        logger.info(f'There is not a stored DFT cacluation for these input parameters, a new calculation will be performed and stored as {dft_params['dft_instance']}.')
-        makedir(f'{dft_path}/{dft_params['dft_instance']}')
-        json.dump(dft_params, open(f'{dft_path}/{dft_params['dft_instance']}/dft_params.txt', 'w')) #save dft parameters
+        logger.info(f'There is not a stored DFT cacluation for these input parameters, a new calculation will be performed and stored as {dft_params["dft_instance"]}.')
+        makedir(f'{dft_path}/{dft_params["dft_instance"]}')
+        json.dump(dft_params, open(f'{dft_path}/{dft_params["dft_instance"]}/dft_params.txt', 'w')) #save dft parameters
         new_dft = True
 
     return new_dft, dft_params
@@ -80,17 +80,17 @@ def list_saved_dft(df=False):
     else: #print all dft params
         for d in dft_instances:
             dft_dict = json.load(open(f'{dft_path}/{d}/dft_params.txt', 'r'))
-            print(f'DFT Instance: {dft_dict['dft_instance']}')
-            print(f'\tLattice vectors: {dft_dict['lattice_vectors']}')
-            print(f'\tAtom Locations: {dft_dict['atomloc']}')
-            print(f'\tBasis: {dft_dict['mybasis']}')
-            print(f'\tEffective Core Potential: {dft_dict['effective_core_potential']}')
-            print(f'\tPseudopotential: {dft_dict['pseudo']}')
-            print(f'\tPrecision: {dft_dict['precision']}')
-            print(f'\tExchange Correlation Functional: {dft_dict['xcfunc']}')
-            print(f'\tk-grid: {dft_dict['k_grid']}'.format(dft_dict['k_grid']))
-            print(f'\tq Shift Direction: {dft_dict['q_shift_dir']}')
-            print(f'\tq shift: {dft_dict['q_shift']}')
+            print(f'DFT Instance: {dft_dict["dft_instance"]}')
+            print(f'\tLattice vectors: {dft_dict["lattice_vectors"]}')
+            print(f'\tAtom Locations: {dft_dict["atomloc"]}')
+            print(f'\tBasis: {dft_dict["mybasis"]}')
+            print(f'\tEffective Core Potential: {dft_dict["effective_core_potential"]}')
+            print(f'\tPseudopotential: {dft_dict["pseudo"]}')
+            print(f'\tPrecision: {dft_dict["precision"]}')
+            print(f'\tExchange Correlation Functional: {dft_dict["xcfunc"]}')
+            print(f'\tk-grid: {dft_dict["k_grid"]}'.format(dft_dict["k_grid"]))
+            print(f'\tq Shift Direction: {dft_dict["q_shift_dir"]}')
+            print(f'\tq shift: {dft_dict["q_shift"]}')
 
 def make_kpts(cell: pbcgto.cell.Cell, dft_params: dict, with_gamma: bool = True) -> pyscf.pbc.lib.kpts.KPoints:
     """
@@ -116,7 +116,7 @@ def make_kpts(cell: pbcgto.cell.Cell, dft_params: dict, with_gamma: bool = True)
     np.save(dft_path + '/k-pts_f', kpts_f.kpts)
 
     logger.info(f'Selected q shift = {np.array2string(q_shift, precision = 5)}')
-    logger.info(f'{kpts_f.nkpts} final k vectors generated, {kpts_f.nkpts_ibz} in irreducible BZ, and stored to {parmt.store}/k-pts_f.npy given k-grid:\n\tnk_x = {dft_params['k_grid'][0]}, nk_y = {dft_params['k_grid'][1]}, nk_z = {dft_params['k_grid'][2]}.')
+    logger.info(f'{kpts_f.nkpts} final k vectors generated, {kpts_f.nkpts_ibz} in irreducible BZ, and stored to {parmt.store}/k-pts_f.npy given k-grid:\n\tnk_x = {dft_params["k_grid"][0]}, nk_y = {dft_params["k_grid"][1]}, nk_z = {dft_params["k_grid"][2]}.')
 
     return kpts_i, kpts_f
 
