@@ -565,23 +565,6 @@ def kramerskronig_lfe(eps_delta):
     eps_pv = np.array(eps_pv_re) - 1j*np.array(eps_pv_im)
     return eps_pv
 
-def get_Nk(unique_Ri, blocks, N_AO):
-    """
-    Returns number of k pairs to include in 3D overlaps multiprocessing based on the available memory and number of cores. Used for LFE calculations.
-    """
-    max_memory = psutil.virtual_memory().available*0.9
-    init_memory = psutil.Process(getpid()).memory_info()[0] #memory currently used 
-    N_cpus = mp.cpu_count()
-
-    N_uniqueRi = sum([Ri.shape[0] for Ri in unique_Ri])
-    N_PG = max(np.concatenate([k1 for k in blocks.keys() for k1 in k])) + 1
-    N_max_block = max([len(k1) for k in blocks.keys() for k1 in k])
-    N_Rid = np.load(parmt.store+'/R_ids/-1.npy').shape[1]
-    overlaps_memory = (N_uniqueRi*N_PG**2 + N_AO**2 + N_uniqueRi*N_PG*N_max_block + N_Rid*N_max_block**2 + N_uniqueRi*N_max_block**2) * 16
-    
-    Nk = int((max_memory - init_memory*N_cpus) / overlaps_memory / N_cpus)
-    return Nk
-
 #May want to put functions below into separate post-processing module? 
 
 def epsilon_r(bin_centers, binned_eps, eps_dtype='complex'):
