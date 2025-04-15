@@ -227,8 +227,7 @@ def get_RPA_dielectric_no_LFE_q_new(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i:
     k_f = k_f[k_pairs[:,1]]
 
     # Calculating the delta function in energy
-    im_delE = delta_energy(mo_en_i, mo_en_f)
-    im_delE = np.copy(np.transpose(im_delE, (0,3,1,2))) #(k,2,a,b)
+    im_delE = delta_energy(mo_en_i, mo_en_f) #(k,2,a,b)
 
     # store relevant quantities, perhaps faster to load in each iteration than supply 
     np.save(working_dir + '/im_energy', im_delE)
@@ -422,8 +421,7 @@ def get_RPA_dielectric_LFE_q(q: np.ndarray, mo_en_f: np.ndarray, mo_en_i: np.nda
     k_f = k_f[k_pairs[:,1]]
 
     # Calculating the delta function in energy
-    im_delE = delta_energy(mo_en_i, mo_en_f) #change shape in future!
-    im_delE = np.copy(np.transpose(im_delE, (0,3,1,2))) #(k,2,a,b)
+    im_delE = delta_energy(mo_en_i, mo_en_f) #(k,2,a,b)
 
     # store relevant quantities, perhaps faster to load in each iteration than supply 
     np.save(working_dir + '/im_energy', im_delE)
@@ -526,8 +524,8 @@ def delta_energy(mo_en_i, mo_en_f):
     nk, nmo, nmu = mo_en_f.shape[0], mo_en_i.shape[1], mo_en_f.shape[1]
     delE = (mo_en_f[:, None, :] - mo_en_i[:, :, None])/parmt.dE
     arr = np.zeros((nk, nmo, nmu, 2), dtype = np.float32)
-    arr[:,:,:,0] = delE//1
-    arr[:,:,:,1] = 1. - delE%1
+    arr[:,0,:,:] = delE//1
+    arr[:,1,:,:] = 1. - delE%1
     return arr
 
 def get_binned_epsilon(tot_bin_eps, tot_bin_weights):
