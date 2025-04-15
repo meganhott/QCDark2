@@ -116,7 +116,7 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
     return 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 
 def save_eps(bin_eps, bin_weights, bin_centers):
-    f = h5py.File(parmt.system_name + '/epsilon.hdf5', 'w') # create and open hdf5 file
+    f = h5py.File(parmt.store + '/epsilon.hdf5', 'w') # create and open hdf5 file
 
     binned_eps = bin_eps/bin_weights[:, None]
     f.create_dataset('binned_epsilon', data=binned_eps) # No KK or interpolation - should save only 0 + iIm(eps) for non-LFE
@@ -523,7 +523,7 @@ def delta_energy(mo_en_i, mo_en_f):
     """
     nk, nmo, nmu = mo_en_f.shape[0], mo_en_i.shape[1], mo_en_f.shape[1]
     delE = (mo_en_f[:, None, :] - mo_en_i[:, :, None])/parmt.dE
-    arr = np.zeros((nk, nmo, nmu, 2), dtype = np.float32)
+    arr = np.zeros((nk, 2, nmo, nmu), dtype = np.float32)
     arr[:,0,:,:] = delE//1
     arr[:,1,:,:] = 1. - delE%1
     return arr
