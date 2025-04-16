@@ -140,7 +140,7 @@ def save_eps(bin_eps, bin_weights, bin_centers):
     # Add attributes from input parameters
     for name, val in parmt.__dict__.items():
         if not name.startswith('__'): # ignores dunders
-            f.attrs[name] = val
+            f.attrs[name] = str(val)
 
     # Add q and E arrays
     q = np.arange(parmt.q_min + 0.5*parmt.dq, parmt.q_max + parmt.dq, parmt.dq)
