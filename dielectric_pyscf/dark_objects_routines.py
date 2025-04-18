@@ -13,10 +13,7 @@ import dielectric_pyscf.cartesian_moments as cartmoments
 @time_wrapper
 def build_cell_from_input() -> pbcgto.cell.Cell:
     """
-    Function that builds cell from inputs.
-    Note that the function requires no inputs but uses attributes defined in input_parameters.py.
-    Returns:
-        cell:   pyscf.pbc.gto.cell.Cell object
+    Function that builds cell from input_parameters.
     """
     if (parmt.pseudo is not None) and (parmt.effective_core_potential is not None):
         raise ValueError('Can only specify effective_core_potential or pseudo. Set one of these parameters to None.')
@@ -33,13 +30,14 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
             precision = parmt.precision,
             pseudo = parmt.pseudo
             )
-    except pyscf.lib.exceptions.BasisNotFoundError: 
-        #If basis set is not loaded in pyscf, check basis set exchange
+    except pyscf.lib.exceptions.BasisNotFoundError: # If basis set is not loaded in pyscf, check basis set exchange
         import basis_set_exchange
 
         basis_bse = {}
         for item in parmt.mybasis.items():
             basis_bse[item[0]] = pbcgto.load(basis_set_exchange.api.get_basis(item[1], elements=item[0], fmt='nwchem'), item[0])
+
+        max_memory = psutil.virtual_memory().available/(2**20)*0.9 # maximum memory pyscf will use
 
         cell = pbcgto.M(
             a = np.asarray(parmt.lattice_vectors),
@@ -50,16 +48,10 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
             output = parmt.pyscf_outfile,
             ecp = parmt.effective_core_potential,
             precision = parmt.precision,
-            pseudo = parmt.pseudo
+            pseudo = parmt.pseudo,
+            max_memory = max_memory
             )
     
-    max_memory = psutil.virtual_memory().available/(2**20)*.9
-    rcut = pbcgto.cell.estimate_rcut(cell, precision=cell.precision)
-    cell.rcut = rcut
-    cell.max_memory = max_memory
-    cell.space_group_symmetry = True
-    cell.build()
-
     logger.info(f'Built cell object. Note that we only use cartesian gaussians.\nWe have set maximum memory available to pyscf = 90% of available memory of system = {max_memory:.2f} MB')
     logger.info("Parameters fed, in atomic units:")
 
@@ -91,7 +83,7 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
         logger.info("\tAll-electron calculation.")
 
     logger.info(f'\tSelected precision: {cell.precision}')
-    logger.info(f'\tRadial cut-off for basis functions = {rcut:.2f} Bohr.')
+    logger.info(f'\tRadial cut-off for basis functions = {cell.rcut:.2f} Bohr.')
     logger.info(f'Further information is in {cell.output}.')
 
     makedir(parmt.store, log = False)
@@ -101,18 +93,13 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
 @time_wrapper
 def construct_R_vectors(cell: pbcgto.cell.Cell) -> np.ndarray:
     """
-    Function to construct all R vectors {R_i} relevant to the cell. We use pyscf build in methods and sort the R vectors from there.
-    Inputs:
-        cell:   pyscf.pbc.gto.cell.Cell object, initialized in build_cell_from_input routine.
-    Returns:
-        Rvecs:  np.ndarray of shape (N, 3), R vectors relevant to the calculation for convergence to
-                cell.precision parameter.
-        unR:    np.ndarray of shape (M, ), M << N, unique scalars in Rvecs. 
+    Function to construct all R-vectors relevant to the cell. We use pyscf built-in methods and sort the R-vectors by norm.
     """
     Rvecs = cell.get_lattice_Ls()
-    Rvecs = Rvecs[np.argsort(np.linalg.norm(Rvecs, axis=1))] #sort by norm
+    Rvecs = Rvecs[np.argsort(np.linalg.norm(Rvecs, axis=1))] # sort by norm
     np.save(parmt.store + '/R_vectors.npy', Rvecs)
-    logger.info(f'{Rvecs.shape[0]} R vectors generated for the cell given precision = {cell.precision}, and saved to {parmt.store}/R_vectors.npy.')
+
+    logger.info(f'{Rvecs.shape[0]} R-vectors generated for the cell given precision = {cell.precision}, and saved to {parmt.store}/R_vectors.npy.')
     return Rvecs
 
 def get_cell_volume(cell: pbcgto.cell.Cell) -> float:

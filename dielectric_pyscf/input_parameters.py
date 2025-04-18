@@ -8,11 +8,11 @@ Authors: Megan Hott, Aman Singal
 """
 
 """Naming-parameters: system_name and name of final file"""
-system_name = '/gpfs/scratch/mhott/dielectric_pyscf_results/Si_cc-pvtz_pbe_8k'
+system_name = '/gpfs/scratch/mhott/dielectric_pyscf_results/Si_cc-pvtz_pbe0_4k'
 res_filename = system_name + '_eps.hdf5'
 DFT_resources_path = '/gpfs/scratch/mhott/dielectric_pyscf_results'
 
-mpi = True                         # If True, MPI parallelization will be implemented
+mpi = False                         # If True, MPI parallelization will be implemented
 
 alt_binning = False                 #Temporary: set to True to use alternate binning technique, where interpolation and binning happen at end only. Do not use for large q since epsilon is kept in memory for all q+G vectors.
 
@@ -23,7 +23,9 @@ lattice_vectors = [[a/2,      a/2,      0. ],
                    [a/2,      0.,       a/2]]
 atomloc =  ''' Si 0 0 0; Si {} {} {}'''.format(a/4, a/4, a/4)
 mybasis = {'Si': 'cc-pvtz'}        # Recommended to keep all basis sets same, however can be made different. We follow pyscf notations, see pyscf documentation
+
 CholOrth = False                   # Perform Cholesky orthogonalization on SCF calculation. Often required for diffuse basis functions
+density_fitting = 'MDF' #'RSDF'
 
 effective_core_potential = None    # All electron basis sets mandate the use of no ECPs, basis sets and ECPS must be chosen consistently
 pseudo = None                      # Similar to ECPs, slight differences (uses CP2K based systems)
@@ -31,12 +33,12 @@ pseudo = None                      # Similar to ECPs, slight differences (uses C
 """Computational parameters: these determine precision and whether optional parameters are applied"""
 precision = 1e-9                   # DFT precision parameter, fed to pyscf only
 precision_R = 1e-9                 # R cutoff precision, used for dielectric function precision
-xcfunc = 'pbe'                     # Exchange-Correlation Functional
-k_grid = [8,8,8]                # k-grid: resolution of grid points in reciprocal space
+xcfunc =   'pbe0'#'HYB_GGA_XC_HSE06'                     # Exchange-Correlation Functional
+k_grid = [4,4,4]                # k-grid: resolution of grid points in reciprocal space
 q_shift_dir = [1,1,1]              # Direction for q-shift (gets normalized automatically)
 q_shift = 0.01                     # In units of alpha*(mass of electron), magnitude of q shift 
 scissor_bandgap = 1.1              # If float in eV, the scissor correction is applied to meet the specified bandgap. If None, scissor correction is not applied
-include_lfe = True                # If False, does not incorporate local field effects into the calculation of epsilon. If True, LFEs will be calculated by inverting eps_{GG'}
+include_lfe = False                # If False, does not incorporate local field effects into the calculation of epsilon. If True, LFEs will be calculated by inverting eps_{GG'}
 
 """Parameters for dielectric function calculations"""
 dq = 0.02                          # In units of alpha*(mass of electron), size of momentum bins 

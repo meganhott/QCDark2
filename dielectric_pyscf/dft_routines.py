@@ -4,16 +4,25 @@ import json
 import pyscf.pbc.gto as pbcgto
 import pyscf.pbc.dft as pbcdft
 import pyscf.pbc
-import pyscf.scf.addons #for basis sets with linear dependencies
+import pyscf.scf.addons # for basis sets with linear dependencies
 
 import dielectric_pyscf.input_parameters as parmt
 from dielectric_pyscf.routines import logger, time_wrapper, makedir
 
-#Constants
-me = 0.51099895000e6 #eV
+# Constants
+me = 0.51099895000e6 # eV
 alpha = 1/137
 
 def save_dft():
+    """
+    Checks saved DFT calculations and determines if a new calculation should be run.
+
+    Returns:
+        new_dft (bool):
+            If True, a new DFT calculation will be run.
+        dft_params (dict):
+            DFT parameters specified in input_parameters.
+    """
     dft_params = {
         'lattice_vectors': parmt.lattice_vectors,
         'atomloc': parmt.atomloc,
@@ -29,14 +38,15 @@ def save_dft():
     }
 
     dft_path = parmt.DFT_resources_path + '/DFT_resources'
-    makedir(dft_path) #makes DFT_routines directory if it does not already exist
+    makedir(dft_path) # makes DFT_routines directory if it does not already exist
+
     dft_instances = os.listdir(dft_path)
     for d in dft_instances:
         dft_dict = json.load(open(f'{dft_path}/{d}/dft_params.txt', 'r'))
-        if all(dft_dict[key] == dft_params[key] for key in dft_dict.keys() if key not in ['dft_instance']): #compare everything except dft_instance
+        if all(dft_dict[key] == dft_params[key] for key in dft_dict.keys() if key not in ['dft_instance']): # compare everything except dft_instance
             dft_params['dft_instance'] = d
             dft_files = os.listdir(dft_path + '/' + d)
-            if len(dft_files) < 4: #Something went wrong with previously calculated DFT, calculation should be started again
+            if len(dft_files) < 4: # something went wrong with previously calculated DFT, calculation should be started again
                 logger.info(f'There is not a stored DFT cacluation for these input parameters, a new calculation will be performed and stored as {d}.')
                 new_dft = True
             elif ('mo_en_i_dft.npy' in dft_files) and ('mo_en_f_dft.npy' not in dft_files):
@@ -52,9 +62,10 @@ def save_dft():
             dft_params['dft_instance'] = 'DFT_0'
         else:
             dft_params['dft_instance'] = 'DFT_' + str(max([int(d.split('_')[1]) for d in dft_instances]) + 1)
+
         logger.info(f'There is not a stored DFT cacluation for these input parameters, a new calculation will be performed and stored as {dft_params["dft_instance"]}.')
         makedir(f'{dft_path}/{dft_params["dft_instance"]}')
-        json.dump(dft_params, open(f'{dft_path}/{dft_params["dft_instance"]}/dft_params.txt', 'w')) #save dft parameters
+        json.dump(dft_params, open(f'{dft_path}/{dft_params["dft_instance"]}/dft_params.txt', 'w')) # save dft parameters
         new_dft = True
 
     return new_dft, dft_params
@@ -92,140 +103,190 @@ def list_saved_dft(df=False):
             print(f'\tq Shift Direction: {dft_dict["q_shift_dir"]}')
             print(f'\tq shift: {dft_dict["q_shift"]}')
 
-def make_kpts(cell: pbcgto.cell.Cell, dft_params: dict, with_gamma: bool = True) -> pyscf.pbc.lib.kpts.KPoints:
+def make_kpts(cell: pbcgto.cell.Cell, dft_params: dict) -> pyscf.pbc.lib.kpts.KPoints:
     """
     Function to get the grid in reciprocal unit cell given k_grid density in input_parameters.py.
+
     Inputs:
-        cell:   pyscf.pbc.gto.cell.Cell object, initialized in build_cell_from_input routine.
+        cell (pyscf.pbc.gto.cell.Cell):
+            Initialized in build_cell_from_input routine
     Returns:
-        k_i, k_f: np.ndarrays of shape (N, 3), initial and final k vectors generated from the cell.
+        k_i ((N_k, 3) np.ndarray): 
+            Inital k-vectors
+        k_f ((N_k, 3) np.ndarray): 
+            Final k-vectors
     """
-    #save k_i
-    dft_path = parmt.DFT_resources_path + '/DFT_resources/' + dft_params['dft_instance']
+    # Save k_i
     k_grid = parmt.k_grid
-    kpts_i = cell.make_kpts(k_grid, wrap_around=True, with_gamma_point=with_gamma, space_group_symmetry=True)
-    np.save(dft_path + '/k-pts_i', kpts_i.kpts)
+    kpts_i = cell.make_kpts(k_grid, wrap_around=True) # wrap_around=True generates k_pts in 1BZ
 
-    logger.info(f'{kpts_i.nkpts} initial k vectors generated, {kpts_i.nkpts_ibz} in irreducible BZ, and stored to {parmt.store}/k-pts_i.npy given k-grid:\n\tnk_x = {k_grid[0]}, nk_y = {k_grid[1]}, nk_z = {k_grid[2]}.')
+    dft_path = parmt.DFT_resources_path + '/DFT_resources/' + dft_params['dft_instance']
+    np.save(dft_path + '/k-pts_i', kpts_i)
 
-    # save k_f
+    logger.info(f'{kpts_i.shape[0]} initial k vectors generated and stored to {parmt.store}/k-pts_i.npy given k-grid:\n\tnk_x = {k_grid[0]}, nk_y = {k_grid[1]}, nk_z = {k_grid[2]}.')
+
+    # Save k_f
     q_shift_dir = np.array(dft_params['q_shift_dir'])
-    q_shift = dft_params['q_shift']*q_shift_dir/np.linalg.norm(q_shift_dir)
-    scaled_center = cell.get_scaled_kpts(q_shift)
-    kpts_f = cell.make_kpts(dft_params['k_grid'], space_group_symmetry=True, wrap_around = True, scaled_center = scaled_center)
-    np.save(dft_path + '/k-pts_f', kpts_f.kpts)
+    q_shift = dft_params['q_shift'] * q_shift_dir / np.linalg.norm(q_shift_dir)
 
     logger.info(f'Selected q shift = {np.array2string(q_shift, precision = 5)}')
-    logger.info(f'{kpts_f.nkpts} final k vectors generated, {kpts_f.nkpts_ibz} in irreducible BZ, and stored to {parmt.store}/k-pts_f.npy given k-grid:\n\tnk_x = {dft_params["k_grid"][0]}, nk_y = {dft_params["k_grid"][1]}, nk_z = {dft_params["k_grid"][2]}.')
 
+    scaled_center = cell.get_scaled_kpts(q_shift)
+
+    kpts_f = cell.make_kpts(dft_params['k_grid'], wrap_around=True, scaled_center=scaled_center)
+    np.save(dft_path + '/k-pts_f', kpts_f)
+
+    logger.info(f'{kpts_f.shape[0]} final k vectors generated and stored to {parmt.store}/k-pts_f.npy given k-grid:\n\tnk_x = {dft_params["k_grid"][0]}, nk_y = {dft_params["k_grid"][1]}, nk_z = {dft_params["k_grid"][2]}.')
+
+    # Using symmetry breaks many DFT calculations, no longer implemented
+    """
+    kpts_i = cell.make_kpts(k_grid, wrap_around=True, with_gamma_point=with_gamma, space_group_symmetry=space_group_symmetry)
+    kpts_f = cell.make_kpts(dft_params['k_grid'], space_group_symmetry=space_group_symmetry, wrap_around = True, scaled_center = scaled_center)
+
+    if space_group_symmetry:
+        np.save(dft_path + '/k-pts_i', kpts_i.kpts)
+        logger.info(f'{kpts_i.nkpts} initial k vectors generated, {kpts_i.nkpts_ibz} in irreducible BZ, and stored to {parmt.store}/k-pts_i.npy given k-grid:\n\tnk_x = {k_grid[0]}, nk_y = {k_grid[1]}, nk_z = {k_grid[2]}.')
+        np.save(dft_path + '/k-pts_f', kpts_f.kpts)
+        logger.info(f'{kpts_f.nkpts} final k vectors generated, {kpts_f.nkpts_ibz} in irreducible BZ, and stored to {parmt.store}/k-pts_f.npy given k-grid:\n\tnk_x = {dft_params["k_grid"][0]}, nk_y = {dft_params["k_grid"][1]}, nk_z = {dft_params["k_grid"][2]}.')
+    """
     return kpts_i, kpts_f
 
 @time_wrapper
-def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict, with_gamma=True, CholOrth=False, cderi_save_file=None, density_fitting='GDF') -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
+def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict, CholOrth=parmt.CholOrth, cderi_save_file=None, density_fitting=parmt.density_fitting) -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
     """
-    Function to do density functional theory. Solves the RKS if only one kpoint in kgrid, otherwise solves RKS at each k-point and constructs density matrix from integrating over 1BZ. 
+    Function to do density functional theory. Performs restricted Kohn-Sham (RKS) DFT at each k-point and constructs density matrix from integrating over 1BZ. 
+
     Inputs:
-        cell:       pyscf.pbc.gto.cell.Cell object, initialized in build_cell_from_input routine.
-        dft_params: dict, DFT parameters
-        CholOrth:   bool: determines if scf calculation will eliminate linear dependencies with Cholesky orthogonalization - useful for basis sets with diffuse functions
+        cell (pyscf.pbc.gto.cell.Cell):
+            Initialized in build_cell_from_input routine, contains information about material
+        dft_params (dict):
+            DFT parameters
+        CholOrth (bool):
+            Determines if scf calculation will eliminate linear dependencies with Cholesky orthogonalization - useful for basis sets with diffuse functions
     Returns:
-        kmf
+        kmf (pyscf.pbc.dft.krks.KRKS):
+            SCF DFT object
     Saves:
         molecular energies, molecular coefficients and molecular occupation numbers.
     """
     dft_path = parmt.DFT_resources_path + '/DFT_resources/' + dft_params['dft_instance']
     logger.info('Initial state calculation:')
-    kpts = make_kpts(cell, dft_params, with_gamma=with_gamma)[0]
+    kpts = make_kpts(cell, dft_params)[0]
 
-    if density_fitting == 'GDF': #Gaussian density fitting
-        kmf = pbcdft.KRKS(cell, kpts).density_fit()
-    elif density_fitting == 'MDF': #Mixed density fitting
+    if density_fitting == 'GDF': # Gaussian density fitting
+        kmf = pbcdft.KRKS(cell, kpts, ).density_fit()
+    elif density_fitting == 'MDF': # Mixed density fitting
         kmf = pbcdft.KRKS(cell, kpts).mix_density_fit()
+    elif density_fitting == 'RSDF': # Range separated density fitting
+        kmf = pbcdft.KRKS(cell, kpts).rs_density_fit()
+    elif density_fitting == 'FFTDF': # Fast Fourier transform density fitting. Do not use for all-electron calculations due to memory constraints!
+        kmf = pbcdft.KRKS(cell, kpts)
     else:
-        raise(ValueError('density_fitting must be "GDF" for Gaussian Density Fitting, or "MDF" for Mixed Density Fitting. FFTDF is not supported for all-electron calculations due to memory constraints.'))
+        raise(ValueError('density_fitting must be "GDF" for Gaussian Density Fitting, "MDF" for Mixed Density Fitting, "RSDF" for Range-Separated Density Fitting, or "FFTDF" for Fast Fourier Transform Density Fitting. FFTDF is not supported for all-electron calculations due to memory constraints.'))
 
     kmf.xc = parmt.xcfunc
 
-    if cderi_save_file is not None:
+    #kmf.exxdiv = exxdiv #None or ewald - may need to change to None for hybrid functionals? exxdiv by default
+
+    if cderi_save_file is not None: # Saves density fitting matrix
         kmf.with_df._cderi_to_save = cderi_save_file
+    else:
+        kmf.with_df._cderi_to_save = f'{parmt.store}/cderi.h5'
 
     if CholOrth: #eventually catch linear dependency errors automatically and run this?
-        kmf = pyscf.scf.addons.remove_linear_dep_(kmf).run() #threshold=1e-7
+        kmf = pyscf.scf.addons.remove_linear_dep_(kmf).run()
+        # pyscf will still output warning even after this is applied but linear dependencies have been removed
     else:
         kmf.kernel()
     
     if kmf.converged:
-        np.save(dft_path + '/mo_en_i_dft', kpts.transform_mo_energy(kmf.mo_energy))
-        np.save(dft_path + '/mo_coeff_i', kpts.transform_mo_coeff(kmf.mo_coeff))
-        np.save(dft_path + '/mo_occ_i', kpts.transform_mo_occ(kmf.mo_occ))
+        np.save(dft_path + '/mo_en_i_dft.npy', kpts.transform_mo_energy(kmf.mo_energy))
+        np.save(dft_path + '/mo_coeff_i.npy', kpts.transform_mo_coeff(kmf.mo_coeff))
+        np.save(dft_path + '/mo_occ_i.npy', kpts.transform_mo_occ(kmf.mo_occ))
     else:
-        raise ValueError('DFT not converged. Might need to orthogonalize basis before continuing (Not Implemented).')
+        raise ValueError('DFT not converged. Might need to orthogonalize basis by setting CholOrth=True.')
+    
     logger.info(f'Electronic structure converged, KS energy is {kmf.e_tot:.2f} Hartrees.\n\tDFT data is stored to {dft_path}.')
+
     return kmf
 
 @time_wrapper
 def KS_non_self_consistent_field(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS, dft_params: dict):
     """
     Non self consistent field calculation for final states.
+
     Inputs:
-        kmf:        pyscf.pbc.dft.krks_ksymm.KsymAdaptedKRKS object
-        dft_params: dict, DFT parameters
+        kmf (pyscf.pbc.dft.krks.KRKS):
+            SCF DFT object
+        dft_params (dict):
+            DFT parameters
     """
-    logger.info("Final State Calculation:")
-    kpts = make_kpts(kmf.cell, dft_params, True)[1]
-    ek , ck = kmf.get_bands(kpts.kpts_ibz)
-    ek = kpts.transform_mo_energy(ek)
-    ck = kpts.transform_mo_coeff(ck)
+    logger.info('Final State Calculation:')
+    kpts = make_kpts(kmf.cell, dft_params)[1]
+
+    energy_k, coeff_k = kmf.get_bands(kpts)
+
+    # Using symmetry breaks many DFT calculations, no longer implemented
+    """
+    enegy_k , coeff_k = kmf.get_bands(kpts.kpts_ibz)
+    energy_k = kpts.transform_mo_energy(ek)
+    coeff_k = kpts.transform_mo_coeff(ck)
+    """
+
     dft_path = parmt.DFT_resources_path + '/DFT_resources/' + dft_params['dft_instance']
-    np.save(dft_path + '/mo_en_f_dft', ek)
-    np.save(dft_path + '/mo_coeff_f', ck)
+    np.save(dft_path + '/mo_en_f_dft.npy', energy_k)
+    np.save(dft_path + '/mo_coeff_f.npy', coeff_k)
+
     logger.info(f'Non self consistent field equations solved for final state k-points. Data is stored to {dft_path}.')
 
 @time_wrapper
 def convert_to_eV_and_scissor(cell: pbcgto.cell.Cell, dft_params: dict):
     """
-    Function converts energies from Ryd to eV - prints bandgap, if scissor - scissor corrects bandgap.
+    Converts energies from Ryd to eV and prints bandgap. If scissor-corrected bandgap is specified in input_parameters, it is applied to MO energies.
+
     Inputs:
-        cell:                               pyscf.pbc.gto.cell.Cell object
-        dft_params:                         dict, DFT parameters
-    Reads:
-        parmt.scissor_bandgap:              float, scissor energies in eV
-        parmt.store + '/DFT/mo_en_i.npy':   np.ndarray object, stored to disk
-        parmt.store + '/DFT/mo_en_f.npy':   np.ndarray object, stored to disk
-    Writes:
-        parmt.store + '/DFT/mo_en_i.npy':   np.ndarray object, stored to disk
-        parmt.store + '/DFT/mo_en_f.npy':   np.ndarray object, stored to disk
+        cell (pyscf.pbc.gto.cell.Cell):
+            Contains information about material
+        dft_params (dict):
+            DFT parameters
     """
-    occ_orb = cell.tot_electrons()//2
     dft_path = parmt.DFT_resources_path + '/DFT_resources/' + dft_params['dft_instance']
-    en_i = np.load(dft_path + '/mo_en_i_dft.npy')*alpha*alpha*me #convert to eV
-    en_f = np.load(dft_path + '/mo_en_f_dft.npy')*alpha*alpha*me
-    homo = max(en_i[:,:occ_orb].max(), en_f[:,:occ_orb].max())
-    en_i, en_f = en_i - homo, en_f - homo
-    homo = 0
-    lumo = min(en_i[:,occ_orb:].min(), en_f[:,occ_orb:].min())
-    logger.info(f'All energies converted to eV. Calculated Bandgap = {(lumo - homo):.2f} eV.')
+    mo_en_i = np.load(dft_path + '/mo_en_i_dft.npy')*alpha*alpha*me # molecular orbital energies for initial k-points, convert to eV
+    mo_en_f = np.load(dft_path + '/mo_en_f_dft.npy')*alpha*alpha*me # molecular orbital energies for final k-points, convert to eV
+
+    occ_orb = cell.tot_electrons()//2 # number of occupied orbitals 
+    homo = max(mo_en_i[:,:occ_orb].max(), mo_en_f[:,:occ_orb].max()) # energy of highest occupied MO
+    mo_en_i, mo_en_f = mo_en_i - homo, mo_en_f - homo # shifting bands so HOMO is at 0 eV
+    lumo = min(mo_en_i[:,occ_orb:].min(), mo_en_f[:,occ_orb:].min()) #energy of lowest unoccupied MO
+
+    logger.info(f'All energies converted to eV. Calculated Bandgap = {lumo:.2f} eV.')
+
+    # Apply scissor correction by shifting all conduction bands
     if parmt.scissor_bandgap is not None:
         if type(parmt.scissor_bandgap) != float:
             raise ValueError('Parameter scissor_bandgap in input_parameters.py must be either None or of type float.')
+        
         correction = parmt.scissor_bandgap - lumo
-        en_i[:,occ_orb:], en_f[:,occ_orb:] = en_i[:,occ_orb:] + correction, en_f[:,occ_orb:] + correction
+
+        mo_en_i[:,occ_orb:], mo_en_f[:,occ_orb:] = mo_en_i[:,occ_orb:] + correction, mo_en_f[:,occ_orb:] + correction
         logger.info(f'Scissor Correction applied, new bandgap is {parmt.scissor_bandgap:.2f} eV.')
     
     makedir(parmt.store + '/DFT')
-    np.save(parmt.store + '/DFT/mo_en_i.npy', en_i)
-    np.save(parmt.store + '/DFT/mo_en_f.npy', en_f)
+    np.save(parmt.store + '/DFT/mo_en_i.npy', mo_en_i)
+    np.save(parmt.store + '/DFT/mo_en_f.npy', mo_en_f)
 
-    #store mo_coeff and k points in main file as well
-    coeff_i = np.load(dft_path + '/mo_coeff_i.npy')
-    coeff_f = np.load(dft_path + '/mo_coeff_f.npy')
-    np.save(parmt.store + '/DFT/mo_coeff_i.npy', coeff_i)
-    np.save(parmt.store + '/DFT/mo_coeff_f.npy', coeff_f)
+    # Store MO coefficients and k-points in main file as well
+    mo_coeff_i = np.load(dft_path + '/mo_coeff_i.npy')
+    mo_coeff_f = np.load(dft_path + '/mo_coeff_f.npy')
+    np.save(parmt.store + '/DFT/mo_coeff_i.npy', mo_coeff_i)
+    np.save(parmt.store + '/DFT/mo_coeff_f.npy', mo_coeff_f)
+
     k_i = np.load(dft_path + '/k-pts_i.npy')
     k_f = np.load(dft_path + '/k-pts_f.npy')
     np.save(parmt.store + '/k-pts_i.npy', k_i)
     np.save(parmt.store + '/k-pts_f.npy', k_f)
-    logger.info("Electronic structure energies updated in files.")
+
+    logger.info('Electronic structure energies updated in files.')
 
 def get_band_indices(dft_params: dict):
     """
@@ -241,7 +302,7 @@ def get_band_indices(dft_params: dict):
         raise NotImplementedError(f'Occupancy of filled bands is not 2. Spin-dependent DFT has not been implemented. Check {dft_path}/mo_occ_i.npy if you expect filled bands to have an occupancy of 2.')
     
     num_bands = mo_occ_i.shape[1]
-    num_all_val = sum(mo_occ_i[0] != 0) #total number of occupied bands from dft calculation
+    num_all_val = sum(mo_occ_i[0] != 0) # total number of occupied bands from dft calculation
 
     if parmt.numval == 'all':
         num_val = num_all_val
