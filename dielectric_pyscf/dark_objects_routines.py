@@ -17,6 +17,8 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
     """
     if (parmt.pseudo is not None) and (parmt.effective_core_potential is not None):
         raise ValueError('Can only specify effective_core_potential or pseudo. Set one of these parameters to None.')
+    
+    max_memory = psutil.virtual_memory().available/(2**20)*0.9 # maximum memory pyscf will use
 
     try:
         cell = pbcgto.M(
@@ -28,7 +30,8 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
             output = parmt.pyscf_outfile,
             ecp = parmt.effective_core_potential,
             precision = parmt.precision,
-            pseudo = parmt.pseudo
+            pseudo = parmt.pseudo,
+            max_memory = max_memory
             )
     except pyscf.lib.exceptions.BasisNotFoundError: # If basis set is not loaded in pyscf, check basis set exchange
         import basis_set_exchange
@@ -36,8 +39,6 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
         basis_bse = {}
         for item in parmt.mybasis.items():
             basis_bse[item[0]] = pbcgto.load(basis_set_exchange.api.get_basis(item[1], elements=item[0], fmt='nwchem'), item[0])
-
-        max_memory = psutil.virtual_memory().available/(2**20)*0.9 # maximum memory pyscf will use
 
         cell = pbcgto.M(
             a = np.asarray(parmt.lattice_vectors),
