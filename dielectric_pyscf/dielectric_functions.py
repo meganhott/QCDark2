@@ -19,7 +19,7 @@ def initialize_cell() -> tuple[do_routines.pbcgto.cell.Cell, dict]:
     primgauss = do_routines.gen_all_1D_prim_gauss(cell)
     primindices = do_routines.gen_prim_gauss_indices(primgauss)
     aos = do_routines.gen_all_atomic_orbitals(cell, primgauss)
-    blocks = do_routines.get_basis_blocks(aos)
+    primgauss_arr, AO_arr, coeff_arr = do_routines.get_ao_blocks(aos)
     G_vectors = do_routines.gen_G_vectors(cell)
     R_vectors = do_routines.construct_R_vectors(cell)
     V_cell = do_routines.get_cell_volume(cell)
@@ -31,7 +31,7 @@ def initialize_cell() -> tuple[do_routines.pbcgto.cell.Cell, dict]:
         'primindices': primindices[0],
         'atom_locs': primindices[1],
         'R_vectors': R_vectors,
-        'blocks': blocks,
+        'block_arrays': [primgauss_arr, AO_arr, coeff_arr],
         'V_cell': V_cell
     }
     return cell, dark_objects

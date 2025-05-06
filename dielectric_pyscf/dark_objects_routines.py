@@ -233,15 +233,20 @@ def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> li
     return all_ao
 
 @time_wrapper
-def get_basis_blocks(aos: list[cartmoments.AO]) -> dict:
+def get_ao_blocks(aos: list[cartmoments.AO]):
     """
-    Get a dictionary object of all blocks of AO in terms of their prim_indices.
+    Reorganizes atomic orbitals into blocks to speed up overlap calculations.
     Inputs:
-        aos:    list[cartesian_moments.AO]
+        aos: list[cartesian_moments.AO]
     Returns:
-        blocks: dict object containing other dictionaries
-                blocks[tuple][index of AO object]: np.ndarray containing coef*norm
+        primgauss_arr: (N_blocks, N_primgauss, 3) boolean np.ndarray
+            Encodes which primitive gaussians are included in each block in each cartesian direction
+        AO_arr: (N_blocks, N_AO) boolean np.ndarray 
+            Encodes which atomic orbitals are included in each block
+        coeff_arr: (N_AO, N_max_primgauss) complex np.ndarray
+            Stores the coefficients that describe how to build each atomic orbital from its primitive gaussians. The coefficients are real, but are stored as complex for numba array computations later.
     """
+    # Build blocks dictionary to determine how many segmented basis blocks there are
     blocks = {}
     for i, ao in enumerate(aos):
         pg = tuple(tuple(pi) for pi in ao.prim_indices)
@@ -249,8 +254,38 @@ def get_basis_blocks(aos: list[cartmoments.AO]) -> dict:
             blocks[pg][i] = ao.coef
         else:
             blocks[pg] = {i: ao.coef}
-    logger.info(f'Generated all blocks in 1D primitive gaussians, number of blocks = {len(blocks)}.')
-    return blocks
+
+    # Construct arrays from blocks dictionary
+    block_keys = list(blocks.keys()) # tuples of primgauss indices
+    block_values = list(blocks.values()) #AOs and primgauss coefficients
+    N_blocks = len(block_keys) # Number of basis blocks
+    N_primgauss = max([bij for bi in [aij for ai in block_keys for aij in ai] for bij in bi]) + 1 # Number of primitive gaussians
+    N_AO = max([aij for ai in (list(b.keys()) for b in block_values) for aij in ai]) + 1 # Number of atomic orbitals
+    N_maxcoeff = max([aij.shape[0] for ai in (list(b.values()) for b in block_values) for aij in ai]) # Maximum number of primgauss in one atomic orbital
+
+    # Building primgauss_arr: for block i, primgauss_arr[i] encodes which primgauss along each cartesian direction are included in the block. primgauss_arr[i,j,d] = 1 if primgauss j is included along cartesian direction d, primgauss_arr[i,j,d] = 0 if not.
+    primgauss_arr = np.zeros((N_blocks, N_primgauss, 3), dtype='bool')
+    for i, b in enumerate(block_keys):
+        for d in range(3):
+            primgauss_arr[i,np.array(b)[d],d] = 1
+
+    # Building AO_arr: for block i, AO_arr[i] enocodes which atomic orbitals are included in the block. AO_arr[i,j] = 1 if AO j is included in block i, AO_arr[i,j] = 0 if not.
+    AO_arr = np.zeros((N_blocks, N_AO), dtype='bool')
+    AOs = [list(b.keys()) for b in block_values]
+    for i, a in enumerate(AOs):
+        AO_arr[i,a] = 1
+
+    # Building array of primgauss coefficients for all atomic orbitals. 
+    coeff_arr = np.zeros((N_AO, N_maxcoeff), dtype='complex') # coefficients are actually just real floats, but need to match complex dtype for numba optimization later 
+    coeff = [list(b.values()) for b in block_values]
+    for b in block_values:
+        for a in list(b.keys()): #[AO1, AO2, ...]
+            coeff = b[a]
+            coeff_arr[a, :coeff.shape[0]] = coeff
+
+    logger.info(f'Generated all blocks in 1D primitive gaussians, number of blocks = {N_blocks}.')
+
+    return primgauss_arr, AO_arr, coeff_arr
 
 def project_vectors_to_1BZ(G: np.ndarray, D: np.ndarray, q: np.ndarray) -> np.ndarray:
     """
