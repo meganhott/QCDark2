@@ -396,8 +396,7 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
         eps_delta_q_neg = -1*get_RPA_dielectric_LFE_q(q, mo_en_f[:,ivalbot:ivaltop+1], mo_en_i[:,iconbot:icontop+1], mo_coeff_f_conj[:,:,ivalbot:ivaltop+1], mo_coeff_i[:,:,iconbot:icontop+1], k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
 
         # Combine both terms for all E
-        eps_delta_q_tot = np.concatenate((np.flip(eps_delta_q_neg[:,1:], axis=1), eps_delta_q), axis=1)
-
+        eps_delta_q_tot = np.concatenate((np.flip(eps_delta_q_neg[:,1:], axis=2), eps_delta_q), axis=2)
 
         #Kramers-Kronig to get transition amplitude parts of Re(eps) and Im(eps)
         eps_pv_q = kramerskronig_lfe(eps_delta_q)
