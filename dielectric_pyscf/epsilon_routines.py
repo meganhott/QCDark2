@@ -32,10 +32,10 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
     
     dft_path = parmt.store + '/DFT/'
-    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,:,ivalbot:ivaltop+1]
-    mo_coeff_f_conj = np.load(dft_path + 'mo_coeff_f.npy')[:,:,iconbot:icontop+1].conj()
-    mo_en_i = np.load(dft_path + 'mo_en_i.npy')[:,ivalbot:ivaltop+1]
-    mo_en_f = np.load(dft_path + 'mo_en_f.npy')[:,iconbot:icontop+1]
+    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')#[:,:,ivalbot:ivaltop+1]
+    mo_coeff_f_conj = np.load(dft_path + 'mo_coeff_f.npy').conj()#[:,:,iconbot:icontop+1].conj()
+    mo_en_i = np.load(dft_path + 'mo_en_i.npy')#[:,ivalbot:ivaltop+1]
+    mo_en_f = np.load(dft_path + 'mo_en_f.npy')#[:,iconbot:icontop+1]
     k_f = np.load(parmt.store + '/k-pts_f.npy')
 
     q_cuts = dark_objects['R_cutoff_q_points']
@@ -76,7 +76,7 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
     
     q_keys = list(unique_q.keys())[q_start:q_stop]
 
-    tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1))
+    tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, int(2*parmt.E_max/parmt.dE)+1))
     tot_bin_weights = np.zeros(bin_centers.shape[0]+N_ang_bins)
 
     for i_q, q in enumerate(q_keys, start=q_start):
@@ -95,10 +95,20 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
         if rank == 0 or rank == None:
             logger.info(f'\t\tnumber of G vectors = {len(G_q)},')
 
-        eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
+        # Imaginary part of polarizability for E >= 0
+        eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f[:,iconbot:icontop+1], mo_en_i[:,ivalbot:ivaltop+1], mo_coeff_f_conj[:,:,iconbot:icontop+1], mo_coeff_i[:,:,ivalbot:ivaltop+1], k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
+
+        # Imaginary part of polarizability for E < 0 to use in KK
+        eps_q_im_neg = -1*get_RPA_dielectric_no_LFE_q(q, mo_en_f[:,ivalbot:ivaltop+1], mo_en_i[:,iconbot:icontop+1], mo_coeff_f_conj[:,:,ivalbot:ivaltop+1], mo_coeff_i[:,:,iconbot:icontop+1], k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
+        #For energies[0, -0.1, -0.2, ...]
+
+        # Combine both terms for E = [-50.0, ..., -0.1, 0, 0.1, ..., 50.0]
+        # Remove E=0 bin from eps_q_im_neg? - maybe not - add to E=0 bin of eps_q_im
+        # Flip order of eps_q_im_neg and concatenate along energy axis
+        eps_q_im_tot = np.concatenate((np.flip(eps_q_im_neg[:,1:], axis=1), eps_q_im), axis=1)
 
         start_time1 = time.time()
-        tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, eps_q_im, bin_centers, tot_bin_eps_im, tot_bin_weights)
+        tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, eps_q_im_tot, bin_centers, tot_bin_eps_im, tot_bin_weights)
 
         if rank == 0 or rank == None:
             logger.info(f'\t\t\tIm(eps) binned. Time taken = {(time.time() - start_time1):.2f} s.')
@@ -107,6 +117,9 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
     # Removing extra bins
     tot_bin_eps_im = tot_bin_eps_im[:-N_ang_bins, :]
     tot_bin_weights = tot_bin_weights[:-N_ang_bins]
+
+    # For testing
+    np.save('im_eps.npy', tot_bin_eps_im)
 
     if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
@@ -310,10 +323,10 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
     
     dft_path = parmt.store + '/DFT/'
-    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,:,ivalbot:ivaltop+1]
-    mo_coeff_f_conj = np.load(dft_path + 'mo_coeff_f.npy')[:,:,iconbot:icontop+1].conj()
-    mo_en_i = np.load(dft_path + 'mo_en_i.npy')[:,ivalbot:ivaltop+1]
-    mo_en_f = np.load(dft_path + 'mo_en_f.npy')[:,iconbot:icontop+1]
+    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')#[:,:,ivalbot:ivaltop+1]
+    mo_coeff_f_conj = np.load(dft_path + 'mo_coeff_f.npy').conj()#[:,:,iconbot:icontop+1]
+    mo_en_i = np.load(dft_path + 'mo_en_i.npy')#[:,ivalbot:ivaltop+1]
+    mo_en_f = np.load(dft_path + 'mo_en_f.npy')#[:,iconbot:icontop+1]
     k_f = np.load(parmt.store + '/k-pts_f.npy')
 
     q_cuts = dark_objects['R_cutoff_q_points']
@@ -355,10 +368,10 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
 
     q_keys = list(unique_q.keys())[q_start:q_stop]
 
-    tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1))
+    tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, int(2*parmt.E_max/parmt.dE)+1))
     tot_bin_weights = np.zeros(bin_centers.shape[0]+N_ang_bins)
 
-    tot_bin_eps_re = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1))
+    tot_bin_eps_re = np.zeros((bin_centers.shape[0]+N_ang_bins, int(2*parmt.E_max/parmt.dE)+1))
     tot_bin_weights_re = np.zeros(bin_centers.shape[0]+N_ang_bins)
 
     for i_q, q in enumerate(q_keys, start=q_start):
@@ -376,10 +389,18 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
         if rank == 0 or rank == None:
             logger.info(f'\t\tnumber of G vectors = {len(G_q)},')
 
-        eps_delta_q = get_RPA_dielectric_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank) #(G,G',E)
+        # delta part of polarizability for E >= 0
+        eps_delta_q = get_RPA_dielectric_LFE_q(q, mo_en_f[:,iconbot:icontop+1], mo_en_i[:,ivalbot:ivaltop+1], mo_coeff_f_conj[:,:,iconbot:icontop+1], mo_coeff_i[:,:,ivalbot:ivaltop+1], k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank) #(G,G',E)
+
+        # delta part of polarizability for E < 0
+        eps_delta_q_neg = -1*get_RPA_dielectric_LFE_q(q, mo_en_f[:,ivalbot:ivaltop+1], mo_en_i[:,iconbot:icontop+1], mo_coeff_f_conj[:,:,ivalbot:ivaltop+1], mo_coeff_i[:,:,iconbot:icontop+1], k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
+
+        # Combine both terms for all E
+        eps_delta_q_tot = np.concatenate((np.flip(eps_delta_q_neg[:,1:], axis=1), eps_delta_q), axis=1)
+
 
         #Kramers-Kronig to get transition amplitude parts of Re(eps) and Im(eps)
-        eps_pv_q= kramerskronig_lfe(eps_delta_q)
+        eps_pv_q = kramerskronig_lfe(eps_delta_q)
 
         eps_q =  eps_pv_q + 1j*eps_delta_q + np.identity(eps_delta_q.shape[0])[:,:,None]
 
@@ -522,7 +543,7 @@ def delta_energy(mo_en_i, mo_en_f):
     Get the lower energy bin and the remainder to feed into that particular bin.
     """
     nk, nmo, nmu = mo_en_f.shape[0], mo_en_i.shape[1], mo_en_f.shape[1]
-    delE = (mo_en_f[:, None, :] - mo_en_i[:, :, None])/parmt.dE
+    delE = np.abs((mo_en_f[:, None, :] - mo_en_i[:, :, None])/parmt.dE)
     arr = np.zeros((nk, 2, nmo, nmu), dtype = np.float32)
     arr[:,0,:,:] = delE//1
     arr[:,1,:,:] = 1. - delE%1
@@ -544,6 +565,26 @@ def get_binned_epsilon(tot_bin_eps, tot_bin_weights):
     binned_eps = tot_bin_eps/tot_bin_weights[:,None]
     #remove nans?
     return(binned_eps)
+
+@time_wrapper(n_tabs=2)
+def kramerskronig_lfe_causal(eps_delta):
+    """
+    Calculates principal value part of Re(eps) and Im(eps) for LFEs. This function is parallelized over G-vectors (over first G-vector of eps_delta).
+
+    Input:
+        eps_delta: np.ndarray of shape (N_G, N_G, N_E): Dirac delta part of dielectric function
+
+    Output: 
+        epa_pv: np.ndarray of shape (N_G, N_G, N_E): Principal value part of dielectric function
+    
+    """
+    eps_delta_re = np.real(eps_delta)
+    eps_delta_im = np.imag(eps_delta)
+    with mp.get_context('fork').Pool(mp.cpu_count()) as p:
+        eps_pv_re = p.map(eps.kramerskronig_im2re_causal, eps_delta_re)
+        eps_pv_im = p.map(eps.kramerskronig_re2im_causal, eps_delta_im)
+    eps_pv = np.array(eps_pv_re) - 1j*np.array(eps_pv_im)
+    return eps_pv
 
 @time_wrapper(n_tabs=2)
 def kramerskronig_lfe(eps_delta):
