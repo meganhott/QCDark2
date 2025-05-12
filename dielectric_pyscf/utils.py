@@ -86,5 +86,11 @@ def check_inputs():
 
     Need to add all checks eventually!
     """
+    if type(parmt.mpi) is not bool:
+        raise ValueError('Parameter "mpi" in input_parameters.py must be either True if running with MPI or False if not using MPI.')
+    
+    if type(parmt.include_lfe) is not bool:
+        raise ValueError('Parameter "include_lfe" in input_parameters.py must be either True if including local field effects in the dielectric function calculation or False if not.')
+
     if (parmt.lfe_q_cutoff is not None) or (type(parmt.lfe_q_cutoff) is not float):
         raise ValueError('Parameter lfe_q_cutoff in input_parameters.py must be either None or of type float.')

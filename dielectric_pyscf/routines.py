@@ -28,7 +28,7 @@ a2bohr = 1.8897259886                                   # convert Å to Bohr rad
 hbarc = 0.1973269804*10**(-6)                           # hbarc in eV*m
 amu2eV = 9.315e8                                        # eV/u
 
-#Initialize log
+# Initialize log
 logger = logging
 logger.basicConfig(filename=parmt.qcdark_outfile, filemode = 'w', level=logging.INFO, format='%(message)s')
 
@@ -48,7 +48,7 @@ def time_wrapper(func=None, *, n_tabs=0):
         logger.info('\t'*n_tabs + f'Exiting function {func.__name__}. Time taken = {(end - start):.2f} s.\n')
         return val
     
-    @wraps(func) #for MPI so we only log rank 0
+    @wraps(func) # For MPI so we only log rank 0
     def wrap_nolog(*args, **kwargs):
         val = func(*args, **kwargs)
         return val
@@ -67,13 +67,14 @@ def time_wrapper(func=None, *, n_tabs=0):
     else: # Not using MPI
         return wrap
 
-def makedir(dirname: str, log = False) -> None:
+def makedir(dirname: str, log = False):
     """
     Function that makes a directory if it does not exist.
     Inputs:
-        dirname:    str, name of directory to be constructed
-        log:        bool, default = False
-                    switch to control logging. Construction of new directory to be logged or not?
+        dirname (str):
+            Name of directory to be constructed
+        log (bool):
+            Switch to control logging. Construction of new directory to be logged or not?
     """
     try:
         os.mkdir(dirname)
@@ -86,15 +87,15 @@ def makedir(dirname: str, log = False) -> None:
         else:
             logger.info(f'File exists with name same as directory {dirname}. Cannot make directory, raising exception.')
             raise FileExistsError(f'Cannot proceed with making directory {dirname}, file exists with same name.')
-    return None
 
 def get_all_unique_nums_in_array(array: np.ndarray, round_to: int = None, log_name: str = None) -> np.ndarray:
     """
-    Given any array, np.ndarray, condense it into 1D and find all unique unique elements.
-    function to simplify np.unique(np.round(array, round_to)).
+    Condense array to 1D and find all unique unique elements. 
+    Simplifies np.unique(np.round(array, round_to))
     Inputs:
-        array:      np.ndarray
-        tol:        round to digits
+        array (np.ndarray)
+        round_to (int):
+            Rounding precision
     """
     if not round_to is None:
         array = np.round(array, round_to)
@@ -106,7 +107,7 @@ def get_all_unique_nums_in_array(array: np.ndarray, round_to: int = None, log_na
 @time_wrapper
 def get_all_unique_vectors_in_array(array: np.ndarray, round_to: int = None) -> np.ndarray:
     """
-    Finds all unique vectors in an (n, 3) array of vectors 
+    Finds all unique vectors in an (n, 3) array of vectors. 
     """
     if not round_to is None:
         array = np.round(array, round_to)
