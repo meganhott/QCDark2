@@ -1,8 +1,6 @@
 import numpy as np
 import time
-import psutil
 import shutil # for removing working directories after calculation is finished
-from os import getpid
 import multiprocessing as mp
 from functools import partial
 from numba import njit
@@ -19,6 +17,8 @@ def get_RPA_dielectric(dark_objects: dict, rank=None, q_start=parmt.q_start, q_s
         tot_bin_eps, tot_bin_weights, bin_centers = get_RPA_dielectric_LFE(dark_objects, rank, q_start, q_stop)
     else:
         if parmt.alt_binning: #Temporary
+            print('Alternate binning is not updated for general Kramers-Kronig transform')
+            exit()
             get_RPA_dielectric_no_LFE_alt_binning(dark_objects)
         else:
             tot_bin_eps, tot_bin_weights, bin_centers = get_RPA_dielectric_no_LFE(dark_objects, rank, q_start, q_stop)
@@ -32,10 +32,10 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
     
     dft_path = parmt.store + '/DFT/'
-    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')#[:,:,ivalbot:ivaltop+1]
-    mo_coeff_f_conj = np.load(dft_path + 'mo_coeff_f.npy').conj()#[:,:,iconbot:icontop+1].conj()
-    mo_en_i = np.load(dft_path + 'mo_en_i.npy')#[:,ivalbot:ivaltop+1]
-    mo_en_f = np.load(dft_path + 'mo_en_f.npy')#[:,iconbot:icontop+1]
+    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')
+    mo_coeff_f_conj = np.load(dft_path + 'mo_coeff_f.npy').conj()
+    mo_en_i = np.load(dft_path + 'mo_en_i.npy')
+    mo_en_f = np.load(dft_path + 'mo_en_f.npy')
     k_f = np.load(parmt.store + '/k-pts_f.npy')
 
     q_cuts = dark_objects['R_cutoff_q_points']
@@ -100,12 +100,13 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
 
         # Imaginary part of polarizability for E < 0 to use in KK
         eps_q_im_neg = -1*get_RPA_dielectric_no_LFE_q(q, mo_en_f[:,ivalbot:ivaltop+1], mo_en_i[:,iconbot:icontop+1], mo_coeff_f_conj[:,:,ivalbot:ivaltop+1], mo_coeff_i[:,:,iconbot:icontop+1], k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
-        #For energies[0, -0.1, -0.2, ...]
-
-        # Combine both terms for E = [-50.0, ..., -0.1, 0, 0.1, ..., 50.0]
-        # Remove E=0 bin from eps_q_im_neg? - maybe not - add to E=0 bin of eps_q_im
+        
         # Flip order of eps_q_im_neg and concatenate along energy axis
         eps_q_im_tot = np.concatenate((np.flip(eps_q_im_neg[:,1:], axis=1), eps_q_im), axis=1)
+        # Remove E=0 bin from eps_q_im_neg? - maybe not - add to E=0 bin of eps_q_im?
+
+        if rank == None or rank == 0:
+            logger.info(f'\t\t\tIm(eps) calculated for all k and G for energies -E_max <= E <= E_max. Time taken = {(time.time() - start_time):.2f} s.')
 
         start_time1 = time.time()
         tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, eps_q_im_tot, bin_centers, tot_bin_eps_im, tot_bin_weights)
@@ -117,9 +118,6 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
     # Removing extra bins
     tot_bin_eps_im = tot_bin_eps_im[:-N_ang_bins, :]
     tot_bin_weights = tot_bin_weights[:-N_ang_bins]
-
-    # For testing
-    #np.save('im_eps.npy', tot_bin_eps_im)
 
     if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
@@ -274,7 +272,6 @@ def RPA_Im_eps_external_prefactor_no_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q
     mo_coeff_f_conj = np.load(working_dir + '/mo_coeff_f_conj.npy')
     mo_coeff_i = np.load(working_dir + '/mo_coeff_i.npy')
 
-    start_time = time.time()
     #make k_f, coeff tuples for starmap
     k_tup = []
     for i_k in range(k_f.shape[0]):
@@ -284,9 +281,6 @@ def RPA_Im_eps_external_prefactor_no_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q
     with mp.get_context('fork').Pool(mp.cpu_count()) as p: #parallelize over k
         eps_im = p.starmap(partial(eps.get_eps_im_k, qG=qG, primgauss_arr=primgauss_arr, AO_arr=AO_arr, coeff_arr=coeff_arr, unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path, im_delE=im_delE), k_tup)
     eps_im = np.sum(np.array(eps_im), axis=0) #(E,G): sum over k
-
-    if rank == None or rank == 0:
-        logger.info(f'\t\t\tIm(eps) calculated for all k and G. Time taken = {(time.time() - start_time):.2f} s.')
 
     return np.copy(np.transpose(eps_im, (1,0))) #(G,E)
 
@@ -323,10 +317,10 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
     
     dft_path = parmt.store + '/DFT/'
-    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')#[:,:,ivalbot:ivaltop+1]
-    mo_coeff_f_conj = np.load(dft_path + 'mo_coeff_f.npy').conj()#[:,:,iconbot:icontop+1]
-    mo_en_i = np.load(dft_path + 'mo_en_i.npy')#[:,ivalbot:ivaltop+1]
-    mo_en_f = np.load(dft_path + 'mo_en_f.npy')#[:,iconbot:icontop+1]
+    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')
+    mo_coeff_f_conj = np.load(dft_path + 'mo_coeff_f.npy').conj()
+    mo_en_i = np.load(dft_path + 'mo_en_i.npy')
+    mo_en_f = np.load(dft_path + 'mo_en_f.npy')
     k_f = np.load(parmt.store + '/k-pts_f.npy')
 
     q_cuts = dark_objects['R_cutoff_q_points']
@@ -417,9 +411,6 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
     tot_bin_eps_im = tot_bin_eps_im[:-N_ang_bins, :]
     tot_bin_eps_re = tot_bin_eps_re[:-N_ang_bins, :]
     tot_bin_weights = tot_bin_weights[:-N_ang_bins]
-
-    #Could interpolate eps_im and re-compute eps_re from KK
-    #binned_eps_re_kk = kramerskronig(binned_eps_im)
 
     if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
