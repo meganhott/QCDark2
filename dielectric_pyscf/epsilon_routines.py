@@ -32,10 +32,10 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
     
     dft_path = parmt.store + '/DFT/'
-    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')[:,:,:-12]#[:,:,ivalbot:ivaltop+1]
-    mo_coeff_f_conj = np.load(dft_path + 'mo_coeff_f.npy').conj()[:,:,:-12]#[:,:,iconbot:icontop+1].conj()
-    mo_en_i = np.load(dft_path + 'mo_en_i.npy')[:,:-12]#[:,ivalbot:ivaltop+1]
-    mo_en_f = np.load(dft_path + 'mo_en_f.npy')[:,:-12]#[:,iconbot:icontop+1]
+    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')#[:,:,ivalbot:ivaltop+1]
+    mo_coeff_f_conj = np.load(dft_path + 'mo_coeff_f.npy').conj()#[:,:,iconbot:icontop+1].conj()
+    mo_en_i = np.load(dft_path + 'mo_en_i.npy')#[:,ivalbot:ivaltop+1]
+    mo_en_f = np.load(dft_path + 'mo_en_f.npy')#[:,iconbot:icontop+1]
     k_f = np.load(parmt.store + '/k-pts_f.npy')
 
     q_cuts = dark_objects['R_cutoff_q_points']
