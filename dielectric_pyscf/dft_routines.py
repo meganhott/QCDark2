@@ -303,16 +303,63 @@ def get_band_indices(dft_params: dict):
     
     num_bands = mo_occ_i.shape[1]
     num_all_val = sum(mo_occ_i[0] != 0) # total number of occupied bands from dft calculation
+    num_all_con = num_bands - num_all_val
 
     if parmt.numval == 'all':
         num_val = num_all_val
+    elif parmt.numval == 'auto':
+        # Remove valence bands that will not contribute to dielectric function up to energy parmt.E_max
+        if parmt.numcon != 'auto':
+            raise Exception('If you want to automatically exclude irrelevant conduction band valence bands, both "numval" and "numcon" must be set to "auto" in input_parameters.')
+        else:
+            mo_en_i = np.load(parmt.store + '/DFT/mo_en_i.npy')
+            mo_en_f = np.load(parmt.store + '/DFT/mo_en_f.npy')
+            mo_en = np.concatenate((mo_en_i, mo_en_f), axis=0)
+
+            mo_en_min = np.min(mo_en, axis=0) # min and max energies of each band
+            mo_en_max = np.max(mo_en, axis=0)
+            dif = mo_en_min[None, num_all_val:] - mo_en_max[:num_all_val, None] #(val, cond) # minimum energy differences for each pair of valence and conduction bands
+
+            locs = np.where(dif > parmt.E_max) # indices of (val, cond) pairs that exceed the maximum energy difference
+
+            bands_to_discard = np.ones(num_bands, dtype='bool')
+            for i in range(num_all_val):
+                if np.count_nonzero(locs[0] == i) == num_all_con:
+                    # If the transition energy to all conduction bands is larger than E_max, we can discard this valence band
+                    bands_to_discard[i] = False
+            for i in range(num_all_con):
+                if np.count_nonzero(locs[1] == i) == num_all_val:
+                    # If the transition energy to all valence bands is larger than E_max, we can discard this conduction band
+                    bands_to_discard[i+num_all_val] = False
+
+            # discard these bands and update number of inluded valence and conduction bands
+
+            np.save(parmt.store + '/DFT/mo_en_i.npy', mo_en_i[:, bands_to_discard])
+            np.save(parmt.store + '/DFT/mo_en_f.npy', mo_en_f[:, bands_to_discard])
+
+            np.save(parmt.store + '/DFT/mo_coeff_i.npy', np.load(parmt.store + '/DFT/mo_coeff_i.npy')[:,:,bands_to_discard])
+            np.save(parmt.store + '/DFT/mo_coeff_f.npy', np.load(parmt.store + '/DFT/mo_coeff_f.npy')[:,:,bands_to_discard])
+
+            new_num_all_val = np.count_nonzero(bands_to_discard[:num_all_val])
+            new_num_all_con = np.count_nonzero(bands_to_discard[num_all_val:])
+
+            logger.info(f'\nThe following bands have been automatically excluded from calculations since valence to conduction energy differences are greater than E_max = {parmt.E_max} eV:\n{np.arange(num_bands)[np.invert(bands_to_discard)]}\nThe number of valence bands has been reduced from {num_all_val} to {new_num_all_val} and the number of conduction bands has been reduced from {num_all_con} to {new_num_all_con}.\n')
+
+            num_all_val = num_val = new_num_all_val
+            num_all_con = num_con = new_num_all_con
+
     elif parmt.numval > num_all_val:
         raise Exception(f'The specified number of valence bands to include ({parmt.numval}) is larger than the number of valence bands obtained from the DFT calculation ({num_all_val}). Check input parameter "numval" and DFT output file {dft_path}/mo_occ_i.npy.')
     else:
         num_val = parmt.numval
     
     if parmt.numcon == 'all':
-        num_con = num_bands - num_all_val
+        num_con = num_all_con
+    elif parmt.numcon == 'auto':
+        if parmt.numval != 'auto':
+            raise Exception('If you want to automatically exclude irrelevant conduction band valence bands, both "numval" and "numcon" must be set to "auto" in input_parameters.')
+        pass # already calculated if numval and numcon are both auto
+
     elif parmt.numcon > num_bands - num_all_val:
         raise Exception(f'The specified number of conduction bands to include ({parmt.numcon}) is larger than the number of conduction bands obtained from the DFT calculation ({num_bands - num_all_val}). To increase the number of conduction bands, consider using a larger basis set. Check input parameters "numcon" and "mybasis", and DFT output file {dft_path}/mo_occ_i.npy.')
     else:

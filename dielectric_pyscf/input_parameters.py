@@ -8,7 +8,7 @@ Authors: Megan Hott, Aman Singal
 """
 
 """Naming-parameters: system_name and name of final file"""
-system_name = '/gpfs/scratch/mhott/dielectric_pyscf_results/Si_cc-pvtz_pbe0_4k'
+system_name = '/gpfs/scratch/mhott/dielectric_pyscf_results/Si_cc-pvtz_pbe_8k'
 res_filename = system_name + '_eps.hdf5'
 DFT_resources_path = '/gpfs/scratch/mhott/dielectric_pyscf_results'
 
@@ -33,8 +33,8 @@ pseudo = None                      # Similar to ECPs, slight differences (uses C
 """Computational parameters: these determine precision and whether optional parameters are applied"""
 precision = 1e-9                   # DFT precision parameter, fed to pyscf only
 precision_R = 1e-9                 # R cutoff precision, used for dielectric function precision
-xcfunc =   'pbe0'#'HYB_GGA_XC_HSE06'                     # Exchange-Correlation Functional
-k_grid = [4,4,4]                # k-grid: resolution of grid points in reciprocal space
+xcfunc =   'pbe'#'HYB_GGA_XC_HSE06'                     # Exchange-Correlation Functional
+k_grid = [8,8,8]                # k-grid: resolution of grid points in reciprocal space
 q_shift_dir = [1,1,1]              # Direction for q-shift (gets normalized automatically)
 q_shift = 0.01                     # In units of alpha*(mass of electron), magnitude of q shift 
 scissor_bandgap = 1.1              # If float in eV, the scissor correction is applied to meet the specified bandgap. If None, scissor correction is not applied
@@ -42,14 +42,14 @@ include_lfe = False                # If False, does not incorporate local field 
 
 """Parameters for dielectric function calculations"""
 dq = 0.02                          # In units of alpha*(mass of electron), size of momentum bins 
-q_max = 2                          # In units of alpha*(mass of electron), maximum momentum
+q_max = 1                          # In units of alpha*(mass of electron), maximum momentum
 q_min = 0                          # In units of alpha*(mass of electron), minimum momentum
 N_theta = 9                        # Number of theta bins
 N_phi = 16                         # Number of phi bins
 dE = 0.1                           # In eV, size of energy bins
 E_max = 50                         # In eV, maximum energy
-numval = 'all'                     # Number of valence bands to include in the calculation, use 'all' for all available valence bands
-numcon = 'all'                     # Number of conduction bands to include in the calculation, use 'all' for all available conduction bands
+numval = 'auto'                     # Number of valence bands to include in the calculation, use 'all' for all available valence bands and 'auto' to exclude irrelevant bands based on E_max
+numcon = 'auto'                     # Number of conduction bands to include in the calculation, use 'all' for all available conduction bands and 'auto' to exclude irrelevant bands based on E_max
 
 """Logging and calculation parameters"""
 q_start = None                     # If None, calculation is performed for all q vectors. If set to an integer, the 
