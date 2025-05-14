@@ -124,26 +124,26 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
     return 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 
 def save_eps(bin_eps, bin_weights, bin_centers):
-    f = h5py.File(parmt.store + '/epsilon.hdf5', 'w') # create and open hdf5 file
+    f = h5py.File(parmt.store + '/epsilon.hdf5', 'r+') # open hdf5 file
 
     binned_eps = bin_eps/bin_weights[:, None]
-    f.create_dataset('binned_epsilon', data=binned_eps) # No KK or interpolation - should save only 0 + iIm(eps) for non-LFE
+    #f.create_dataset('binned_epsilon', data=binned_eps) # No KK or interpolation - should save only 0 + iIm(eps) for non-LFE
 
     binned_eps_im = np.imag(binned_eps)
-    binned_eps_kk = eps.kramerskronig_im2re(binned_eps_im) + 1. + 1j*binned_eps_im
-    f.create_dataset('binned_epsilon_kk', data=binned_eps_kk) # Only KK, no interpolation
+    #binned_eps_kk = eps.kramerskronig_im2re(binned_eps_im) + 1. + 1j*binned_eps_im
+    #f.create_dataset('binned_epsilon_kk', data=binned_eps_kk) # Only KK, no interpolation
 
-    binned_eps_kk_interp = interp_eps(bin_centers, binned_eps)
-    f.create_dataset('binned_epsilon_kk_interp', data=binned_eps_kk_interp) # KK then Interpolation
+    #binned_eps_kk_interp = interp_eps(bin_centers, binned_eps)
+    #f.create_dataset('binned_epsilon_kk_interp', data=binned_eps_kk_interp) # KK then Interpolation
 
     binned_eps_im_interp = interp_eps(bin_centers, binned_eps_im)
     binned_eps_interp = eps.kramerskronig_im2re(binned_eps_im_interp) + 1. + 1j*binned_eps_im_interp
-    f.create_dataset('binned_epsilon_interp_kk', data=binned_eps_interp) # Interpolation and then KK # This slightly reduces noise in ELF compared to KK then interpolation
+    #f.create_dataset('binned_epsilon_interp_kk', data=binned_eps_interp) # Interpolation and then KK # This slightly reduces noise in ELF compared to KK then interpolation
 
     eps_r = epsilon_r(bin_centers, binned_eps_interp)
-    eps_r = f.create_dataset('epsilon', data=eps_r) # angular average
+    f.create_dataset('epsilon_all', data=eps_r) # angular average, for -E_max to E_max
 
-    f.create_dataset('bin_centers', data=bin_centers)
+    #f.create_dataset('bin_centers', data=bin_centers)
 
     # Add attributes from input parameters
     for name, val in parmt.__dict__.items():
@@ -156,6 +156,8 @@ def save_eps(bin_eps, bin_weights, bin_centers):
     
     f.create_dataset('q', data=q)
     f.create_dataset('E', data=E)
+
+    f.create_dataset('epsilon', data=eps_r[:,(E.shape-1):]) # save only for positive energies
 
     f.close() # Close hdf5 file
 
