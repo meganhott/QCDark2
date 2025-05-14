@@ -109,7 +109,61 @@ def ovlp_sum(primgauss_arr, AO_arr, coeff_arr, ints_x, ints_y, ints_z, R_id):
 @nb.njit()
 def kramerskronig_im2re(im, dE = parmt.dE, E_max=parmt.E_max):
     """
-    Computes the Kramers-Kronig transformation of the input imaginary part to obtain the real part.
+    Computes the Kramers-Kronig transformation of the input imaginary part to obtain the real part. Requires Im[f(-E_max <= E <= E_max)].
+
+    Input:
+        im: np.ndarray (N_E, N_G)
+    Output:
+        re: np.ndarray (N_E, N_G), Note that Re(eps) = eps_re + 1 
+    """
+    E = np.arange(-E_max, E_max+dE, dE)
+    re = np.empty_like(im)
+    N_G, N_E = im.shape
+    for nE in range(N_E):
+        E_pv = np.delete(E, nE) #removes Ei = En for principal value
+        En = E[nE]
+        for nG in range(N_G):
+            im_pv = np.concatenate((im[nG, :nE], im[nG, nE+1:]))
+
+            s = 0
+            for ns in range(N_E-1):
+                s += im_pv[ns]/(E_pv[ns] - En)
+
+            re[nG,nE] = 1/np.pi*dE*(s - 0.5*(im_pv[0]/(E_pv[0]-En) + im_pv[-1]/(E_pv[-1]-En))) #trapezoid rule
+    return re
+
+@nb.njit()
+def kramerskronig_re2im(re, dE = parmt.dE, E_max=parmt.E_max):
+    """
+    Computes the Kramers-Kronig transformation of the input real part to obtain the imaginary part. Requires Re[f(-E_max <= E <= E_max)].
+
+    Input:
+        re: np.ndarray (N_E, N_G)
+    Output:
+        im: np.ndarray (N_E, N_G)
+    """
+    E = np.arange(-E_max, E_max+dE, dE)
+    im = np.empty_like(re)
+    N_G, N_E = re.shape
+    for nE in range(N_E):
+        E_pv = np.delete(E, nE) #removes Ei = En for principal value
+        En = E[nE]
+        for nG in range(N_G):
+            re_pv = np.concatenate((re[nG, :nE], re[nG, nE+1:]))
+
+            s = 0
+            for ns in range(N_E-1):
+                s += re_pv[ns]/(E_pv[ns] - En)
+
+            im[nG,nE] = -1/np.pi*dE*(s - 0.5*(re_pv[0]/(E_pv[0]-En) + re_pv[-1]/(E_pv[-1]-En))) #trapezoid rule
+    return im
+
+
+
+@nb.njit()
+def kramerskronig_im2re_causal(im, dE = parmt.dE, E_max=parmt.E_max):
+    """
+    Computes the Kramers-Kronig transformation of the input imaginary part to obtain the real part. Assumes f(-E) = f(E)* and requires Im[f(0 <= E <= E_max)].
 
     Input:
         im: np.ndarray (N_E, N_G)
@@ -133,9 +187,9 @@ def kramerskronig_im2re(im, dE = parmt.dE, E_max=parmt.E_max):
     return re
 
 @nb.njit()
-def kramerskronig_re2im(re, dE = parmt.dE, E_max=parmt.E_max):
+def kramerskronig_re2im_causal(re, dE = parmt.dE, E_max=parmt.E_max):
     """
-    Computes the Kramers-Kronig transformation of the input real part to obtain the imaginary part.
+    Computes the Kramers-Kronig transformation of the input real part to obtain the imaginary part. Assumes f(-E) = f(E)* and requires Re[f(0 <= E <= E_max)].
 
     Input:
         re: np.ndarray (N_E, N_G)

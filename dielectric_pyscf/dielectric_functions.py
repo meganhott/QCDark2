@@ -41,8 +41,8 @@ def electronic_structure(cell: do_routines.pbcgto.cell.Cell, dft_params: dict):
     dft_routines.KS_non_self_consistent_field(kmf, dft_params)
 
 def dielectric_RPA(cell: do_routines.pbcgto.cell.Cell, dark_objects: dict, dft_params: dict) -> dict:
-    dft_routines.get_band_indices(dft_params)
     dft_routines.convert_to_eV_and_scissor(cell, dft_params)
+    dft_routines.get_band_indices(dft_params)
     dark_objects['unique_q'] = do_routines.get_1BZ_q_points(cell)
     dark_objects['R_cutoffs'] = do_routines.primgauss_1D_overlaps(dark_objects)
     dark_objects['R_cutoff_q_points'] = do_routines.store_R_ids(dark_objects)
