@@ -12,7 +12,7 @@ import dielectric_pyscf.input_parameters as parmt
 import dielectric_pyscf.epsilon_helper as eps
 import dielectric_pyscf.binning as bin
 
-def get_RPA_dielectric(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=None):
+def get_RPA_dielectric(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
     if parmt.include_lfe:
         tot_bin_eps, tot_bin_weights, bin_centers = get_RPA_dielectric_LFE(dark_objects, rank, q_start, q_stop)
     else:
@@ -26,7 +26,7 @@ def get_RPA_dielectric(dark_objects: dict, rank=None, q_start=parmt.q_start, q_s
     return tot_bin_eps, tot_bin_weights, bin_centers
 
 @time_wrapper
-def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=None):
+def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
     # Reading all relevant data
     N_AO = len(dark_objects['aos'])
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
@@ -157,7 +157,7 @@ def save_eps(bin_eps, bin_weights, bin_centers):
     f.create_dataset('q', data=q)
     f.create_dataset('E', data=E)
 
-    f.create_dataset('epsilon', data=eps_r[:,(E.shape-1):]) # save only for positive energies
+    f.create_dataset('epsilon', data=eps_r[:,(E.shape[0]-1):]) # save only for positive energies
 
     f.close() # Close hdf5 file
 
@@ -284,7 +284,7 @@ def RPA_Im_eps_external_prefactor_no_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q
 
     return np.copy(np.transpose(eps_im, (1,0))) #(G,E)
 
-def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=None):
+def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
     # Reading all relevant data
     N_AO = len(dark_objects['aos'])
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
@@ -373,7 +373,12 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
         #Bin real and imaginary parts - modify binning so both parts done at same time
         tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, np.imag(eps_lfe), bin_centers, tot_bin_eps_im, tot_bin_weights)
         tot_bin_eps_re, tot_bin_weights_re = bin.bin_eps_q(q, G_q, np.real(eps_lfe), bin_centers, tot_bin_eps_re, tot_bin_weights_re)
-        
+
+        # Save to working directory
+        np.save(f'{working_dir}/tot_bin_eps_im_q.npy', tot_bin_eps_im)
+        np.save(f'{working_dir}/tot_bin_eps_re_q.npy', tot_bin_eps_re)
+        np.save(f'{working_dir}/tot_bin_weights_q.npy', tot_bin_weights)
+
         if rank == 0 or rank == None:
             logger.info(f'\t\tcomplete. Time taken = {(time.time() - start_time):.2f} s.')
 
@@ -385,7 +390,7 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
     if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
 
-    shutil.rmtree(working_dir) # delete working directory
+    #shutil.rmtree(working_dir) # delete working directory
 
     return tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 

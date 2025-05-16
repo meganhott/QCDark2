@@ -174,7 +174,7 @@ def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict, CholOrth=p
     kpts = make_kpts(cell, dft_params)[0]
 
     if density_fitting == 'GDF': # Gaussian density fitting
-        kmf = pbcdft.KRKS(cell, kpts, ).density_fit()
+        kmf = pbcdft.KRKS(cell, kpts).density_fit()
     elif density_fitting == 'MDF': # Mixed density fitting
         kmf = pbcdft.KRKS(cell, kpts).mix_density_fit()
     elif density_fitting == 'RSDF': # Range separated density fitting
@@ -200,9 +200,9 @@ def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict, CholOrth=p
         kmf.kernel()
     
     if kmf.converged:
-        np.save(dft_path + '/mo_en_i_dft.npy', kpts.transform_mo_energy(kmf.mo_energy))
-        np.save(dft_path + '/mo_coeff_i.npy', kpts.transform_mo_coeff(kmf.mo_coeff))
-        np.save(dft_path + '/mo_occ_i.npy', kpts.transform_mo_occ(kmf.mo_occ))
+        np.save(dft_path + '/mo_en_i_dft.npy', kmf.mo_energy)
+        np.save(dft_path + '/mo_coeff_i.npy', kmf.mo_coeff)
+        np.save(dft_path + '/mo_occ_i.npy', kmf.mo_occ)
     else:
         raise ValueError('DFT not converged. Might need to orthogonalize basis by setting CholOrth=True.')
     
