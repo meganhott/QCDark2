@@ -12,7 +12,7 @@ import dielectric_pyscf.input_parameters as parmt
 import dielectric_pyscf.epsilon_helper as eps
 import dielectric_pyscf.binning as bin
 
-def get_RPA_dielectric(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=None):
+def get_RPA_dielectric(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
     if parmt.include_lfe:
         tot_bin_eps, tot_bin_weights, bin_centers = get_RPA_dielectric_LFE(dark_objects, rank, q_start, q_stop)
     else:
@@ -26,7 +26,7 @@ def get_RPA_dielectric(dark_objects: dict, rank=None, q_start=parmt.q_start, q_s
     return tot_bin_eps, tot_bin_weights, bin_centers
 
 @time_wrapper
-def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=None):
+def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
     # Reading all relevant data
     N_AO = len(dark_objects['aos'])
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
@@ -112,6 +112,10 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
             logger.info(f'\t\t\tIm(eps) binned. Time taken = {(time.time() - start_time1):.2f} s.')
             logger.info(f'\t\tcomplete. Time taken = {(time.time() - start_time):.2f} s.')
 
+        # Save to working directory
+        np.save(f'{working_dir}/tot_bin_eps_im.npy', tot_bin_eps_im)
+        np.save(f'{working_dir}/tot_bin_weights.npy', tot_bin_weights)
+
     # Removing extra bins
     tot_bin_eps_im = tot_bin_eps_im[:-N_ang_bins, :]
     tot_bin_weights = tot_bin_weights[:-N_ang_bins]
@@ -119,31 +123,31 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
     if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
 
-    shutil.rmtree(working_dir) # delete working directory
+    #shutil.rmtree(working_dir) # delete working directory
 
     return 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 
 def save_eps(bin_eps, bin_weights, bin_centers):
-    f = h5py.File(parmt.store + '/epsilon.hdf5', 'w') # create and open hdf5 file
+    f = h5py.File(parmt.store + '/epsilon.hdf5', 'r+') # open hdf5 file
 
     binned_eps = bin_eps/bin_weights[:, None]
-    f.create_dataset('binned_epsilon', data=binned_eps) # No KK or interpolation - should save only 0 + iIm(eps) for non-LFE
+    #f.create_dataset('binned_epsilon', data=binned_eps) # No KK or interpolation - should save only 0 + iIm(eps) for non-LFE
 
     binned_eps_im = np.imag(binned_eps)
-    binned_eps_kk = eps.kramerskronig_im2re(binned_eps_im) + 1. + 1j*binned_eps_im
-    f.create_dataset('binned_epsilon_kk', data=binned_eps_kk) # Only KK, no interpolation
+    #binned_eps_kk = eps.kramerskronig_im2re(binned_eps_im) + 1. + 1j*binned_eps_im
+    #f.create_dataset('binned_epsilon_kk', data=binned_eps_kk) # Only KK, no interpolation
 
-    binned_eps_kk_interp = interp_eps(bin_centers, binned_eps)
-    f.create_dataset('binned_epsilon_kk_interp', data=binned_eps_kk_interp) # KK then Interpolation
+    #binned_eps_kk_interp = interp_eps(bin_centers, binned_eps)
+    #f.create_dataset('binned_epsilon_kk_interp', data=binned_eps_kk_interp) # KK then Interpolation
 
     binned_eps_im_interp = interp_eps(bin_centers, binned_eps_im)
     binned_eps_interp = eps.kramerskronig_im2re(binned_eps_im_interp) + 1. + 1j*binned_eps_im_interp
-    f.create_dataset('binned_epsilon_interp_kk', data=binned_eps_interp) # Interpolation and then KK # This slightly reduces noise in ELF compared to KK then interpolation
+    #f.create_dataset('binned_epsilon_interp_kk', data=binned_eps_interp) # Interpolation and then KK # This slightly reduces noise in ELF compared to KK then interpolation
 
     eps_r = epsilon_r(bin_centers, binned_eps_interp)
-    eps_r = f.create_dataset('epsilon', data=eps_r) # angular average
+    f.create_dataset('epsilon_all', data=eps_r) # angular average, for -E_max to E_max
 
-    f.create_dataset('bin_centers', data=bin_centers)
+    #f.create_dataset('bin_centers', data=bin_centers)
 
     # Add attributes from input parameters
     for name, val in parmt.__dict__.items():
@@ -156,6 +160,8 @@ def save_eps(bin_eps, bin_weights, bin_centers):
     
     f.create_dataset('q', data=q)
     f.create_dataset('E', data=E)
+
+    f.create_dataset('epsilon', data=eps_r[:,(E.shape[0]-1):]) # save only for positive energies
 
     f.close() # Close hdf5 file
 
@@ -282,7 +288,7 @@ def RPA_Im_eps_external_prefactor_no_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q
 
     return np.copy(np.transpose(eps_im, (1,0))) #(G,E)
 
-def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=None):
+def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
     # Reading all relevant data
     N_AO = len(dark_objects['aos'])
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
@@ -371,7 +377,12 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
         #Bin real and imaginary parts - modify binning so both parts done at same time
         tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, np.imag(eps_lfe), bin_centers, tot_bin_eps_im, tot_bin_weights)
         tot_bin_eps_re, tot_bin_weights_re = bin.bin_eps_q(q, G_q, np.real(eps_lfe), bin_centers, tot_bin_eps_re, tot_bin_weights_re)
-        
+
+        # Save to working directory
+        np.save(f'{working_dir}/tot_bin_eps_im_q.npy', tot_bin_eps_im)
+        np.save(f'{working_dir}/tot_bin_eps_re_q.npy', tot_bin_eps_re)
+        np.save(f'{working_dir}/tot_bin_weights_q.npy', tot_bin_weights)
+
         if rank == 0 or rank == None:
             logger.info(f'\t\tcomplete. Time taken = {(time.time() - start_time):.2f} s.')
 
@@ -383,7 +394,7 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
     if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
 
-    shutil.rmtree(working_dir) # delete working directory
+    #shutil.rmtree(working_dir) # delete working directory
 
     return tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 

@@ -27,6 +27,8 @@ def save_dft():
         'lattice_vectors': parmt.lattice_vectors,
         'atomloc': parmt.atomloc,
         'mybasis': parmt.mybasis,
+        'orth': parmt.orth,
+        'density_fitting': parmt.density_fitting,
         'effective_core_potential': parmt.effective_core_potential,
         'pseudo': parmt.pseudo,
         'precision': parmt.precision,
@@ -152,7 +154,7 @@ def make_kpts(cell: pbcgto.cell.Cell, dft_params: dict) -> pyscf.pbc.lib.kpts.KP
     return kpts_i, kpts_f
 
 @time_wrapper
-def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict, CholOrth=parmt.CholOrth, cderi_save_file=None, density_fitting=parmt.density_fitting) -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
+def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict, orth=parmt.orth, cderi_save_file=None, density_fitting=parmt.density_fitting) -> pbcdft.krks_ksymm.KsymAdaptedKRKS:
     """
     Function to do density functional theory. Performs restricted Kohn-Sham (RKS) DFT at each k-point and constructs density matrix from integrating over 1BZ. 
 
@@ -174,7 +176,7 @@ def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict, CholOrth=p
     kpts = make_kpts(cell, dft_params)[0]
 
     if density_fitting == 'GDF': # Gaussian density fitting
-        kmf = pbcdft.KRKS(cell, kpts, ).density_fit()
+        kmf = pbcdft.KRKS(cell, kpts).density_fit()
     elif density_fitting == 'MDF': # Mixed density fitting
         kmf = pbcdft.KRKS(cell, kpts).mix_density_fit()
     elif density_fitting == 'RSDF': # Range separated density fitting
@@ -185,24 +187,39 @@ def KS_electronic_structure(cell: pbcgto.cell.Cell, dft_params: dict, CholOrth=p
         raise(ValueError('density_fitting must be "GDF" for Gaussian Density Fitting, "MDF" for Mixed Density Fitting, "RSDF" for Range-Separated Density Fitting, or "FFTDF" for Fast Fourier Transform Density Fitting. FFTDF is not supported for all-electron calculations due to memory constraints.'))
 
     kmf.xc = parmt.xcfunc
+    kmf.chkfile = f'{dft_path}/kmf.chk' # save checkfile
 
     #kmf.exxdiv = exxdiv #None or ewald - may need to change to None for hybrid functionals? exxdiv by default
 
     if cderi_save_file is not None: # Saves density fitting matrix
         kmf.with_df._cderi_to_save = cderi_save_file
-    else:
-        kmf.with_df._cderi_to_save = f'{parmt.store}/cderi.h5'
+    #else:
+    #    kmf.with_df._cderi_to_save = f'{parmt.store}/cderi.h5'
 
-    if CholOrth: #eventually catch linear dependency errors automatically and run this?
+    if orth: #eventually catch linear dependency errors automatically and run this?
+        logger.info('Molecular orbital basis will be orthogonalized in SCF calculation to remove linear dependence and improve convergence.')
         kmf = pyscf.scf.addons.remove_linear_dep_(kmf).run()
         # pyscf will still output warning even after this is applied but linear dependencies have been removed
     else:
         kmf.kernel()
     
     if kmf.converged:
-        np.save(dft_path + '/mo_en_i_dft.npy', kpts.transform_mo_energy(kmf.mo_energy))
-        np.save(dft_path + '/mo_coeff_i.npy', kpts.transform_mo_coeff(kmf.mo_coeff))
-        np.save(dft_path + '/mo_occ_i.npy', kpts.transform_mo_occ(kmf.mo_occ))
+        if orth:
+            #remove highest bands/mo orbitals of some k-points so that all k-points have same number of bands
+            N_MO_min = min([en_k.shape[0] for en_k in kmf.mo_energy])
+            logger.info(f'Orthogonalized SCF resulted in {N_MO_min} bands/molecular orbitals from {cell.nao} atomic orbitals.')
+            mo_energy = np.array([en_k[:N_MO_min] for en_k in kmf.mo_energy])
+            mo_coeff = np.array([coeff_k[:,:N_MO_min] for coeff_k in kmf.mo_coeff])
+            mo_occ = np.array([occ_k[:N_MO_min] for occ_k in kmf.mo_occ])
+        else:
+            #otherwise all k-points will have same number of MO
+            mo_energy = kmf.mo_energy
+            mo_coeff = kmf.mo_coeff
+            mo_occ = kmf.mo_occ
+    
+        np.save(dft_path + '/mo_en_i_dft.npy', mo_energy)
+        np.save(dft_path + '/mo_coeff_i.npy', mo_coeff)
+        np.save(dft_path + '/mo_occ_i.npy', mo_occ)
     else:
         raise ValueError('DFT not converged. Might need to orthogonalize basis by setting CholOrth=True.')
     
@@ -301,7 +318,7 @@ def get_band_indices(dft_params: dict):
     if mo_occ_i[0][0] != 2:
         raise NotImplementedError(f'Occupancy of filled bands is not 2. Spin-dependent DFT has not been implemented. Check {dft_path}/mo_occ_i.npy if you expect filled bands to have an occupancy of 2.')
     
-    num_bands = mo_occ_i.shape[1]
+    num_bands = mo_occ_i.shape[2]
     num_all_val = sum(mo_occ_i[0] != 0) # total number of occupied bands from dft calculation
     num_all_con = num_bands - num_all_val
 

@@ -1,6 +1,7 @@
 import psutil
 import itertools
 import numpy as np
+import h5py
 import multiprocessing as mp
 from functools import partial
 import pyscf.pbc.gto as pbcgto
@@ -88,6 +89,14 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
     logger.info(f'Further information is in {cell.output}.')
 
     makedir(parmt.store, log = False)
+
+    # create and open hdf5 file
+    f = h5py.File(parmt.store + '/epsilon.hdf5', 'w')
+    # Add cell mass and volume as attributes for crystal form factor calculation
+    M_cell = np.sum(cell.atom_mass_list()*9.315e8) #convert from amu to eV
+    f.attrs['M_cell'] = M_cell
+    f.attrs['V_cell'] = cell.vol
+    f.close()
 
     return cell
 

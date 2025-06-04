@@ -6,9 +6,21 @@ from dielectric_pyscf.dielectric_functions import main_setup, main_eps, main_eps
 from dielectric_pyscf.epsilon_routines import save_eps
 
 def get_q_start_stop(N_q, N_nodes):
-    q_per_node = int(np.ceil(N_q/N_nodes))
-    q_start = np.arange(0, q_per_node*N_nodes, q_per_node)
-    q_stop = np.append(np.arange(q_per_node, q_per_node*N_nodes, q_per_node), N_q)
+    if parmt.q_stop is not None:
+        N_q = parmt.q_stop
+        q_f = parmt.q_stop
+    else:
+        q_f = N_q
+
+    if parmt.q_start is not None:
+        N_q = N_q - parmt.q_start
+        q_i = parmt.q_start
+    else:
+        q_i = 0
+    
+    q_per_node = int(np.ceil((N_q)/N_nodes))
+    q_start = np.arange(q_i, q_i + q_per_node*N_nodes, q_per_node)
+    q_stop = np.append(np.arange(q_i + q_per_node, q_i + q_per_node*N_nodes, q_per_node), q_f)
     return q_start, q_stop
 
 if parmt.mpi:
