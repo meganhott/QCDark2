@@ -112,6 +112,10 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
             logger.info(f'\t\t\tIm(eps) binned. Time taken = {(time.time() - start_time1):.2f} s.')
             logger.info(f'\t\tcomplete. Time taken = {(time.time() - start_time):.2f} s.')
 
+        # Save to working directory
+        np.save(f'{working_dir}/tot_bin_eps_im.npy', tot_bin_eps_im)
+        np.save(f'{working_dir}/tot_bin_weights.npy', tot_bin_weights)
+
     # Removing extra bins
     tot_bin_eps_im = tot_bin_eps_im[:-N_ang_bins, :]
     tot_bin_weights = tot_bin_weights[:-N_ang_bins]
@@ -119,7 +123,7 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
     if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
 
-    shutil.rmtree(working_dir) # delete working directory
+    #shutil.rmtree(working_dir) # delete working directory
 
     return 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 
