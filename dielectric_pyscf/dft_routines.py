@@ -6,6 +6,8 @@ import pyscf.pbc.dft as pbcdft
 import pyscf.pbc
 import pyscf.scf.addons # for basis sets with linear dependencies
 
+import pyscf.lib
+
 import dielectric_pyscf.input_parameters as parmt
 from dielectric_pyscf.routines import logger, time_wrapper, makedir
 
@@ -318,7 +320,7 @@ def get_band_indices(dft_params: dict):
     if mo_occ_i[0][0] != 2:
         raise NotImplementedError(f'Occupancy of filled bands is not 2. Spin-dependent DFT has not been implemented. Check {dft_path}/mo_occ_i.npy if you expect filled bands to have an occupancy of 2.')
     
-    num_bands = mo_occ_i.shape[2]
+    num_bands = mo_occ_i.shape[1]
     num_all_val = sum(mo_occ_i[0] != 0) # total number of occupied bands from dft calculation
     num_all_con = num_bands - num_all_val
 
