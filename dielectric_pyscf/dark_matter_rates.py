@@ -54,10 +54,52 @@ default_no_sreen = {
 default_screening = default_no_sreen
 
 
+class df: # Dielectric function class
+    def __init__(self, filename=None, eps=None, q=None, E=None, M_cell=None, V_cell=None, dE=None):
+        if filename is None:
+            # If filename is not specified, the user can build a df instance without an hdf5 file
+            self.eps = eps
+            self.q = q
+            self.E = E 
+            self.M_cell = M_cell
+            self.V_cell = V_cell 
+            self.dE = dE
+        elif filename is not None:
+            # If filename is specified, the object is built from the hdf5 file and no parameters besides filename need to be specified
+            h5 = h5py.File(filename, 'r')
+            self.h5 = h5
+            self.eps = np.array(h5['epsilon'])
+            self.q = np.array(h5['q']) # Momentum in units of alpha*m_e
+            self.E = np.array(h5['E']) # Energy in eV
+
+            # Parameters required for DM rates calculations
+            self.M_cell = h5.attrs['M_cell'] # Mass in units of eV
+            self.V_cell = h5.attrs['V_cell'] # Unit cell volume in units of (alpha*m_e)^-3
+            self.dE = float(h5.attrs['dE']) # Size of energy bins in eV
+            # Other parameters can be accessed through self.h5.attrs.items()
+
+    def save_as_hdf5(self, savename):
+        # If object was built from existing data, it can be saved as an hdf5 file for later use
+        h5 = h5py.File(savename, 'w')
+        h5.create_dataset('epsilon', data=self.eps)
+        h5.create_dataset('q', data=self.q)
+        h5.create_dataset('E', data=self.E)
+        h5.attrs['M_cell'] = self.M_cell
+        h5.attrs['V_cell'] = self.V_cell
+        h5.attrs['dE'] = self.dE
+        h5.close()
+
+    def elf(self):
+        # Energy loss function
+        elf = np.imag(self.eps) / ((np.imag(self.eps))**2 + np.real(self.eps)**2)
+        return elf
 
 #load angular averaged dielectric function
-def load_epsilon(path):
-    epsilon = h5py.File(path, 'r')
+def load_epsilon(filename):
+    """
+    Loads angular averaged dielectric function. filename should be the location of epsilon.hdf5 file. 
+    """
+    epsilon = df(filename)
     return epsilon
 
 def get_elf(eps):
@@ -122,7 +164,7 @@ def momentum_integrand(q, E, cff2, eps_screening, m_X, mediator, astro_model):
     integrand = 1 / q[:,None]**2 * get_eta_MB(q, E, m_X, astro_model) * F_DM[:,None]**2 * cff2[:,:] * eps_screening[:,:] #(q,E)
     return integrand
 
-def get_dR_dE(eps, m_X, mediator, astro_model, eps_screening):
+def get_dR_dE(epsilon, m_X, mediator, astro_model, eps_screening):
     """
     Returns differential rate with respect to energy. This can be used to calculate the total rate or the rate per ionization.
     Inputs:
@@ -134,12 +176,11 @@ def get_dR_dE(eps, m_X, mediator, astro_model, eps_screening):
     rho_X = astro_model['rhoX']
     cross_section = astro_model['sigma_e']
 
-    epsilon = eps['epsilon'] # angular averaged dielectric function
-    M_cell = eps.attrs['M_cell'] # mass of cell
-    q = eps['q'] # momentum
-    E  = eps['E'] # energy
+    M_cell = epsilon.M_cell # mass of cell
+    q = epsilon.q*alpha*m_e # momentum
+    E  = epsilon.E # energy
 
-    N_cell = kg/M_cell
+    N_cell = kg/M_cell #number of cells in one kg of material
     reduced_mass = m_X * m_e /(m_X + m_e)
 
     prefactor = (rho_X/m_X) * N_cell * cross_section  * alpha * m_e**2 / reduced_mass**2 #this might be off by factor of 2pi
@@ -150,59 +191,59 @@ def get_dR_dE(eps, m_X, mediator, astro_model, eps_screening):
     dR_dE = np.empty(E.shape[0], dtype='float')
     for i_E in range(E.shape[0]):
         dR_dE[i_E] = sp.integrate.simpson(integrand[:,i_E], q)
-    dR_dE = prefactor * dR_dE / cm2sec / sec2yr #check that units are correct!
+    dR_dE = prefactor * dR_dE / cm2sec / sec2yr
 
     return dR_dE, E #(E,)
 
-def rate(eps, m_X, astro_model, mediator='light', screening='RPA'):
+def rate(epsilon, m_X, astro_model, mediator='light', screening='RPA'):
     """
     Returns total rate by integrating dR/dE over energy
     """
     if screening == 'RPA':
-        eps_screening = eps
+        eps_screening = epsilon.eps
     elif screening == 'TF':
-        q, E = eps['q'], eps['E']
+        q, E = epsilon.q*alpha*m_e, epsilon.E
         eps_screening = ThomasFermi(E, q)
     elif screening == 'Lindhard':
-        q, E = eps['q'], eps['E']
+        q, E = epsilon.q*alpha*m_e, epsilon.E
         eps_screening = Lindhard(E, q, 0.1)
     elif screening == None:
-        q, E = eps['q'], eps['E']
+        q, E = epsilon.q*alpha*m_e, epsilon.E
         eps_screening = np.ones((q.shape[0], E.shape[0]), dtype='complex')
 
-    dR_dE, E = get_dR_dE(eps, m_X, mediator, astro_model, eps_screening=eps_screening)
+    dR_dE, E = get_dR_dE(epsilon, m_X, mediator, astro_model, eps_screening=eps_screening)
 
     R = sp.integrate.simpson(dR_dE, E) #need to multiply by probability from RK secondary ionization
     return R
 
 
-def crystal_form_factor2_epsilon(eps):
+def crystal_form_factor2_epsilon(epsilon):
     """
     Calculates the squared crystal form factor from Im(eps) using eq. 16 in darkELF paper
     """
-    epsilon = eps['epsilon']
-    V_cell = eps.attrs['V_cell'] / (alpha * m_e)**3
-    q = eps['q']
+    eps = epsilon.eps
+    V_cell = epsilon.V_cell / (alpha * m_e)**3
+    q = epsilon.q*alpha*m_e
 
-    crystal_form_factor2 = q[:,None]**5 * V_cell / 8 / pi**2 / alpha**2 / m_e**2 * np.imag(epsilon)
+    crystal_form_factor2 = q[:,None]**5 * V_cell / 8 / pi**2 * np.imag(eps) / (alpha * m_e)**2 # If q in eV, this should be / (alpha * m_e)**2
 
     return crystal_form_factor2 #(q,E)
 
-def d_rate_RamanathanQ(eps, m_X, ionization_file, mediator, astro_model=default_astro, screening='RPA'):
+def d_rate_RamanathanQ(epsilon, m_X, ionization_file, mediator, astro_model=default_astro, screening='RPA'):
 
     if screening == 'RPA':
-        eps_screening = eps
+        eps_screening = epsilon.eps
     elif screening == 'TF':
-        q, E = eps['q'], eps['E']
+        q, E = epsilon.q*alpha*m_e, epsilon.E
         eps_screening = ThomasFermi(E, q)
     elif screening == 'Lindhard':
-        q, E = eps['q'], eps['E']
+        q, E = epsilon.q*alpha*m_e, epsilon.E
         eps_screening = Lindhard(E, q, 0.1)
     elif screening == None:
-        q, E = eps['q'], eps['E']
+        q, E = epsilon.q*alpha*m_e, epsilon.E
         eps_screening = np.ones((q.shape[0], E.shape[0]), dtype='complex')
 
-    dR_dE, E = get_dR_dE(eps, m_X, mediator=mediator, astro_model=astro_model, eps_screening=eps_screening)
+    dR_dE, E = get_dR_dE(epsilon, m_X, mediator=mediator, astro_model=astro_model, eps_screening=eps_screening)
      
     ionization_inp = np.genfromtxt(ionization_file).transpose()
     E_ionization = ionization_inp[0]
@@ -213,7 +254,7 @@ def d_rate_RamanathanQ(eps, m_X, ionization_file, mediator, astro_model=default_
     E = np.round(E, 5)
     E, dR_dE = E[(E >= E_min) & (E <= E_max)], dR_dE[(E >= E_min) & (E <= E_max)]
 
-    dE = float(eps.attrs['dE'])
+    dE = epsilon.dE
   
     N_max_pairs = pair_creation_prob.shape[0]
     R_Q = np.zeros(N_max_pairs, dtype='float')
@@ -223,13 +264,13 @@ def d_rate_RamanathanQ(eps, m_X, ionization_file, mediator, astro_model=default_
     return R_Q
 
 #exclusion plot
-def ex(eps, mediator, astro_model=default_astro, screening='RPA'):
+def ex(epsilon, mediator, astro_model=default_astro, screening='RPA'):
     simga_e_0 = astro_model['sigma_e']
 
     m_X_list = np.logspace(5, 9, 100)
     sigma_e = np.empty_like(m_X_list)
     for i, m_X in enumerate(m_X_list):
-        sigma_e[i] = 2.3*simga_e_0 / rate(eps, m_X, astro_model=astro_model, mediator=mediator, screening=screening)
+        sigma_e[i] = 2.3*simga_e_0 / rate(epsilon, m_X, astro_model=astro_model, mediator=mediator, screening=screening)
     return m_X_list, sigma_e
 
 
