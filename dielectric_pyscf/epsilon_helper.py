@@ -106,6 +106,15 @@ def ovlp_sum(primgauss_arr, AO_arr, coeff_arr, ints_x, ints_y, ints_z, R_id):
                     ovlp[i,j] = (tot@coeff1)@coeff2
     return ovlp
 
+#General outer product for eta_qG_sq (kij, G, G') = eta_qG(kij, G)*eta_qG(kij, G').conj() to replace much slower np.einsum('ag,ah -> agh')
+@nb.njit(nb.complex128[:,:,::1](nb.complex128[:,::1], nb.complex128[:,::1], nb.complex128[:,:,::1]), parallel=True)
+def gen_outer(A, B, C):
+    for i in nb.prange(A.shape[0]):
+        for j in range(A.shape[1]):
+            for k in range(B.shape[1]):
+                C[i,j,k] = A[i,j]*B[i,k]
+    return C
+
 @nb.njit()
 def kramerskronig_im2re(im, dE = parmt.dE, E_max=parmt.E_max):
     """

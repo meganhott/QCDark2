@@ -445,6 +445,9 @@ def RPA_Im_eps_external_prefactor_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q_cu
     """
     # Load data
     im_delE = np.load(working_dir + '/im_energy.npy')
+    im_delE_ind = im_delE[:,0,:,:] #energy indices (k,i,j)
+    im_delE_rem = im_delE[:,1,:,:] #remainders (k,i,j)
+
     k_f = np.load(working_dir + '/k_f.npy')
     mo_coeff_f_conj = np.load(working_dir + '/mo_coeff_f_conj.npy')
     mo_coeff_i = np.load(working_dir + '/mo_coeff_i.npy')
@@ -474,7 +477,23 @@ def RPA_Im_eps_external_prefactor_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q_cu
         logger.info(f'\t\t\t3D overlaps loaded from memory for all G. Time taken = {(time.time() - start_time):.2f} s.')
 
     start_time = time.time()
-    eps_delta = np.zeros((N_E, qG.shape[0], qG.shape[0]), dtype='complex')
+    #eps_delta = np.zeros((N_E, qG.shape[0], qG.shape[0]), dtype='complex')
+    eps_delta_h5 = h5py.File(working_dir + 'eps_delta.h5', 'w')
+    eps_delta = eps_delta_h5.create_dataset('eps_delta', (N_E, qG.shape[0], qG.shape[0]), dtype='complex')
+    eps_delta_n_min_1 = np.zeros((qG.shape[0], qG.shape[0]), dtype='complex')
+    for n_E in range(N_E-1):
+        k_ind, i_ind, j_ind = np.where(im_delE_ind == n_E)
+        eta_qG_kij = eta_qG[k_ind, i_ind, j_ind] #(k,i,j,G) -> (kij,G) #only keeps k,i,j elements relevent to delta calculation
+        rem_kij = im_delE_rem[k_ind, i_ind, j_ind]
+
+        eta_qG_kij_sq = np.empty((k_ind.shape[0], eta_qG_kij.shape[1], eta_qG_kij.shape[1]), dtype='complex')
+        eta_qG_kij_sq = eps.gen_outer(eta_qG_kij, eta_qG_kij.conj(), eta_qG_kij_sq) #numba optimized function
+
+        eps_delta_n = np.tensordot(rem_kij, eta_qG_kij_sq, axes=(0,0)) 
+        eps_delta[n_E] = eps_delta_n + eps_delta_n_min_1
+        eps_delta_n_min_1 = np.sum(eta_qG_kij_sq, axis=0) - eps_delta_n # (1 - rem)*eta_sq
+
+    """
     for i_k in range(k_f.shape[0]):
         a_ind, b_ind = np.nonzero(im_delE[i_k,0] < N_E)
         eta_qG_ab = eta_qG[i_k, a_ind, b_ind] #(a,b,G) -> (ab,G) #only keeps a,b pairs relevent to delta calculation
@@ -486,6 +505,7 @@ def RPA_Im_eps_external_prefactor_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q_cu
             eps_delta[int(ind)] += rem*eta_qG_sq[i] #already checked ind < nE
             if ind < N_E - 1:
                 eps_delta[int(ind+1)] += (1. - rem)*eta_qG_sq[i]
+    """
 
     if rank == None or rank == 0:
         logger.info(f'\t\t\tDelta part of epsilon calculated. Time taken = {(time.time() - start_time):.2f} s.')
