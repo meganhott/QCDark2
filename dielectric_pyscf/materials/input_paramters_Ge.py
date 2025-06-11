@@ -8,7 +8,7 @@ Authors: Megan Hott, Aman Singal
 """
 
 """Naming-parameters: system_name and name of final file"""
-system_name = '/gpfs/scratch/mhott/dielectric_pyscf_results/Ge_cc-pvtz_pbe_10k_lfe_464'
+system_name = '/gpfs/scratch/mhott/dielectric_pyscf_results/Ge_cc-pvtz_pbe_10k_lfe_491'
 res_filename = system_name + '_eps.hdf5'
 DFT_resources_path = '/gpfs/scratch/mhott/dielectric_pyscf_results'
 
@@ -33,7 +33,7 @@ pseudo = None                      # Similar to ECPs, slight differences (uses C
 precision = 1e-12                   # DFT precision parameter, fed to pyscf only
 precision_R = 1e-9                 # R cutoff precision, used for dielectric function precision
 xcfunc = 'pbe'                     # Exchange-Correlation Functional
-k_grid = [12,12,12]                # k-grid: resolution of grid points in reciprocal space
+k_grid = [10,10,10]                # k-grid: resolution of grid points in reciprocal space
 q_shift_dir = [1,1,1]              # Direction for q-shift (gets normalized automatically)
 q_shift = 0.01                     # In units of alpha*(mass of electron), magnitude of q shift 
 scissor_bandgap = 0.67              # If float in eV, the scissor correction is applied to meet the specified bandgap. If None, scissor correction is not applied
@@ -51,7 +51,7 @@ numval = 'auto'                     # Number of valence bands to include in the 
 numcon = 'auto'                     # Number of conduction bands to include in the calculation, use 'all' for all available conduction bands
 
 """Logging and calculation parameters"""
-q_start = 464                     # If None, calculation is performed for all q vectors. If set to an integer, the 
+q_start = 491                     # If None, calculation is performed for all q vectors. If set to an integer, the 
                                    # calculations are started at that q vector. Only use if previous calculation was interrupted.
 q_stop = None
 

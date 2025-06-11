@@ -8,11 +8,11 @@ Authors: Megan Hott, Aman Singal
 """
 
 """Naming-parameters: system_name and name of final file"""
-system_name = '/gpfs/scratch/mhott/dielectric_pyscf_results/Si_cc-pvtpdz_pbe_6k_10q_lfe'
+system_name = '/gpfs/scratch/mhott/dielectric_pyscf_results/Si_cc-pvtpdz_pbe_6k_25q_0_60'
 res_filename = system_name + '_eps.hdf5'
 DFT_resources_path = '/gpfs/scratch/mhott/dielectric_pyscf_results'
 
-mpi = False                         # If True, MPI parallelization will be implemented
+mpi = True                         # If True, MPI parallelization will be implemented
 
 alt_binning = False                 #Temporary: set to True to use alternate binning technique, where interpolation and binning happen at end only. Do not use for large q since epsilon is kept in memory for all q+G vectors.
 
@@ -38,11 +38,11 @@ k_grid = [6,6,6]                # k-grid: resolution of grid points in reciproca
 q_shift_dir = [1,1,1]              # Direction for q-shift (gets normalized automatically)
 q_shift = 0.01                     # In units of alpha*(mass of electron), magnitude of q shift 
 scissor_bandgap = 1.1              # If float in eV, the scissor correction is applied to meet the specified bandgap. If None, scissor correction is not applied
-include_lfe = True                # If False, does not incorporate local field effects into the calculation of epsilon. If True, LFEs will be calculated by inverting eps_{GG'}
+include_lfe = False                # If False, does not incorporate local field effects into the calculation of epsilon. If True, LFEs will be calculated by inverting eps_{GG'}
 
 """Parameters for dielectric function calculations"""
 dq = 0.02                          # In units of alpha*(mass of electron), size of momentum bins 
-q_max = 10                          # In units of alpha*(mass of electron), maximum momentum
+q_max = 25                          # In units of alpha*(mass of electron), maximum momentum
 q_min = 0                          # In units of alpha*(mass of electron), minimum momentum
 N_theta = 9                        # Number of theta bins
 N_phi = 16                         # Number of phi bins
@@ -54,7 +54,7 @@ numcon = 'auto'                     # Number of conduction bands to include in t
 """Logging and calculation parameters"""
 q_start = None                     # If None, calculation is performed for all q vectors. If set to an integer, the 
                                    # calculations are started at that q vector. Only use if previous calculation was interrupted.
-q_stop = None
+q_stop = 60
 
 store = system_name + '_resources' # Location to store intermediate calculations to reduce memory load
 qcdark_outfile = system_name + '_eps.log'

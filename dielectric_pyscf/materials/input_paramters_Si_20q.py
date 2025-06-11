@@ -8,7 +8,7 @@ Authors: Megan Hott, Aman Singal
 """
 
 """Naming-parameters: system_name and name of final file"""
-system_name = '/gpfs/scratch/mhott/dielectric_pyscf_results/Si_cc-pvtpdz_pbe_8k_301_343'
+system_name = '/gpfs/scratch/mhott/dielectric_pyscf_results/Si_cc-pvtpdz_pbe_8k_427_469'
 res_filename = system_name + '_eps.hdf5'
 DFT_resources_path = '/gpfs/scratch/mhott/dielectric_pyscf_results'
 
@@ -52,9 +52,9 @@ numval = 'auto'                     # Number of valence bands to include in the 
 numcon = 'auto'                     # Number of conduction bands to include in the calculation, use 'all' for all available conduction bands and 'auto' to exclude irrelevant bands based on E_max
 
 """Logging and calculation parameters"""
-q_start = 301                     # If None, calculation is performed for all q vectors. If set to an integer, the 
+q_start = 427                     # If None, calculation is performed for all q vectors. If set to an integer, the 
                                    # calculations are started at that q vector. Only use if previous calculation was interrupted.
-q_stop = 343
+q_stop = 469
 
 store = system_name + '_resources' # Location to store intermediate calculations to reduce memory load
 qcdark_outfile = system_name + '_eps.log'
