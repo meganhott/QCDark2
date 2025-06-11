@@ -467,6 +467,7 @@ def RPA_Im_eps_external_prefactor_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q_cu
     if rank == None or rank == 0:
         logger.info(f'\t\t\teta_qG calculated for all k and G. Time taken = {(time.time() - start_time):.2f} s.')
 
+    # Load 3D overlaps to memory
     start_time = time.time()
     eta_qG = np.empty((k_f.shape[0], mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2], qG.shape[0]), dtype='complex128')
     for i_k in range(k_f.shape[0]):
@@ -474,14 +475,15 @@ def RPA_Im_eps_external_prefactor_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q_cu
     eta_qG = eta_qG / np.linalg.norm(qG, axis=1)[None,None,None,:]
 
     if rank == None or rank == 0:
-        logger.info(f'\t\t\t3D overlaps loaded from memory for all G. Time taken = {(time.time() - start_time):.2f} s.')
+        logger.info(f'\t\t\t3D overlaps loaded to memory for all G. Time taken = {(time.time() - start_time):.2f} s.')
 
+    # Calculate eps_delta
     start_time = time.time()
-    #eps_delta = np.zeros((N_E, qG.shape[0], qG.shape[0]), dtype='complex')
-    eps_delta_h5 = h5py.File(working_dir + 'eps_delta.h5', 'w')
+    eps_delta_h5 = h5py.File(working_dir + 'eps_delta.h5', 'w') #eps_delta with be stored to hdf5 for each energy
     eps_delta = eps_delta_h5.create_dataset('eps_delta', (N_E, qG.shape[0], qG.shape[0]), dtype='complex')
+
     eps_delta_n_min_1 = np.zeros((qG.shape[0], qG.shape[0]), dtype='complex')
-    for n_E in range(N_E-1):
+    for n_E in range(N_E):
         k_ind, i_ind, j_ind = np.where(im_delE_ind == n_E)
         eta_qG_kij = eta_qG[k_ind, i_ind, j_ind] #(k,i,j,G) -> (kij,G) #only keeps k,i,j elements relevent to delta calculation
         rem_kij = im_delE_rem[k_ind, i_ind, j_ind]
@@ -493,40 +495,8 @@ def RPA_Im_eps_external_prefactor_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q_cu
         eps_delta[n_E] = eps_delta_n + eps_delta_n_min_1
         eps_delta_n_min_1 = np.sum(eta_qG_kij_sq, axis=0) - eps_delta_n # (1 - rem)*eta_sq
 
-    """
-    for i_k in range(k_f.shape[0]):
-        a_ind, b_ind = np.nonzero(im_delE[i_k,0] < N_E)
-        eta_qG_ab = eta_qG[i_k, a_ind, b_ind] #(a,b,G) -> (ab,G) #only keeps a,b pairs relevent to delta calculation
-        im_delE_ab = im_delE[i_k, :, a_ind, b_ind] #(2, ab)
-        eta_qG_sq = np.einsum('ag, ah -> agh', eta_qG_ab, eta_qG_ab.conj()) #(ab,G,G')
-
-        for i in range(eta_qG_sq.shape[0]):
-            ind, rem = im_delE_ab[i]
-            eps_delta[int(ind)] += rem*eta_qG_sq[i] #already checked ind < nE
-            if ind < N_E - 1:
-                eps_delta[int(ind+1)] += (1. - rem)*eta_qG_sq[i]
-    """
-
     if rank == None or rank == 0:
         logger.info(f'\t\t\tDelta part of epsilon calculated. Time taken = {(time.time() - start_time):.2f} s.')
-
-
-    #too slow to load all eps_delta from memory, will only get worse with larger N_G
-    """
-    #save eta for each k, then load and combine after calculating for all k
-    with mp.get_context('fork').Pool(mp.cpu_count()) as p: #parallelize over k
-        p.starmap(partial(eps.get_eps_delta_k, qG=qG, primgauss_arr=primgauss_arr, AO_arr=AO_arr, coeff_arr=coeff_arr, unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path, im_delE=im_delE), k_tup) #(G,k,i,j)
-
-    logger.info('\t\t\teps_delta calculated for all k and G. Time taken = {:.2f} s.'.format(time.time()-start_time))
-
-    #load and add eps_delta for all k
-    start_time = time.time()
-    eps_delta = np.zeros((N_E, qG.shape[0], qG.shape[0]), dtype='complex')
-    for i_k in range(k_f.shape[0]):
-        eps_delta += np.load(parmt.store + f'/working_dir/eps_delta/eps_delta_k{i_k}.npy')
-
-    logger.info('\t\t\teps_delta loaded from memory and summed for all k. Time taken = {:.2f} s.'.format(time.time()-start_time))
-    """
 
     return np.copy(np.transpose(eps_delta, (1,2,0))) #(G,G',E)
 
