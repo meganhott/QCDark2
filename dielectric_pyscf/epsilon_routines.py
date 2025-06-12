@@ -479,7 +479,7 @@ def RPA_Im_eps_external_prefactor_LFE(qG, primgauss_arr, AO_arr, coeff_arr, q_cu
 
     # Calculate eps_delta
     start_time = time.time()
-    eps_delta_h5 = h5py.File(working_dir + 'eps_delta.h5', 'w') #eps_delta with be stored to hdf5 for each energy
+    eps_delta_h5 = h5py.File(working_dir + '/eps_delta.h5', 'w') #eps_delta with be stored to hdf5 for each energy
     eps_delta = eps_delta_h5.create_dataset('eps_delta', (N_E, qG.shape[0], qG.shape[0]), dtype='complex')
 
     eps_delta_n_min_1 = np.zeros((qG.shape[0], qG.shape[0]), dtype='complex')
