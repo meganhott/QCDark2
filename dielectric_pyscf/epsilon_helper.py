@@ -107,13 +107,17 @@ def ovlp_sum(primgauss_arr, AO_arr, coeff_arr, ints_x, ints_y, ints_z, R_id):
     return ovlp
 
 #General outer product for eta_qG_sq (kij, G, G') = eta_qG(kij, G)*eta_qG(kij, G').conj() to replace much slower np.einsum('ag,ah -> agh')
-@nb.njit(nb.complex128[:,:,::1](nb.complex128[:,::1], nb.complex128[:,::1], nb.complex128[:,:,::1]), parallel=True)
-def gen_outer(A, B, C):
+@nb.njit(nb.complex128[:,:,::1](nb.complex128[:,::1], nb.complex128[:,::1], nb.complex128[:,:,::1], nb.float64), parallel=True)
+def gen_outer(A, B, C, prefactor):
     for i in nb.prange(A.shape[0]):
         for j in range(A.shape[1]):
             for k in range(B.shape[1]):
                 C[i,j,k] = A[i,j]*B[i,k]
-    return C
+    return prefactor*C
+
+#def gen_diagonal(A):
+    #(N_E,N_G_chunk,N_G)
+
 
 @nb.njit()
 def kramerskronig_im2re(im, dE = parmt.dE, E_max=parmt.E_max):
@@ -121,9 +125,9 @@ def kramerskronig_im2re(im, dE = parmt.dE, E_max=parmt.E_max):
     Computes the Kramers-Kronig transformation of the input imaginary part to obtain the real part. Requires Im[f(-E_max <= E <= E_max)].
 
     Input:
-        im: np.ndarray (N_E, N_G)
+        im: np.ndarray (N_G, N_E)
     Output:
-        re: np.ndarray (N_E, N_G), Note that Re(eps) = eps_re + 1 
+        re: np.ndarray (N_G, N_E), Note that Re(eps) = eps_re + 1 
     """
     E = np.arange(-E_max, E_max+dE, dE)
     re = np.empty_like(im)
@@ -147,9 +151,9 @@ def kramerskronig_re2im(re, dE = parmt.dE, E_max=parmt.E_max):
     Computes the Kramers-Kronig transformation of the input real part to obtain the imaginary part. Requires Re[f(-E_max <= E <= E_max)].
 
     Input:
-        re: np.ndarray (N_E, N_G)
+        re: np.ndarray (N_G, N_E)
     Output:
-        im: np.ndarray (N_E, N_G)
+        im: np.ndarray (N_G, N_E)
     """
     E = np.arange(-E_max, E_max+dE, dE)
     im = np.empty_like(re)
