@@ -374,7 +374,7 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
         G_per_chunk = int(np.floor(max_memory/eps_delta_size/2*N_G)) #maximum number of G-vectors to load in each chunk. Factor of 2 because we will also have KK-transformed eps_delta in memory
         N_chunks = int(np.ceil(N_G/G_per_chunk))
 
-        logger.info(f"\t\tBeginning Kramers-Kronig transform of eps_delta. This will be performed in {N_chunks} batches of (N_E={N_E}, N_G={G_per_chunk}, N_G'={N_G}) arrays.")
+        logger.info(f"\t\tBeginning Kramers-Kronig transform of eps_delta. This will be performed in {N_chunks} batches of (N_E={N_E}, N_G={min(G_per_chunk, N_G)}, N_G'={N_G}) arrays.")
 
         G_start = np.arange(0, G_per_chunk*N_chunks, G_per_chunk)
         G_stop = np.append(np.arange(G_per_chunk, G_per_chunk*N_chunks, G_per_chunk), N_G)
@@ -394,17 +394,17 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
         E_per_chunk = int(np.floor(max_memory/eps_delta_size/2*N_E)) #maximum number of (N_G,N_G) arrays to load in each chunk. Factor of 2 because we will also have inverted eps in memory
         N_chunks = int(np.ceil(N_E/E_per_chunk))
 
-        logger.info(f"\t\tBeginning inversion of eps_delta to obtain eps_LFE. This will be performed in {N_chunks} batches of (N_E={E_per_chunk}, N_G={N_G}, N_G'={N_G}) arrays.")
+        logger.info(f"\t\tBeginning inversion of eps_delta to obtain eps_LFE. This will be performed in {N_chunks} batches of (N_E={min(E_per_chunk, N_E)}, N_G={N_G}, N_G'={N_G}) arrays.")
 
         E_start = np.arange(0, E_per_chunk*N_chunks, E_per_chunk)
         E_stop = np.append(np.arange(E_per_chunk, E_per_chunk*N_chunks, E_per_chunk), N_E)
 
-        eps_lfe = np.empty((N_E, N_G), dtype='complex')
+        eps_lfe = np.empty((N_G, N_E), dtype='complex')
         start_time = time.time()
         for i in range(N_chunks):
             start_time1 = time.time()
             eps_delta_chunk = eps_delta[E_start[i]:E_stop[i]]
-            eps_lfe[E_start[i]:E_stop[i]] = (1/np.diagonal(np.linalg.inv(eps_delta_chunk.transpose(2,0,1)), axis1=1, axis2=2)).transpose((1,0)) #make general diagonal function? write this whole function with numba? Is inv faster if we transpose first? (E,G,G') -> (G,E)
+            eps_lfe[E_start[i]:E_stop[i]] = (1/np.diagonal(np.linalg.inv(eps_delta_chunk), axis1=1, axis2=2)).transpose((1,0)) #make general diagonal function? write this whole function with numba? Is inv faster if we transpose first? (E,G,G') -> (G,E)
             logger.info(f'\t\t\tBatch {i+1} finished in {time.time() - start_time1} s.')
         eps_delta_h5.close()
         logger.info(f'\t\tInversion completed and eps_LFE calculated in {time.time() - start_time} s.')
@@ -449,19 +449,19 @@ def get_RPA_dielectric_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k
 
     valbot, valtop, conbot, contop = np.load(parmt.store + '/bands.npy')
     # For E >=0, initial states are occupied and final states are unoccupied
-    logger.info(f'\t\t\tStarting calculation of delta part of polarizability for 0 < E <= {parmt.E_max}')
+    logger.info(f'\t\t\tStarting calculation of delta part of polarizability for 0 < E <= {parmt.E_max} eV')
     start_time = time.time()
-    im_delE = delta_energy(mo_en_i[:,valbot:valtop+1], mo_en_f[:,:,conbot:contop+1]) #(k,2,a,b) # Calculating the delta function in energy
-    RPA_Im_eps_external_prefactor_LFE(qG, k_f, mo_coeff_i[:,valbot:valtop+1], mo_coeff_f_conj[:,:,conbot:contop+1], im_delE, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank, prefactor, neg_E=False)
-    logger.info(f'\t\t\tFinished calculation of delta part of polarizability for 0 < E <= {parmt.E_max}.\nTime taken = {(time.time() - start_time):.2f} s')
+    im_delE = delta_energy(mo_en_i[:,valbot:valtop+1], mo_en_f[:,conbot:contop+1]) #(k,2,a,b) # Calculating the delta function in energy
+    RPA_Im_eps_external_prefactor_LFE(qG, k_f, mo_coeff_i[:,:,valbot:valtop+1], mo_coeff_f_conj[:,:,conbot:contop+1], im_delE, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank, prefactor, neg_E=False)
+    logger.info(f'\t\t\tFinished calculation of delta part of polarizability for 0 < E <= {parmt.E_max} eV. Time taken = {(time.time() - start_time):.2f} s')
 
     # For E < 0, initial states are unoccupied and final states are occupied
-    logger.info(f'\t\t\tStarting calculation of delta part of polarizability for -{parmt.E_max} <= E <= 0')
+    logger.info(f'\t\t\tStarting calculation of delta part of polarizability for -{parmt.E_max} <= E <= 0 eV')
     start_time = time.time()
-    im_delE = delta_energy(mo_en_i[:,:,conbot:contop+1], mo_en_f[:,valbot:valtop+1]) #(k,2,a,b)
+    im_delE = delta_energy(mo_en_i[:,conbot:contop+1], mo_en_f[:,valbot:valtop+1]) #(k,2,a,b)
     #negate ind?
-    RPA_Im_eps_external_prefactor_LFE(qG, k_f, mo_coeff_i[:,:,conbot:contop+1], mo_coeff_f_conj[:,valbot:valtop+1], im_delE, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank, prefactor, neg_E=True)
-    logger.info(f'\t\t\tFinished calculation of delta part of polarizability for -{parmt.E_max} <= E <= 0.\nTime taken = {(time.time() - start_time):.2f} s')
+    RPA_Im_eps_external_prefactor_LFE(qG, k_f, mo_coeff_i[:,:,conbot:contop+1], mo_coeff_f_conj[:,:,valbot:valtop+1], im_delE, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank, prefactor, neg_E=True)
+    logger.info(f'\t\t\tFinished calculation of delta part of polarizability for -{parmt.E_max} <= E <= 0 eV. Time taken = {(time.time() - start_time):.2f} s')
 
 
 def RPA_Im_eps_external_prefactor_LFE(qG, k_f, mo_coeff_i, mo_coeff_f_conj, im_delE, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank, prefactor, neg_E):
