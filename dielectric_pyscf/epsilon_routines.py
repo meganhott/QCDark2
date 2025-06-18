@@ -363,57 +363,103 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
 
         #Creating hdf5 file to store large intermediate array
         eps_delta_h5 = h5py.File(working_dir + '/eps_delta.h5', 'w') #eps_delta with be stored to hdf5 for each energy
-        eps_delta_h5.create_dataset('eps_delta', (N_E, N_G, N_G), dtype='complex')
+        # Determining chunks used to store data
+        """
+        chunk_size = 2**30 #1 GB chunks
+        N_chunks = 16 * N_E * N_G**2 / chunk_size
+        E_per_chunk = np.floor(N_E / np.sqrt(N_chunks))
+        G_per_chunk = np.floor(N_G / np.sqrt(N_chunks))
+        """
+        chunk_slice_size = 2**30 # want to read/write in 1 GB chunks later
+        E_per_chunk = int(np.floor(chunk_slice_size / (16 * N_G**2)))
+        G_per_chunk = int(np.floor(np.sqrt(chunk_slice_size / (16 * N_E))))
+        if G_per_chunk > N_G: 
+            if E_per_chunk > N_E:
+                eps_delta_h5.create_dataset('eps_delta', (N_E, N_G, N_G), dtype='complex') # no chunking
+                E_per_chunk = N_E
+                G_per_chunk = N_G
+            else:
+                if E_per_chunk < 1:
+                    E_per_chunk = 1
+                eps_delta_h5.create_dataset('eps_delta', (N_E, N_G, N_G), dtype='complex', chunks=(E_per_chunk, N_G, N_G)) # only chunking along E
+                G_per_chunk = N_G
+        else:
+            eps_delta_h5.create_dataset('eps_delta', (N_E, N_G, N_G), dtype='complex', chunks=(E_per_chunk, N_G, G_per_chunk))
+
+        if rank == 0 or rank == None:
+            logger.info(f'\t\tAn hdf5 dataset has been created to store intermediate results. The shape is (N_E={N_E}, N_G={N_G}, N_G={N_G}) saved in chunks of ({E_per_chunk}, {G_per_chunk}, {G_per_chunk}).')
+
         eps_delta_h5.close()
 
         get_RPA_dielectric_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank) # calculate and store delta part of polarizability (E,G,G')
 
         #Perform Kramers-Kronig transformation to get transition amplitude parts of Re(eps) and Im(eps)
-        eps_delta_size = int(parmt.E_max/parmt.dE*2 + 1)*N_G**2*16
-        max_memory = psutil.virtual_memory().available*0.9
-        G_per_chunk = int(np.floor(max_memory/eps_delta_size/2*N_G)) #maximum number of G-vectors to load in each chunk. Factor of 2 because we will also have KK-transformed eps_delta in memory
-        N_chunks = int(np.ceil(N_G/G_per_chunk))
+        N_G_chunks = int(np.ceil(N_G/G_per_chunk))
+        if rank == 0 or rank == None:
+            logger.info(f"\t\tBeginning Kramers-Kronig transform of eps_delta. This will be performed in {N_G_chunks**2} batches of (N_E={N_E}, N_G={G_per_chunk}, N_G'={G_per_chunk}) arrays.")
 
-        logger.info(f"\t\tBeginning Kramers-Kronig transform of eps_delta. This will be performed in {N_chunks} batches of (N_E={N_E}, N_G={min(G_per_chunk, N_G)}, N_G'={N_G}) arrays.")
-
-        G_start = np.arange(0, G_per_chunk*N_chunks, G_per_chunk)
-        G_stop = np.append(np.arange(G_per_chunk, G_per_chunk*N_chunks, G_per_chunk), N_G)
+        G_start = np.arange(0, G_per_chunk*N_G_chunks, G_per_chunk)
+        G_stop = np.append(np.arange(G_per_chunk, G_per_chunk*N_G_chunks, G_per_chunk), N_G)
 
         eps_delta_h5 = h5py.File(working_dir + '/eps_delta.h5', 'r+')
         eps_delta = eps_delta_h5['eps_delta']
         start_time = time.time()
-        for i in range(N_chunks):
-            start_time1 = time.time()
-            eps_delta_chunk = eps_delta[:,G_start[i]:G_stop[i]] #(E,G_chunk,G')
-            eps_pv = kramerskronig_lfe(eps_delta_chunk.transpose((1,2,0))).transpose((2,0,1)) #(G_chunk,G',E) -> (E,G_chunk,G') # check that is it faster to send transposed matrix to KK
-            eps_delta[:,G_start[i]:G_stop[i]] = eps_pv + 1j*eps_delta_chunk + np.identity(N_G)[None,:,:] #add eps_pv and identity to existing eps_delta
-            logger.info(f'\t\t\tBatch {i+1} finished in {time.time() - start_time1} s.')
-        logger.info(f'\t\tKramers-Kronig transform completed in {time.time() - start_time} s.')
+        for i in range(N_G_chunks):
+            for j in range(N_G_chunks):
+                start_time1 = time.time()
+                eps_delta_chunk = eps_delta[:, G_start[i]:G_stop[i], G_start[j]:G_stop[j]] #(E,G_chunk,G'_chunk)
+                
+                eps_lfe = eps.kramerskronig_lfe(eps_delta_chunk)
+
+                if parmt.debug_logging and (rank == 0 or rank == None):
+                    logger.info(f'\t\t\t\tKK finished in {time.time() - start_time1} s.')
+
+                start_time2 = time.time()
+                eps_delta[:, G_start[i]:G_stop[i], G_start[j]:G_stop[j]] = eps_lfe + np.identity(N_G)[None, G_start[i]:G_stop[i], G_start[j]:G_stop[j]] #add eps_pv and identity to existing eps_lfe
+
+                if parmt.debug_logging and (rank == 0 or rank == None):
+                    logger.info(f'\t\t\t\tWriting to hdf5 finished in {time.time() - start_time2} s.')
+                    logger.info(f'\t\t\tBatch {(i+1)*N_G_chunks + (j+1)} finished in {time.time() - start_time1} s.')
+
+        if rank == 0 or rank == None:
+            logger.info(f'\t\tKramers-Kronig transform completed in {(time.time() - start_time):.2f} s.')
 
         #take inverse in chunks of energy
-        E_per_chunk = int(np.floor(max_memory/eps_delta_size/2*N_E)) #maximum number of (N_G,N_G) arrays to load in each chunk. Factor of 2 because we will also have inverted eps in memory
-        N_chunks = int(np.ceil(N_E/E_per_chunk))
+        N_E_chunks = int(np.ceil(N_E/E_per_chunk))
 
-        logger.info(f"\t\tBeginning inversion of eps_delta to obtain eps_LFE. This will be performed in {N_chunks} batches of (N_E={min(E_per_chunk, N_E)}, N_G={N_G}, N_G'={N_G}) arrays.")
+        if rank == 0 or rank == None:
+            logger.info(f"\t\tBeginning inversion of eps_delta to obtain eps_LFE. This will be performed in {N_E_chunks} batches of (N_E={E_per_chunk}, N_G={N_G}, N_G'={N_G}) arrays.")
 
-        E_start = np.arange(0, E_per_chunk*N_chunks, E_per_chunk)
-        E_stop = np.append(np.arange(E_per_chunk, E_per_chunk*N_chunks, E_per_chunk), N_E)
+        E_start = np.arange(0, E_per_chunk*N_E_chunks, E_per_chunk)
+        E_stop = np.append(np.arange(E_per_chunk, E_per_chunk*N_E_chunks, E_per_chunk), N_E)
 
-        eps_lfe = np.empty((N_G, N_E), dtype='complex')
+        eps_lfe = np.empty((N_E, N_G), dtype='complex')
         start_time = time.time()
-        for i in range(N_chunks):
+        for i in range(N_E_chunks):
             start_time1 = time.time()
             eps_delta_chunk = eps_delta[E_start[i]:E_stop[i]]
-            eps_lfe[E_start[i]:E_stop[i]] = (1/np.diagonal(np.linalg.inv(eps_delta_chunk), axis1=1, axis2=2)).transpose((1,0)) #make general diagonal function? write this whole function with numba? Is inv faster if we transpose first? (E,G,G') -> (G,E)
-            logger.info(f'\t\t\tBatch {i+1} finished in {time.time() - start_time1} s.')
+
+            if E_per_chunk == 1: # eps_delta_chunk will be 2d
+                eps_lfe[E_start[i]:E_stop[i]] = (1/np.diagonal(np.linalg.inv(eps_delta_chunk), axis1=0, axis2=1))
+            else: # eps_delta_chunk will be 3d
+                eps_lfe[E_start[i]:E_stop[i]] = (1/np.diagonal(np.linalg.inv(eps_delta_chunk), axis1=1, axis2=2)) #make general diagonal function? write this whole function with numba? Is inv faster if we transpose first? (E,G,G') -> (G,E)
+
+            if parmt.debug_logging and (rank == 0 or rank == None):
+                logger.info(f'\t\t\tBatch {i+1} finished in {time.time() - start_time1} s.')
+
         eps_delta_h5.close()
-        logger.info(f'\t\tInversion completed and eps_LFE calculated in {time.time() - start_time} s.')
+        eps_lfe = eps_lfe.transpose((1,0)).copy() #(G,E)
+
+        if rank == 0 or rank == None:
+            logger.info(f'\t\tInversion completed and eps_LFE calculated in {(time.time() - start_time):.2f} s.')
 
         #Bin real and imaginary parts - modify binning so both parts done at same time
         start_time = time.time()
         tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, np.imag(eps_lfe), bin_centers, tot_bin_eps_im, tot_bin_weights)
         tot_bin_eps_re, tot_bin_weights_re = bin.bin_eps_q(q, G_q, np.real(eps_lfe), bin_centers, tot_bin_eps_re, tot_bin_weights_re)
-        logger.info(f'\t\tBinning of eps_LFE completed in {time.time() - start_time} s.')
+
+        if rank == 0 or rank == None:
+            logger.info(f'\t\tBinning of eps_LFE completed in {(time.time() - start_time):.2f} s.')
 
         # Save to working directory
         np.save(f'{working_dir}/tot_bin_eps_im_q.npy', tot_bin_eps_im)
@@ -449,19 +495,25 @@ def get_RPA_dielectric_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k
 
     valbot, valtop, conbot, contop = np.load(parmt.store + '/bands.npy')
     # For E >=0, initial states are occupied and final states are unoccupied
-    logger.info(f'\t\t\tStarting calculation of delta part of polarizability for 0 < E <= {parmt.E_max} eV')
+    if rank == 0 or rank == None:
+        logger.info(f'\t\t\tStarting calculation of delta part of polarizability for 0 < E <= {parmt.E_max} eV')
     start_time = time.time()
     im_delE = delta_energy(mo_en_i[:,valbot:valtop+1], mo_en_f[:,conbot:contop+1]) #(k,2,a,b) # Calculating the delta function in energy
     RPA_Im_eps_external_prefactor_LFE(qG, k_f, mo_coeff_i[:,:,valbot:valtop+1], mo_coeff_f_conj[:,:,conbot:contop+1], im_delE, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank, prefactor, neg_E=False)
-    logger.info(f'\t\t\tFinished calculation of delta part of polarizability for 0 < E <= {parmt.E_max} eV. Time taken = {(time.time() - start_time):.2f} s')
+    
+    if rank == 0 or rank == None:
+        logger.info(f'\t\t\tFinished calculation of delta part of polarizability for 0 < E <= {parmt.E_max} eV. Time taken = {(time.time() - start_time):.2f} s')
 
     # For E < 0, initial states are unoccupied and final states are occupied
-    logger.info(f'\t\t\tStarting calculation of delta part of polarizability for -{parmt.E_max} <= E <= 0 eV')
+    if rank == 0 or rank == None:
+        logger.info(f'\t\t\tStarting calculation of delta part of polarizability for -{parmt.E_max} <= E <= 0 eV')
     start_time = time.time()
     im_delE = delta_energy(mo_en_i[:,conbot:contop+1], mo_en_f[:,valbot:valtop+1]) #(k,2,a,b)
     #negate ind?
     RPA_Im_eps_external_prefactor_LFE(qG, k_f, mo_coeff_i[:,:,conbot:contop+1], mo_coeff_f_conj[:,:,valbot:valtop+1], im_delE, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank, prefactor, neg_E=True)
-    logger.info(f'\t\t\tFinished calculation of delta part of polarizability for -{parmt.E_max} <= E <= 0 eV. Time taken = {(time.time() - start_time):.2f} s')
+
+    if rank == 0 or rank == None:
+        logger.info(f'\t\t\tFinished calculation of delta part of polarizability for -{parmt.E_max} <= E <= 0 eV. Time taken = {(time.time() - start_time):.2f} s')
 
 
 def RPA_Im_eps_external_prefactor_LFE(qG, k_f, mo_coeff_i, mo_coeff_f_conj, im_delE, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank, prefactor, neg_E):
@@ -523,7 +575,55 @@ def RPA_Im_eps_external_prefactor_LFE(qG, k_f, mo_coeff_i, mo_coeff_f_conj, im_d
 
     eps_delta_h5 = h5py.File(working_dir + '/eps_delta.h5', 'r+') #eps_delta hdf5 file
     eps_delta = eps_delta_h5['eps_delta']
+    
+    chunks = eps_delta.chunks
+    if chunks is not None:
+        E_per_chunk = chunks[0]
+    else:
+        E_per_chunk = 1
+    N_E_chunks = int(np.ceil(N_E/E_per_chunk))
+    E_start = np.arange(0, E_per_chunk*N_E_chunks, E_per_chunk)
+    E_stop = np.append(np.arange(E_per_chunk, E_per_chunk*N_E_chunks, E_per_chunk), N_E)
+
+    if rank == 0 or rank == None:
+        logger.info(f"\t\t\t\tBeginning eps_delta. This will be performed in {N_E_chunks} batches of N_E = {E_per_chunk}")
+
     eps_delta_n_min_1 = np.zeros((qG.shape[0], qG.shape[0]), dtype='complex')
+    for n_E_chunk in range(N_E_chunks):
+        start_time1 = time.time()
+        E_i = E_start[n_E_chunk]
+        E_f = E_stop[n_E_chunk]
+        eps_delta_chunk = np.empty((E_f-E_i, qG.shape[0], qG.shape[0]), dtype='complex')
+        for i in range(E_f - E_i):
+            n_E = E_i + i
+            k_ind, i_ind, j_ind = np.where(im_delE_ind == n_E)
+            eta_qG_kij = eta_qG[k_ind, i_ind, j_ind] #(k,i,j,G) -> (kij,G) #only keeps k,i,j elements relevent to delta calculation
+            rem_kij = im_delE_rem[k_ind, i_ind, j_ind]
+
+            eta_qG_kij_sq = np.empty((k_ind.shape[0], eta_qG_kij.shape[1], eta_qG_kij.shape[1]), dtype='complex')
+            eta_qG_kij_sq = eps.gen_outer(eta_qG_kij, eta_qG_kij.conj(), eta_qG_kij_sq, prefactor) #numba optimized function
+
+            eps_delta_n = np.tensordot(rem_kij, eta_qG_kij_sq, axes=(0,0)) 
+            eps_delta_chunk[i] = eps_delta_n + eps_delta_n_min_1
+            #eps_delta[ind_sign*n_E + int(parmt.E_max/parmt.dE)] = eps_delta_n + eps_delta_n_min_1 #write to hdf5. Index is offset because this array contains both positive and negative energies
+            eps_delta_n_min_1 = np.sum(eta_qG_kij_sq, axis=0) - eps_delta_n # (1 - rem)*eta_sq
+        
+        if parmt.debug_logging and (rank == 0 or rank == None):
+            logger.info(f'\t\t\t\t\t\tBatch {n_E_chunk} of eps_delta calculated. Time taken = {(time.time() - start_time1):.2f} s.')
+
+        # write to hdf5 only after entire chunk has been calculated
+        start_time1 = time.time()
+        if ind_sign == -1:
+            eps_delta[(ind_sign*E_f + int(parmt.E_max/parmt.dE)):(ind_sign*E_i + int(parmt.E_max/parmt.dE))] = eps_delta_chunk
+        else: # ind_sign = 1
+            eps_delta[(ind_sign*E_i + int(parmt.E_max/parmt.dE)):(ind_sign*E_f + int(parmt.E_max/parmt.dE))] = eps_delta_chunk
+        
+        if parmt.debug_logging and (rank == 0 or rank == None):
+            logger.info(f'\t\t\t\t\t\tBatch {n_E_chunk} of eps_delta saved to hdf5. Time taken = {(time.time() - start_time1):.2f} s.')
+
+    eps_delta_h5.close()
+            
+    """
     for n_E in range(N_E):
         k_ind, i_ind, j_ind = np.where(im_delE_ind == n_E)
         eta_qG_kij = eta_qG[k_ind, i_ind, j_ind] #(k,i,j,G) -> (kij,G) #only keeps k,i,j elements relevent to delta calculation
@@ -536,6 +636,7 @@ def RPA_Im_eps_external_prefactor_LFE(qG, k_f, mo_coeff_i, mo_coeff_f_conj, im_d
         eps_delta[ind_sign*n_E + int(parmt.E_max/parmt.dE)] = eps_delta_n + eps_delta_n_min_1 #write to hdf5. Index is offset because this array contains both positive and negative energies
         eps_delta_n_min_1 = np.sum(eta_qG_kij_sq, axis=0) - eps_delta_n # (1 - rem)*eta_sq
     eps_delta_h5.close()
+    """
 
     if rank == None or rank == 0:
         logger.info(f'\t\t\t\tDelta part of epsilon calculated. Time taken = {(time.time() - start_time):.2f} s.')
@@ -588,25 +689,6 @@ def kramerskronig_lfe_causal(eps_delta):
     with mp.get_context('fork').Pool(mp.cpu_count()) as p:
         eps_pv_re = p.map(eps.kramerskronig_im2re_causal, eps_delta_re)
         eps_pv_im = p.map(eps.kramerskronig_re2im_causal, eps_delta_im)
-    eps_pv = np.array(eps_pv_re) - 1j*np.array(eps_pv_im)
-    return eps_pv
-
-def kramerskronig_lfe(eps_delta):
-    """
-    Calculates principal value part of Re(eps) and Im(eps) for LFEs. This function is parallelized over G-vectors (over first G-vector of eps_delta).
-
-    Input:
-        eps_delta: np.ndarray of shape (N_G, N_G, N_E): Dirac delta part of dielectric function
-
-    Output: 
-        epa_pv: np.ndarray of shape (N_G, N_G, N_E): Principal value part of dielectric function
-    
-    """
-    eps_delta_re = np.real(eps_delta)
-    eps_delta_im = np.imag(eps_delta)
-    with mp.get_context('fork').Pool(mp.cpu_count()) as p:
-        eps_pv_re = p.map(eps.kramerskronig_im2re, eps_delta_re)
-        eps_pv_im = p.map(eps.kramerskronig_re2im, eps_delta_im)
     eps_pv = np.array(eps_pv_re) - 1j*np.array(eps_pv_im)
     return eps_pv
 

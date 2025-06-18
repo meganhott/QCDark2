@@ -119,8 +119,8 @@ def gen_outer(A, B, C, prefactor):
     #(N_E,N_G_chunk,N_G)
 
 
-@nb.njit()
-def kramerskronig_im2re(im, dE = parmt.dE, E_max=parmt.E_max):
+@nb.njit(nb.float64[:,:](nb.float64[:,:]))
+def kramerskronig_im2re(im):
     """
     Computes the Kramers-Kronig transformation of the input imaginary part to obtain the real part. Requires Im[f(-E_max <= E <= E_max)].
 
@@ -129,7 +129,7 @@ def kramerskronig_im2re(im, dE = parmt.dE, E_max=parmt.E_max):
     Output:
         re: np.ndarray (N_G, N_E), Note that Re(eps) = eps_re + 1 
     """
-    E = np.arange(-E_max, E_max+dE, dE)
+    E = np.arange(-parmt.E_max, parmt.E_max + parmt.dE, parmt.dE)
     re = np.empty_like(im)
     N_G, N_E = im.shape
     for nE in range(N_E):
@@ -142,11 +142,11 @@ def kramerskronig_im2re(im, dE = parmt.dE, E_max=parmt.E_max):
             for ns in range(N_E-1):
                 s += im_pv[ns]/(E_pv[ns] - En)
 
-            re[nG,nE] = 1/np.pi*dE*(s - 0.5*(im_pv[0]/(E_pv[0]-En) + im_pv[-1]/(E_pv[-1]-En))) #trapezoid rule
+            re[nG,nE] = 1/np.pi*parmt.dE*(s - 0.5*(im_pv[0]/(E_pv[0]-En) + im_pv[-1]/(E_pv[-1]-En))) #trapezoid rule
     return re
 
-@nb.njit()
-def kramerskronig_re2im(re, dE = parmt.dE, E_max=parmt.E_max):
+@nb.njit(nb.float64[:,:](nb.float64[:,:]))
+def kramerskronig_re2im(re):
     """
     Computes the Kramers-Kronig transformation of the input real part to obtain the imaginary part. Requires Re[f(-E_max <= E <= E_max)].
 
@@ -155,7 +155,7 @@ def kramerskronig_re2im(re, dE = parmt.dE, E_max=parmt.E_max):
     Output:
         im: np.ndarray (N_G, N_E)
     """
-    E = np.arange(-E_max, E_max+dE, dE)
+    E = np.arange(-parmt.E_max, parmt.E_max + parmt.dE, parmt.dE)
     im = np.empty_like(re)
     N_G, N_E = re.shape
     for nE in range(N_E):
@@ -168,10 +168,39 @@ def kramerskronig_re2im(re, dE = parmt.dE, E_max=parmt.E_max):
             for ns in range(N_E-1):
                 s += re_pv[ns]/(E_pv[ns] - En)
 
-            im[nG,nE] = -1/np.pi*dE*(s - 0.5*(re_pv[0]/(E_pv[0]-En) + re_pv[-1]/(E_pv[-1]-En))) #trapezoid rule
+            im[nG,nE] = -1/np.pi*parmt.dE*(s - 0.5*(re_pv[0]/(E_pv[0]-En) + re_pv[-1]/(E_pv[-1]-En))) #trapezoid rule
     return im
 
+@nb.njit(nb.complex128[:,:,::1](nb.complex128[:,:,::1]), parallel=True)
+def kramerskronig_lfe(eps_delta):
+    """
+    Calculates principal value part of Re(eps) and Im(eps) for LFEs.
 
+    Input:
+        eps_delta: np.ndarray of shape (N_E, N_G, N_G): Dirac delta part of dielectric function
+    Output: 
+        epa_lfe: np.ndarray of shape (N_E, N_G, N_G): i*Delta part of dielectric function plus its Fourier transform
+    """
+    E = np.arange(-parmt.E_max, parmt.E_max + parmt.dE, parmt.dE).astype('complex')
+    eps_lfe = np.empty_like(eps_delta)
+    N_E, N_G, N_Gp = eps_delta.shape
+
+    pi = complex(np.pi)
+    dE = complex(parmt.dE)
+
+    for nE in nb.prange(N_E):
+        E_pv = np.delete(E, nE) #removes Ei = En for principal value
+        En = complex(E[nE])
+        for nG in range(N_G):
+            for nGp in range(N_Gp):
+                eps_delta_pv = np.concatenate((eps_delta[:nE, nG, nGp], eps_delta[nE+1:, nG, nGp]))
+
+                s = complex(0)
+                for ns in range(N_E - 1):
+                    s += eps_delta_pv[ns]/(E_pv[ns] - En)
+
+                eps_lfe[nE,nG,nGp] = 1j*eps_delta[nE,nG,nGp] + 1/pi*dE*(s - 0.5*(eps_delta_pv[0]/(E_pv[0]-En) + eps_delta_pv[-1]/(E_pv[-1]-En)))
+    return eps_lfe #still need to add identity to this
 
 @nb.njit()
 def kramerskronig_im2re_causal(im, dE = parmt.dE, E_max=parmt.E_max):
