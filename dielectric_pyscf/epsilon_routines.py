@@ -539,7 +539,7 @@ def RPA_Im_eps_external_prefactor_LFE(qG, k_f, mo_coeff_i, mo_coeff_f_conj, im_d
     else:
         ind_sign = 1
 
-    im_delE_ind = im_delE[:,0,:,:] # energy indices (k,i,j)
+    im_delE_ind = im_delE[:,0,:,:].astype('int') # energy indices (k,i,j)
     im_delE_rem = im_delE[:,1,:,:] # remainders (k,i,j)
 
     N_E = int(parmt.E_max/parmt.dE + 1) # Number of E for E <=0 or E>= 0
@@ -601,12 +601,12 @@ def RPA_Im_eps_external_prefactor_LFE(qG, k_f, mo_coeff_i, mo_coeff_f_conj, im_d
             rem_kij = im_delE_rem[k_ind, i_ind, j_ind]
 
             eta_qG_kij_sq = np.empty((k_ind.shape[0], eta_qG_kij.shape[1], eta_qG_kij.shape[1]), dtype='complex')
-            eta_qG_kij_sq = eps.gen_outer(eta_qG_kij, eta_qG_kij.conj(), eta_qG_kij_sq, prefactor) #numba optimized function
+            eta_qG_kij_sq = eps.gen_outer(eta_qG_kij.conj(), eta_qG_kij, eta_qG_kij_sq, prefactor) #numba optimized function
 
             eps_delta_n = np.tensordot(rem_kij, eta_qG_kij_sq, axes=(0,0)) 
             eps_delta_chunk[i] = eps_delta_n + eps_delta_n_min_1
-            #eps_delta[ind_sign*n_E + int(parmt.E_max/parmt.dE)] = eps_delta_n + eps_delta_n_min_1 #write to hdf5. Index is offset because this array contains both positive and negative energies
-            eps_delta_n_min_1 = np.sum(eta_qG_kij_sq, axis=0) - eps_delta_n # (1 - rem)*eta_sq
+
+            eps_delta_n_min_1 = np.tensordot(1 - rem_kij, eta_qG_kij_sq, axes=(0,0)) # (1 - rem)*eta_sq
         
         if parmt.debug_logging and (rank == 0 or rank == None):
             logger.info(f'\t\t\t\t\t\tBatch {n_E_chunk} of eps_delta calculated. Time taken = {(time.time() - start_time1):.2f} s.')
@@ -614,7 +614,7 @@ def RPA_Im_eps_external_prefactor_LFE(qG, k_f, mo_coeff_i, mo_coeff_f_conj, im_d
         # write to hdf5 only after entire chunk has been calculated
         start_time1 = time.time()
         if ind_sign == -1:
-            eps_delta[(ind_sign*E_f + int(parmt.E_max/parmt.dE)):(ind_sign*E_i + int(parmt.E_max/parmt.dE))] = eps_delta_chunk
+            eps_delta[(ind_sign*E_f + int(parmt.E_max/parmt.dE)):(ind_sign*E_i + int(parmt.E_max/parmt.dE))] = np.flip(eps_delta_chunk, axis=0)
         else: # ind_sign = 1
             eps_delta[(ind_sign*E_i + int(parmt.E_max/parmt.dE)):(ind_sign*E_f + int(parmt.E_max/parmt.dE))] = eps_delta_chunk
         
