@@ -7,7 +7,7 @@ import dielectric_pyscf.input_parameters as parmt
 alpha = 1/137
 me = 0.51099895000e6 #eV
 
-def get_eps_im_k(i_k: int, k_f: np.ndarray, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray, qG: np.ndarray, primgauss_arr, AO_arr, coeff_arr, unique_Ri:list[np.ndarray], q_cuts: np.ndarray, path, im_delE):
+def get_eps_im_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path, im_delE, working_dir):
     """
     For non-LFE code
     """
@@ -17,7 +17,7 @@ def get_eps_im_k(i_k: int, k_f: np.ndarray, mo_coeff_i: np.ndarray, mo_coeff_f_c
     eta_qG = get_3D_overlaps_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path) #(a,b,G)
     eta_qG = eta_qG / np.linalg.norm(qG, axis=1)[None,None,:] #(a,b,G)
 
-    eps_im = np.zeros((N_E, qG.shape[0]), dtype='float64')
+    eps_im = np.zeros((N_E, qG.shape[0]), dtype='float')
 
     a_ind, b_ind = np.nonzero(im_delE[i_k,0] < N_E)
     eta_qG_ab = eta_qG[a_ind, b_ind] #(a,b,G) -> (ab,G) #only keeps a,b pairs relevent to delta calculation
@@ -29,12 +29,11 @@ def get_eps_im_k(i_k: int, k_f: np.ndarray, mo_coeff_i: np.ndarray, mo_coeff_f_c
         eps_im[int(ind)] += rem*eta_qG_sq[i] #already checked ind < nE
         if ind < N_E - 1:
             eps_im[int(ind+1)] += (1. - rem)*eta_qG_sq[i]
+    np.save(working_dir + f'/eps_im/eps_im_k{i_k}.npy', np.transpose(eps_im, (1,0)).copy())
+    #return eps_im
 
-    #np.save(parmt.store + f'/working_dir/eps_delta/eps_delta_k{i_k}.npy', eps_delta)
-    return eps_im
 
-
-def get_3D_overlaps_k(i_k: int, k_f: np.ndarray, mo_coeff_i: np.ndarray, mo_coeff_f_conj: np.ndarray, qG: np.ndarray, primgauss_arr, AO_arr, coeff_arr, unique_Ri:list[np.ndarray], q_cuts: np.ndarray, path, working_dir=None):
+def get_3D_overlaps_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path, working_dir=None):
     """
     Calculates all 3D overlaps eta = <jk'|exp(i(q+G)r)|ik> for a given 1BZ q-vector and given G-vector using stored 1D overlaps
 
