@@ -1,5 +1,6 @@
 import numpy as np
 import time
+import os
 import psutil
 import shutil # for removing working directories after calculation is finished
 import multiprocessing as mp
@@ -421,7 +422,8 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
     if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
 
-    #shutil.rmtree(working_dir) # delete working directory
+    shutil.rmtree(f'{working_dir}/eta_qG') # delete large working directory files
+    os.remove(f'{working_dir}/eps_delta.h5')
 
     return tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 

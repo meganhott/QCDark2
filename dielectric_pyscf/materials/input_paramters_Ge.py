@@ -8,13 +8,13 @@ Authors: Megan Hott, Aman Singal
 """
 
 """Naming-parameters: system_name and name of final file"""
-system_name = '/gpfs/scratch/mhott/dielectric_pyscf_results/Ge_cc-pvtz_pbe_10k_lfe_491'
+system_name = '/gpfs/scratch/mhott/dielectric_pyscf_results/Ge_cc-pvtz_pbe_10k_7q_lfe_2_74'
 res_filename = system_name + '_eps.hdf5'
 DFT_resources_path = '/gpfs/scratch/mhott/dielectric_pyscf_results'
 
 mpi = True                   # If True, MPI parallelization will be implemented
-
-alt_binning = False                 #Temporary: set to True to use alternate binning technique, where interpolation and binning happen at end only. Do not use for large q since epsilon is kept in memory for all q+G vectors.
+q_start = 2 
+q_stop = 74
 
 """Build the periodic system, all units in angstrom"""
 lattice_vectors = [[2.829,    2.829,    0. ], 
@@ -41,7 +41,7 @@ include_lfe = True                # If False, does not incorporate local field e
 
 """Parameters for dielectric function calculations"""
 dq = 0.02                          # In units of alpha*(mass of electron), size of momentum bins 
-q_max = 2.5                          # In units of alpha*(mass of electron), maximum momentum
+q_max = 7                          # In units of alpha*(mass of electron), maximum momentum
 q_min = 0                          # In units of alpha*(mass of electron), minimum momentum
 N_theta = 9                        # Number of theta bins
 N_phi = 16                         # Number of phi bins
@@ -51,11 +51,8 @@ numval = 'auto'                     # Number of valence bands to include in the 
 numcon = 'auto'                     # Number of conduction bands to include in the calculation, use 'all' for all available conduction bands
 
 """Logging and calculation parameters"""
-q_start = 491                     # If None, calculation is performed for all q vectors. If set to an integer, the 
-                                   # calculations are started at that q vector. Only use if previous calculation was interrupted.
-q_stop = None
-
 store = system_name + '_resources' # Location to store intermediate calculations to reduce memory load
 qcdark_outfile = system_name + '_eps.log'
 pyscf_outfile = system_name + '_pyscf.log'
 pyscf_outlev = 4
+debug_logging = False
