@@ -51,7 +51,7 @@ def dielectric_RPA(cell: do_routines.pbcgto.cell.Cell, dark_objects: dict, dft_p
 def main_setup() -> dict:
     cell, dark_objects = initialize_cell()
 
-    new_dft, dft_params = dft_routines.save_dft()
+    new_dft, dft_params = dft_routines.save_dft(cell)
     if new_dft:
         electronic_structure(cell, dft_params)
     dark_objects = dielectric_RPA(cell, dark_objects, dft_params)

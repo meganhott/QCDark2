@@ -3,21 +3,10 @@ Dielectric function calculation with Pyscf, analytical calculation of exact RPA 
 
 Requirements:
  - python version, > 3.9.6
- - pyscf version, > 2.5.0
+ - pyscf version, > 2.9.0
 
-To execute code from terminal:
+To run:
 ```
-python3 -m dielectric_pyscf
+python3 -m dielectric_pyscf input_file.in
 ```
 (This executes dielectric_pyscf/__main__.py)
-
-Can also execute within python instance:
-```
-import dielectric_pyscf
-dielectric_pyscf.dielectric_functions.main()
-```
-
-To perform bandstucture calculation (temporary):
-```
-python3 bandstructure_testing/dft_testing_functions.py
-```
