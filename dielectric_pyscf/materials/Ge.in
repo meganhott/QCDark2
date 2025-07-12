@@ -8,7 +8,7 @@ mpi = False
 q_start = 200
 q_stop = 202
 
-unit = Bohr
+unit = angstrom
 lattice_vectors = [[2.829, 2.829, 0.], [0., 2.829, 2.829], [2.829, 0., 2.829]]
 atom = Ge, 0., 0., 0.; Ge, 1.4145, 1.4145, 1.4145
 basis = Ge: cc-pvtz

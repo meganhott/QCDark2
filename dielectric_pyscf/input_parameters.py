@@ -32,14 +32,14 @@ try:
     unit = d['unit']
     if unit in ['B', 'b', 'Bohr', 'bohr', 'AU', 'au']:
         unit = 'bohr'
-        c = 1 # unit conversion to bohr
+        c = 1.8897259886 # unit conversion to angstrom
     elif unit in ['A', 'a', 'Angstrom', 'angstrom', 'Ang', 'ang']:
         unit = 'angstrom'
-        c = 1.8897259886 # unit conversion to bohr
+        c = 1 # unit conversion to angstrom
     else:
-        raise Exception('Input Error: cell units must either be "unit = bohr" or "unit = angstrom". The default unit is bohr.')
+        raise Exception('Input Error: cell units must either be "unit = bohr" or "unit = angstrom". The default unit is angstrom.')
 except KeyError:
-    unit = 'bohr' #default
+    unit = 'angstrom' #default
     c = 1
 
 try:
@@ -53,7 +53,8 @@ except KeyError:
 try:
     atom = d['atom']
     test_cell = gto.M(a=lattice_vectors, atom=atom, unit=unit) # test atom in pyscf
-    atom = test_cell.format_atom(test_cell.atom, unit=unit) # converts to standard format in units of bohr
+    formatted_atom_bohr = test_cell.format_atom(test_cell.atom, unit=unit) # pyscf gives standard format in bohr
+    atom = [(atom[0], [round(coord/1.8897259886, 6) for coord in atom[1]]) for atom in formatted_atom_bohr] # formatted atom locations in angstrom
 except KeyError:
     raise Exception(generic_error.format('atom'))
 except Exception: #other errors from pyscf

@@ -28,8 +28,8 @@ def save_dft(cell):
     """
     dft_params = {
         'dft_instance': None,
-        'lattice_vectors': cell.a,
-        'atom': cell.atom,
+        'lattice_vectors': cell.a, # lattice vectors in units of angstrom
+        'atom': cell.atom, # formatted atom locations in units of angstrom
         'basis': cell.basis,
         'orth': parmt.orth,
         'density_fitting': parmt.density_fitting,

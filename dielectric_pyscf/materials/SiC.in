@@ -6,7 +6,7 @@ q_max = 1
 
 mpi = False
 
-unit = Bohr
+unit = angstrom
 lattice_vectors = [[2.1798, 2.1798, 0.0], [0.0, 2.1798, 2.1798], [2.1798, 0.0, 2.1798]]
 atom = Si, 0., 0., 0.; C, 1.0899, 1.0899, 1.0899
 basis = Si: cc-pvtz, C: cc-pvtz
