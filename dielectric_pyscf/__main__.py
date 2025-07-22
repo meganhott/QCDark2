@@ -18,9 +18,8 @@ def get_q_start_stop(N_q, N_nodes):
     else:
         q_i = 0
     
-    q_per_node = int(np.ceil((N_q)/N_nodes))
-    q_start = np.arange(q_i, q_i + q_per_node*N_nodes, q_per_node)
-    q_stop = np.append(np.arange(q_i + q_per_node, q_i + q_per_node*N_nodes, q_per_node), q_f)
+    q_start = np.array([a[0] for a in np.array_split(np.arange(q_i, q_f), N_nodes)])
+    q_stop = np.append(q_start[1:], q_f)
     return q_start, q_stop
 
 if parmt.mpi:
