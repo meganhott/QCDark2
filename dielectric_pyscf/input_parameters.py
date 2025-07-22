@@ -2,7 +2,7 @@
 This script parses the given input file. Custom default options may be specified below.
 """
 
-defaults = {'mpi':False, 'effective_core_potential':None, 'pseudo':None, 'orth':False, 'density_fitting':'MDF', 'precision':1e-12, 'precision_R':1e-9, 'q_shift_dir':[1,1,1], 'q_shift':0.01, 'dq':0.02, 'N_theta':9, 'N_phi':16, 'dE':0.1, 'E_max':50.0}
+defaults = {'mpi':False, 'save_3d':False, 'effective_core_potential':None, 'pseudo':None, 'orth':False, 'density_fitting':'MDF', 'precision':1e-12, 'precision_R':1e-9, 'q_shift_dir':[1,1,1], 'q_shift':0.01, 'dq':0.02, 'N_theta':9, 'N_phi':16, 'dE':0.1, 'E_max':50.0}
 
 import argparse
 from pyscf.pbc import gto
@@ -338,3 +338,14 @@ try:
         raise Exception('Input Error: mpi parameter must be either True or False.')
 except KeyError:
     mpi = defaults['mpi']
+
+try:
+    save_3d = d['save_3d']
+    if save_3d in true_list:
+        save_3d = True
+    elif save_3d in false_list:
+        save_3d = False
+    else:
+        raise Exception('Input Error: save_3d parameter must be either True or False.')
+except KeyError:
+    save_3d = defaults['save_3d']
