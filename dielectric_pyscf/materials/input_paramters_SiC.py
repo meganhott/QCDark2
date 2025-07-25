@@ -8,10 +8,13 @@ Authors: Megan Hott, Aman Singal
 """
 
 """Naming-parameters: system_name & name of final file"""
-system_name = '/gpfs/scratch/mhott/dielectric_pyscf_results/SiC_cc-pvdz_pbe_8k'
+system_name = '/gpfs/scratch/mhott/dielectric_pyscf_results/SiC_cc-pvtz_pbe_8k'
 res_filename = system_name + '_eps.hdf5'
+DFT_resources_path = '/gpfs/scratch/mhott/dielectric_pyscf_results'
 
-alt_binning = False #Temporary: set to True to use alternate binning technique, where interpolation and binning happen at end only. Do not use for large q since epsilon is kept in memory for all q+G vectors.
+mpi = False                   # If True, MPI parallelization will be implemented
+q_start = None 
+q_stop = None
 
 """Build the periodic system, all units in angstrom"""
 lattice_vectors = [[2.1798,    2.1798,    0. ], 
@@ -19,7 +22,7 @@ lattice_vectors = [[2.1798,    2.1798,    0. ],
                    [2.1798,    0.,       2.1798]]
 atomloc =  ''' Si	0.	     0.	     0.    
 		     C	1.0899	1.0899	1.0899'''
-mybasis = {'Si': 'cc-pvdz', 'C': 'cc-pvdz'}                            # Recommended to keep all basis sets same, however can be made different. We follow pyscf notations, see pyscf documentation
+mybasis = {'Si': 'cc-pvtz', 'C': 'cc-pvtz'}                            # Recommended to keep all basis sets same, however can be made different. We follow pyscf notations, see pyscf documentation
 
 orth = True                   # Perform orthogonalization on SCF calculation. Often required for diffuse basis functions or large basis sets
 density_fitting = 'MDF' #'RSDF'
@@ -40,8 +43,7 @@ q_shift = 0.01                                         # In units of alpha*(mass
 scissor_bandgap = 2.36                                 # If float in eV, the scissor correction is applied to meet the specified bandgap. If None, scissor correction is not applied
 include_lfe = False                # If False, does not incorporate local field effects into the calculation of epsilon. If True, LFEs will be calculated by inverting eps_{GG'}
 
-"""parameters for dielectric function calculations,
-     including q_max, bin widths, number of bands, etc"""
+"""Parameters for dielectric function calculations"""
 dq = 0.02                                              # In units of alpha*(mass of electron) 
 q_max = 1                                              # In units of alpha*(mass of electron)
 q_min = 0                                              # In units of alpha*(mass of electron)
@@ -53,11 +55,8 @@ numval = 'auto'                     # Number of valence bands to include in the 
 numcon = 'auto'                     # Number of conduction bands to include in the calculation, use 'all' for all available conduction bands and 'auto' to exclude irrelevant bands based on E_max
 
 """Logging and calculation parameters"""
-q_start = None                     # If None, calculation is performed for all q vectors. If set to an integer, the 
-                                   # calculations are started at that q vector. Only use if previous calculation was interrupted.
-q_stop = None
-
 store = system_name + '_resources' # Location to store intermediate calculations to reduce memory load
 qcdark_outfile = system_name + '_eps.log'
 pyscf_outfile = system_name + '_pyscf.log'
 pyscf_outlev = 4
+debug_logging = False

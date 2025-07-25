@@ -23,8 +23,8 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
 
     try:
         cell = pbcgto.M(
-            a = np.asarray(parmt.lattice_vectors),
-            atom = parmt.atomloc,
+            a = parmt.lattice_vectors,
+            atom = parmt.atom,
             basis = parmt.mybasis,
             cart = True,
             verbose = parmt.pyscf_outlev,
@@ -42,8 +42,8 @@ def build_cell_from_input() -> pbcgto.cell.Cell:
             basis_bse[item[0]] = pbcgto.load(basis_set_exchange.api.get_basis(item[1], elements=item[0], fmt='nwchem'), item[0])
 
         cell = pbcgto.M(
-            a = np.asarray(parmt.lattice_vectors),
-            atom = parmt.atomloc,
+            a = parmt.lattice_vectors,
+            atom = parmt.atom,
             basis = basis_bse,
             cart = True,
             verbose = parmt.pyscf_outlev,

@@ -8,13 +8,13 @@ Authors: Megan Hott, Aman Singal
 """
 
 """Naming-parameters: system_name and name of final file"""
-system_name = '/gpfs/scratch/mhott/dielectric_pyscf_results/Si_cc-pvtpdz_pbe_6k_10q_lfe'
+system_name = '/gpfs/scratch/mhott/dielectric_pyscf_results/Si_cc-pvtpdz_pbe_8k_8q_lfe_139_223'
 res_filename = system_name + '_eps.hdf5'
 DFT_resources_path = '/gpfs/scratch/mhott/dielectric_pyscf_results'
 
-mpi = False                         # If True, MPI parallelization will be implemented
-
-alt_binning = False                 #Temporary: set to True to use alternate binning technique, where interpolation and binning happen at end only. Do not use for large q since epsilon is kept in memory for all q+G vectors.
+mpi = True                         # If True, MPI parallelization will be implemented
+q_start = 139
+q_stop = 223
 
 """Build the periodic system, all units in angstrom"""
 a = 5.43 #5.4877                   # Crystal lattice constant
@@ -34,7 +34,7 @@ pseudo = None                      # Similar to ECPs, slight differences (uses C
 precision = 1e-12                   # DFT precision parameter, fed to pyscf only
 precision_R = 1e-9                 # R cutoff precision, used for dielectric function precision
 xcfunc =   'pbe'#'HYB_GGA_XC_HSE06'                     # Exchange-Correlation Functional
-k_grid = [6,6,6]                # k-grid: resolution of grid points in reciprocal space
+k_grid = [8,8,8]                # k-grid: resolution of grid points in reciprocal space
 q_shift_dir = [1,1,1]              # Direction for q-shift (gets normalized automatically)
 q_shift = 0.01                     # In units of alpha*(mass of electron), magnitude of q shift 
 scissor_bandgap = 1.1              # If float in eV, the scissor correction is applied to meet the specified bandgap. If None, scissor correction is not applied
@@ -42,7 +42,7 @@ include_lfe = True                # If False, does not incorporate local field e
 
 """Parameters for dielectric function calculations"""
 dq = 0.02                          # In units of alpha*(mass of electron), size of momentum bins 
-q_max = 10                          # In units of alpha*(mass of electron), maximum momentum
+q_max = 8                          # In units of alpha*(mass of electron), maximum momentum
 q_min = 0                          # In units of alpha*(mass of electron), minimum momentum
 N_theta = 9                        # Number of theta bins
 N_phi = 16                         # Number of phi bins
@@ -52,11 +52,8 @@ numval = 'auto'                     # Number of valence bands to include in the 
 numcon = 'auto'                     # Number of conduction bands to include in the calculation, use 'all' for all available conduction bands and 'auto' to exclude irrelevant bands based on E_max
 
 """Logging and calculation parameters"""
-q_start = None                     # If None, calculation is performed for all q vectors. If set to an integer, the 
-                                   # calculations are started at that q vector. Only use if previous calculation was interrupted.
-q_stop = None
-
 store = system_name + '_resources' # Location to store intermediate calculations to reduce memory load
 qcdark_outfile = system_name + '_eps.log'
 pyscf_outfile = system_name + '_pyscf.log'
 pyscf_outlev = 4
+debug_logging = False

@@ -1,0 +1,19 @@
+save_path = /gpfs/scratch/mhott/dielectric_pyscf_results
+name = test_Ge_cc-pvtz_pbe_10k_7q_lfe
+
+include_lfe = True
+q_max = 7
+
+mpi = False
+q_start = 200
+q_stop = 202
+
+unit = angstrom
+lattice_vectors = [[2.829, 2.829, 0.], [0., 2.829, 2.829], [2.829, 0., 2.829]]
+atom = Ge, 0., 0., 0.; Ge, 1.4145, 1.4145, 1.4145
+basis = Ge: cc-pvtz
+
+xcfunc = pbe
+k_grid = [10,10,10]
+
+scissor_bandgap = 0.67

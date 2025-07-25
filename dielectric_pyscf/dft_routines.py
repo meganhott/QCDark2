@@ -5,6 +5,7 @@ import pyscf.pbc.gto as pbcgto
 import pyscf.pbc.dft as pbcdft
 import pyscf.pbc
 import pyscf.scf.addons # for basis sets with linear dependencies
+from pyscf.dft.xc.utils import format_xc_code
 
 import pyscf.lib
 
@@ -15,7 +16,7 @@ from dielectric_pyscf.routines import logger, time_wrapper, makedir
 me = 0.51099895000e6 # eV
 alpha = 1/137
 
-def save_dft():
+def save_dft(cell):
     """
     Checks saved DFT calculations and determines if a new calculation should be run.
 
@@ -26,20 +27,29 @@ def save_dft():
             DFT parameters specified in input_parameters.
     """
     dft_params = {
-        'lattice_vectors': parmt.lattice_vectors,
-        'atomloc': parmt.atomloc,
-        'mybasis': parmt.mybasis,
+        'dft_instance': None,
+        'lattice_vectors': cell.a, # lattice vectors in units of angstrom
+        'atom': cell.atom, # formatted atom locations in units of angstrom
+        'basis': cell.basis,
         'orth': parmt.orth,
         'density_fitting': parmt.density_fitting,
-        'effective_core_potential': parmt.effective_core_potential,
+        'ecp': parmt.effective_core_potential,
         'pseudo': parmt.pseudo,
         'precision': parmt.precision,
-        'xcfunc': parmt.xcfunc,
+        'xcfunc': format_xc_code(parmt.xcfunc),
         'k_grid': parmt.k_grid,
         'q_shift_dir': parmt.q_shift_dir,
         'q_shift': parmt.q_shift,
-        'dft_instance': None
+        'formatted_basis': cell.format_basis(cell.basis),
+        'formatted_ecp': cell.format_ecp(cell.ecp),
+        #'formatted_pseudo': cell.format_pseudo(cell.pseudo)
     }
+
+    try:
+        dft_params['formatted_pseudo'] = cell.format_pseudo(cell.pseudo)
+        # This is currently broken in pyscf: if no pseudo is specified, cell.pseudo is None and breaks their formatting function. Not sure why this doesn't work like ecp which is saved as {} if no ecp is specified.
+    except:
+        dft_params['formatted_pseudo'] = {}
 
     dft_path = parmt.DFT_resources_path + '/DFT_resources'
     makedir(dft_path) # makes DFT_routines directory if it does not already exist
@@ -47,7 +57,7 @@ def save_dft():
     dft_instances = os.listdir(dft_path)
     for d in dft_instances:
         dft_dict = json.load(open(f'{dft_path}/{d}/dft_params.txt', 'r'))
-        if all(dft_dict[key] == dft_params[key] for key in dft_dict.keys() if key not in ['dft_instance']): # compare everything except dft_instance
+        if all(dft_dict[key] == dft_params[key] for key in dft_dict.keys() if key not in ['dft_instance', 'basis', 'ecp', 'pseudo', 'atom']) and cell.format_atom(dft_dict['atom'], unit=1) == dft_params['atom']: # compare everything except dft_instance and unformatted 
             dft_params['dft_instance'] = d
             dft_files = os.listdir(dft_path + '/' + d)
             if len(dft_files) < 4: # something went wrong with previously calculated DFT, calculation should be started again
@@ -60,7 +70,7 @@ def save_dft():
                 logger.info(f'DFT already calculated for these input parameters and stored as {d}')
                 new_dft = False
             return new_dft, dft_params
-    
+        
     if dft_params['dft_instance'] is None:
         if len(dft_instances) == 0:
             dft_params['dft_instance'] = 'DFT_0'
@@ -97,7 +107,7 @@ def list_saved_dft(df=False):
             dft_dict = json.load(open(f'{dft_path}/{d}/dft_params.txt', 'r'))
             print(f'DFT Instance: {dft_dict["dft_instance"]}')
             print(f'\tLattice vectors: {dft_dict["lattice_vectors"]}')
-            print(f'\tAtom Locations: {dft_dict["atomloc"]}')
+            print(f'\tAtom Locations: {dft_dict["atom"]}')
             print(f'\tBasis: {dft_dict["mybasis"]}')
             print(f'\tEffective Core Potential: {dft_dict["effective_core_potential"]}')
             print(f'\tPseudopotential: {dft_dict["pseudo"]}')

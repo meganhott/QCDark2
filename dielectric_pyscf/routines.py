@@ -28,10 +28,6 @@ a2bohr = 1.8897259886                                   # convert Å to Bohr rad
 hbarc = 0.1973269804*10**(-6)                           # hbarc in eV*m
 amu2eV = 9.315e8                                        # eV/u
 
-# Initialize log
-logger = logging
-logger.basicConfig(filename=parmt.qcdark_outfile, filemode = 'w', level=logging.INFO, format='%(message)s')
-
 def time_wrapper(func=None, *, n_tabs=0):
     """
     Wrapper for printing execution time to logger.
@@ -123,3 +119,8 @@ def load_unique_R():
         dir = f'{parmt.store}/primgauss_1d_integrals/dim_{dim}/Ru.npy'
         unique_Ri.append(np.load(dir))
     return unique_Ri
+
+# Initialize log
+makedir(parmt.store, log=False)
+logger = logging
+logger.basicConfig(filename=parmt.qcdark_outfile, filemode = 'w', level=logging.INFO, format='%(message)s')
