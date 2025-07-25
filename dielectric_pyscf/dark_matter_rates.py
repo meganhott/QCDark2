@@ -55,7 +55,7 @@ default_screening = default_no_sreen
 
 
 class df: # Dielectric function class
-    def __init__(self, filename=None, eps=None, q=None, E=None, M_cell=None, V_cell=None, dE=None):
+    def __init__(self, filename=None, eps=None, q=None, E=None, M_cell=None, V_cell=None, dE=None, binned_eps=None, bin_centers=None):
         if filename is None:
             # If filename is not specified, the user can build a df instance without an hdf5 file
             self.eps = eps
@@ -64,19 +64,26 @@ class df: # Dielectric function class
             self.M_cell = M_cell
             self.V_cell = V_cell 
             self.dE = dE
+            self.binned_eps = binned_eps
+            self.bin_centers = bin_centers
         elif filename is not None:
             # If filename is specified, the object is built from the hdf5 file and no parameters besides filename need to be specified
             h5 = h5py.File(filename, 'r')
             self.h5 = h5
-            self.eps = np.array(h5['epsilon'])
-            self.q = np.array(h5['q']) # Momentum in units of alpha*m_e
-            self.E = np.array(h5['E']) # Energy in eV
+            self.eps = h5['epsilon'][:]
+            self.q = h5['q'][:] # Momentum in units of alpha*m_e
+            self.E = h5['E'][:] # Energy in eV
 
             # Parameters required for DM rates calculations
             self.M_cell = h5.attrs['M_cell'] # Mass in units of eV
             self.V_cell = h5.attrs['V_cell'] # Unit cell volume in units of (alpha*m_e)^-3
             self.dE = float(h5.attrs['dE']) # Size of energy bins in eV
             # Other parameters can be accessed through self.h5.attrs.items()
+
+            if 'binned_eps' in h5.keys(): # for anisotropic crystal
+                self.binned_eps = h5['binned_eps'][:]
+                self.bin_centers = h5['bin_centers'][:]
+            h5.close() 
 
     def save_as_hdf5(self, savename):
         # If object was built from existing data, it can be saved as an hdf5 file for later use

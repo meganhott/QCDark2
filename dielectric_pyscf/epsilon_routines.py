@@ -146,6 +146,7 @@ def save_eps(bin_eps, bin_weights, bin_centers):
     #f.create_dataset('binned_epsilon_interp_kk', data=binned_eps_interp) # Interpolation and then KK # This slightly reduces noise in ELF compared to KK then interpolation
     if parmt.save_3d: # Saves 3-dimensional binned epsilon
         f.create_dataset('binned_eps', data=binned_eps_interp)
+        f.create_dataset('bin_centers', data=bin_centers)
 
     eps_r = epsilon_r(bin_centers, binned_eps_interp)
     f.create_dataset('epsilon_all', data=eps_r) # angular average, for -E_max to E_max
