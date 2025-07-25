@@ -19,11 +19,11 @@ sec2yr         = 1/(60.*60.*24*365.25)
 
 """Dark Matter astrophysical parameters"""
 default_astro = {
-    'v0': 238.,
-    'vEarth': 250.2,
-    'vEscape': 544.0,
-    'rhoX': 0.3e9,
-    'sigma_e': 1e-39
+    'v0': 238., # km/s
+    'vEarth': 250.2, # km/s
+    'vEscape': 544.0, # km/s
+    'rhoX': 0.3e9, # eV/cm^3
+    'sigma_e': 1e-39#1e-37 # reference cross section, cm^2
 }
 old_astro = {
     'v0': 230.,
@@ -93,6 +93,11 @@ class df: # Dielectric function class
         # Energy loss function
         elf = np.imag(self.eps) / ((np.imag(self.eps))**2 + np.real(self.eps)**2)
         return elf
+    
+    def S(self):
+        # Dynamic structure factor
+        S = self.elf() * self.q[:,None]**2 / (2*np.pi*alpha)
+        return S
 
 #load angular averaged dielectric function
 def load_epsilon(filename):
@@ -115,11 +120,11 @@ def get_F_DM(q, m_V=0):
     F_DM = (m_V**2 + (alpha*m_e)**2) / (m_V**2 + (alpha*m_e*q)**2)
     return F_DM #(q)
 
-def get_eta_MB(q, E, m_X, astro_model):   # In units of c^-1
+def get_eta_MB(q, E, m_X, astro_model=default_astro):   # In units of c^-1
     """
     Calculates the integrated Maxwell-Boltzmann distribution eta(v_{min}(q,E)).
     Inputs:
-        q:             (N_q,) np.ndarray: |q| float
+        q:             (N_q,) np.ndarray: |q| float in ame
         E:             (N_E,) np.ndarray: float
         mX:            float, dark matter mass in eV
         astro_model:   dict containing astrophysical DM parameters
@@ -129,6 +134,8 @@ def get_eta_MB(q, E, m_X, astro_model):   # In units of c^-1
     vEscape   = astro_model['vEscape']/lightSpeed
     vEarth    = astro_model['vEarth']/lightSpeed
     v0        = astro_model['v0']/lightSpeed
+
+    q = alpha*m_e * q # converting q to eV
 
     N_q = q.shape[0]
     N_E = E.shape[0]
@@ -150,21 +157,24 @@ def get_eta_MB(q, E, m_X, astro_model):   # In units of c^-1
 
     return eta_MB #(q,E)
 
-def momentum_integrand(q, E, cff2, eps_screening, m_X, mediator, astro_model):
+def momentum_integrand(epsilon, m_X, mediator, astro_model, velocity_dist):
+    q = epsilon.q
+    E = epsilon.E
     #F_DM = get_F_DM(q, m_V)
     if mediator == 'light':
-        F_DM = (alpha*m_e)**2 / q**2
+        F_DM = 1 / q**2
     elif mediator == 'heavy':
         F_DM = np.ones_like(q)
     else:
         raise(ValueError('mediator must be set to "light" or "heavy" to determine form of F_DM'))
      
-    eps_screening = 1/(np.real(eps_screening)**2 + np.imag(eps_screening)**2)
-     
-    integrand = 1 / q[:,None]**2 * get_eta_MB(q, E, m_X, astro_model) * F_DM[:,None]**2 * cff2[:,:] * eps_screening[:,:] #(q,E)
+    if velocity_dist == 'MB':
+        integrand = q[:,None] * F_DM[:,None]**2 * epsilon.S() * get_eta_MB(q, E, m_X, astro_model) #(q,E)
+    elif velocity_dist == 1:
+        integrand = q[:,None] * F_DM[:,None]**2 * epsilon.S()  
     return integrand
 
-def get_dR_dE(epsilon, m_X, mediator, astro_model, eps_screening):
+def get_dR_dE(epsilon, m_X, mediator, astro_model, screening, velocity_dist):
     """
     Returns differential rate with respect to energy. This can be used to calculate the total rate or the rate per ionization.
     Inputs:
@@ -176,74 +186,49 @@ def get_dR_dE(epsilon, m_X, mediator, astro_model, eps_screening):
     rho_X = astro_model['rhoX']
     cross_section = astro_model['sigma_e']
 
-    M_cell = epsilon.M_cell # mass of cell
-    q = epsilon.q*alpha*m_e # momentum
-    E  = epsilon.E # energy
-
-    N_cell = kg/M_cell #number of cells in one kg of material
+    rho_T = epsilon.M_cell / kg / epsilon.V_cell # density of target in units of kg/bohr^3
     reduced_mass = m_X * m_e /(m_X + m_e)
 
-    prefactor = (rho_X/m_X) * N_cell * cross_section  * alpha * m_e**2 / reduced_mass**2 #this might be off by factor of 2pi
+    prefactor = (1/rho_T) * (rho_X/m_X)  * (cross_section/reduced_mass**2) / (4*np.pi)
 
-    cff2 = crystal_form_factor2_epsilon(epsilon)
-    integrand = momentum_integrand(q, E, cff2, eps_screening, m_X, mediator, astro_model)
+    integrand = momentum_integrand(epsilon, m_X, mediator, astro_model, velocity_dist)
+
+    # Option to implement different screening
+    if screening in ['RPA', 'TF', 'Lindhard', None]:
+        if screening in ['TF', 'Lindhard', None]:
+            q, E = epsilon.q*alpha*m_e, epsilon.E
+            if screening == 'TF':
+                eps_screening = ThomasFermi(E, q)
+            elif screening == 'Lindhard':
+                eps_screening = Lindhard(E, q, 0.1)
+            elif screening == None:
+                eps_screening = np.ones((q.shape[0], E.shape[0]), dtype='complex')
+            integrand = integrand * np.abs(epsilon.eps)**2 / np.abs(eps_screening)**2 # Replacing RPA screening
+    else:
+        print('Warning: invalid screening specified. Screening must be "RPA", "TF", "Lindhard", or None. Any other inputs will result in the default RPA screening')
+
+    q = epsilon.q # momentum in units of bohr^-1
+    E  = epsilon.E # energy in units of eV
 
     dR_dE = np.empty(E.shape[0], dtype='float')
     for i_E in range(E.shape[0]):
         dR_dE[i_E] = sp.integrate.simpson(integrand[:,i_E], q)
-    dR_dE = prefactor * dR_dE / cm2sec / sec2yr
+    dR_dE = prefactor * dR_dE * alpha*m_e  / cm2sec / sec2yr
 
     return dR_dE, E #(E,)
 
-def rate(epsilon, m_X, astro_model, mediator='light', screening='RPA'):
+def rate(epsilon, m_X, astro_model, mediator='light', screening='RPA', velocity_dist='MB'):
     """
     Returns total rate by integrating dR/dE over energy
     """
-    if screening == 'RPA':
-        eps_screening = epsilon.eps
-    elif screening == 'TF':
-        q, E = epsilon.q*alpha*m_e, epsilon.E
-        eps_screening = ThomasFermi(E, q)
-    elif screening == 'Lindhard':
-        q, E = epsilon.q*alpha*m_e, epsilon.E
-        eps_screening = Lindhard(E, q, 0.1)
-    elif screening == None:
-        q, E = epsilon.q*alpha*m_e, epsilon.E
-        eps_screening = np.ones((q.shape[0], E.shape[0]), dtype='complex')
-
-    dR_dE, E = get_dR_dE(epsilon, m_X, mediator, astro_model, eps_screening=eps_screening)
+    dR_dE, E = get_dR_dE(epsilon, m_X, mediator, astro_model, screening, velocity_dist)
 
     R = sp.integrate.simpson(dR_dE, E) #need to multiply by probability from RK secondary ionization
     return R
 
+def d_rate_RamanathanQ(epsilon, m_X, ionization_file, mediator, astro_model=default_astro, screening='RPA', velocity_dist='MB'):
 
-def crystal_form_factor2_epsilon(epsilon):
-    """
-    Calculates the squared crystal form factor from Im(eps) using eq. 16 in darkELF paper
-    """
-    eps = epsilon.eps
-    V_cell = epsilon.V_cell / (alpha * m_e)**3
-    q = epsilon.q*alpha*m_e
-
-    crystal_form_factor2 = q[:,None]**5 * V_cell / 8 / pi**2 * np.imag(eps) / (alpha * m_e)**2 # If q in eV, this should be / (alpha * m_e)**2
-
-    return crystal_form_factor2 #(q,E)
-
-def d_rate_RamanathanQ(epsilon, m_X, ionization_file, mediator, astro_model=default_astro, screening='RPA'):
-
-    if screening == 'RPA':
-        eps_screening = epsilon.eps
-    elif screening == 'TF':
-        q, E = epsilon.q*alpha*m_e, epsilon.E
-        eps_screening = ThomasFermi(E, q)
-    elif screening == 'Lindhard':
-        q, E = epsilon.q*alpha*m_e, epsilon.E
-        eps_screening = Lindhard(E, q, 0.1)
-    elif screening == None:
-        q, E = epsilon.q*alpha*m_e, epsilon.E
-        eps_screening = np.ones((q.shape[0], E.shape[0]), dtype='complex')
-
-    dR_dE, E = get_dR_dE(epsilon, m_X, mediator=mediator, astro_model=astro_model, eps_screening=eps_screening)
+    dR_dE, E = get_dR_dE(epsilon, m_X, mediator=mediator, astro_model=astro_model, screening=screening, velocity_dist=velocity_dist)
      
     ionization_inp = np.genfromtxt(ionization_file).transpose()
     E_ionization = ionization_inp[0]
@@ -263,14 +248,27 @@ def d_rate_RamanathanQ(epsilon, m_X, ionization_file, mediator, astro_model=defa
 
     return R_Q
 
+def crystal_form_factor2_epsilon(epsilon):
+    """
+    Calculates the squared crystal form factor from Im(eps) using eq. 16 in darkELF paper
+    """
+    eps = epsilon.eps
+    V_cell = epsilon.V_cell / (alpha * m_e)**3
+    q = epsilon.q*alpha*m_e
+
+    crystal_form_factor2 = q[:,None]**5 * V_cell / 8 / pi**2 * np.imag(eps) / (alpha * m_e)**2 # If q in eV, this should be / (alpha * m_e)**2
+
+    return crystal_form_factor2 #(q,E)
+
+
 #exclusion plot
-def ex(epsilon, mediator, astro_model=default_astro, screening='RPA'):
+def ex(epsilon, mediator, astro_model=default_astro, screening='RPA', velocity_dist='MB'):
     simga_e_0 = astro_model['sigma_e']
 
     m_X_list = np.logspace(5, 9, 100)
     sigma_e = np.empty_like(m_X_list)
     for i, m_X in enumerate(m_X_list):
-        sigma_e[i] = 2.3*simga_e_0 / rate(epsilon, m_X, astro_model=astro_model, mediator=mediator, screening=screening)
+        sigma_e[i] = 2.3*simga_e_0 / rate(epsilon, m_X, astro_model=astro_model, mediator=mediator, screening=screening, velocity_dist=velocity_dist)
     return m_X_list, sigma_e
 
 
@@ -311,3 +309,45 @@ def Lindhard(E, q, fp):
     factor1 = 3*(omp**2)/(q_mesh**2)/(vF**2)
     factor2 = 0.5 + kF/(4*q_mesh)*(1-Qm**2)*plog((Qm+1)/(Qm-1)) + kF/(4*q_mesh)*(1-Qp**2)*plog((Qp+1)/(Qp-1))
     return 1 + factor1*factor2
+
+def integrate_3d(bin_centers, integrand):
+    """
+    bin_centers in spherical coords
+    """
+    q = np.unique(bin_centers[:,0])
+    theta = np.unique(bin_centers[:,1])
+    cos_theta = np.cos(theta)
+    phi = np.unique(bin_centers[:,2])
+
+    N_q = q.shape[0]
+    N_th = theta.shape[0]
+    N_phi = phi.shape[0]
+
+    vol_phi = 2*np.pi/N_phi
+
+    I = np.zeros(integrand.shape[1])
+    for i, c in enumerate(bin_centers):
+        q_n = np.where(c[0] == q)[0][0]
+        if q_n == 0:
+            d_q = q[q_n]**3 / 3
+        elif q_n == N_q-1:
+            d_q = 0
+        else:           
+            d_q = ((q[q_n] + q[q_n+1])**3 - (q[q_n] + q[q_n-1])**3) / 24
+
+        th_n = np.where(c[1] == theta)[0][0]
+        if th_n == 0: #theta = 0
+            d_th = 0.5*(cos_theta[0] - cos_theta[1])
+            d_phi = 2*np.pi
+        elif th_n == N_th-1: #theta = pi
+            d_th = 0.5*(cos_theta[th_n-1] - cos_theta[th_n])
+            d_phi = 2*np.pi
+        else:
+            d_th = 0.5*(cos_theta[th_n-1] + cos_theta[th_n+1]) - cos_theta[th_n]
+            d_phi = vol_phi
+
+        d_vol = d_q*d_th*d_phi
+
+        I  = I + d_vol*integrand[i]
+
+    return 4*np.pi*I # where am I missing this 4pi factor????
