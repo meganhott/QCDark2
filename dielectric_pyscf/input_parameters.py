@@ -184,26 +184,26 @@ except KeyError:
 try:
     q_start = d['q_start']
     if q_start == 'None':
-        q_start = None
+        q_start = 0
     else:
         q_start = int(q_start)
         if q_start < 0 or q_start > N_k:
             raise Exception(f'q_start must be between 0 and the total number of k in k_grid, {N_k}')
 except KeyError:
-    q_start = None #default
+    q_start = 0 #default
 except Exception:
     raise
 
 try:
     q_stop = d['q_stop']
     if q_stop == 'None':
-        q_stop = None
+        q_stop = N_k
     else:
         q_stop = int(q_stop)
         if q_stop < 0 or q_stop > N_k or q_stop < q_start:
             raise Exception(f'q_stop must be between 0 and the total number of k in k_grid, {N_k}, and must be larger than q_start.')
 except KeyError:
-    q_stop = None #default
+    q_stop = N_k #default
 except Exception:
     raise
 
@@ -253,14 +253,18 @@ except ValueError:
 except KeyError:
     q_min = 0 #default
 
-try: #does this also have to be odd?
+try:
     N_theta = int(d['N_theta'])
+
+    if not N_theta%2:
+        print(f'Warning: N_theta = {N_theta} is even, so the dielectric function with not contain points in the x-y plane. The accuracy of the dielectric function will remain unaffected.')
+
 except ValueError:
     raise ValueError('The number of theta bins, N_theta, must be an integer.')
 except KeyError:
     N_theta = defaults['N_theta']
 
-try: #does this also have to be even?
+try:
     N_phi = int(d['N_phi'])
 except ValueError:
     raise ValueError('The number of phi bins, N_phi, must be an integer.')

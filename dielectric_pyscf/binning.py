@@ -1,12 +1,9 @@
 import numpy as np
 from numba import njit
 
-from dielectric_pyscf.routines import logger
-import dielectric_pyscf.input_parameters as parmt
-
 n = 10 #rounding precision
 
-def spherical_to_cartesian(sph: np.ndarray, unique=False) -> np.ndarray:
+def spherical_to_cartesian(sph, unique=False):
     """
     Convert all vectors given in spherical polar coordinates to corresponding vectors in cartesian coordinates,
     and remove non-unique vectors. They can come up when theta = 0 or pi, because phi becomes degenerate. 
@@ -27,7 +24,7 @@ def spherical_to_cartesian(sph: np.ndarray, unique=False) -> np.ndarray:
     return cart
 
 @njit
-def cartesian_to_spherical(cart: np.ndarray) -> np.ndarray:
+def cartesian_to_spherical(cart):
     """
     Converts all vectors given in cartesian coordinates to corresponding vectors in spherical polar coordinates.
 
@@ -56,7 +53,7 @@ def cartesian_to_spherical(cart: np.ndarray) -> np.ndarray:
     sph = np.round(np.stack((r, theta, phi), axis=1), n)
     return sph
 
-def construct_theta_bins() -> np.ndarray:
+def construct_theta_bins(N_theta, N_phi):
     """
     Construct bin edges in theta, such that the z and -z axis are endpoints, and each bin center
     follows the following requirements:
@@ -73,23 +70,18 @@ def construct_theta_bins() -> np.ndarray:
     Returns:
         bin_center:   np.ndarray
     """
-    i = np.arange(parmt.N_theta - 2) + .5
-    N = 2 + (parmt.N_theta - 2)*parmt.N_phi # Note: we begin counting from 0 in our bin_edges, so to conserve shape we must subtract 1. 
-    b_i = np.append([1], 1 - 2/N*(1 + i*parmt.N_phi))
+    i = np.arange(N_theta - 2) + .5
+    N = 2 + (N_theta - 2)*N_phi # Note: we begin counting from 0 in our bin_edges, so to conserve shape we must subtract 1. 
+    b_i = np.append([1], 1 - 2/N*(1 + i*N_phi))
     b_i = np.append(b_i, [-1])
     return np.arccos(b_i)
 
-def construct_all_solid_angles() -> np.ndarray:
+def construct_all_solid_angles(N_theta, N_phi):
     """
     Construct points in theta and phi, such that the integral over solid angles is well-approximated by a trapezoidal rule integration law in theta.
     """
-    if type(parmt.N_theta) != int or type(parmt.N_phi) != int:
-        logger.info('Raising exception, in input_parameters.py, N_theta and N_phi must be of the type int.')
-        raise Exception('In input_parameters.py, N_theta and N_phi must be of the type int.')
-    if not parmt.N_theta%2:
-        logger.info(f'! WARNING: Given N_theta = {parmt.N_theta} is even and will not contain points in the x-y plane.\nThe accuracy of the dielectric function will remain unaffected.')
-    theta_bins = construct_theta_bins()
-    phi_bins = np.arange(-0.5, 0.5, 1./parmt.N_phi)*2*np.pi #-pi <= phi <pi
+    theta_bins = construct_theta_bins(N_theta, N_phi)
+    phi_bins = np.arange(-0.5, 0.5, 1./N_phi)*2*np.pi #-pi <= phi <pi
     solid_angles = []
     for theta in theta_bins:
         if theta == 0 or round(theta, 9) == round(np.pi, 9):
@@ -99,9 +91,9 @@ def construct_all_solid_angles() -> np.ndarray:
                 solid_angles.append([theta, phi])
     return np.array(solid_angles)
 
-def gen_bin_centers(q_max = parmt.q_max, q_min=parmt.q_min, cartesian=False) -> np.ndarray:
-    Omega = construct_all_solid_angles()
-    qr = np.linspace(q_min+parmt.dq*0.5, q_max+parmt.dq*0.5, int((q_max - q_min)/parmt.dq)+1)
+def gen_bin_centers(q_max, q_min, dq, N_theta, N_phi, cartesian=False):
+    Omega = construct_all_solid_angles(N_theta, N_phi)
+    qr = np.linspace(q_min + dq*0.5, q_max + dq*0.5, int((q_max - q_min)/dq) + 1)
     qra = []
     for q in qr:
         for O in Omega:
@@ -143,40 +135,45 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     Outputs:
         updated tot_bin_eps and tot_bin_weights
     """
+    N_theta = np.unique(bin_centers[:,1]).shape[0]
+    N_phi = np.unique(bin_centers[:,2]).shape[0]
+    q_min = np.min(bin_centers[:,0])
+    dq = np.unique(bin_centers[:,0])[1] - np.unique(bin_centers[:,0])[0]
+
     def find_bin_id(coord_id):
         """
         Input: (G, 8, [r_id,theta_id,phi_id])
         Output: (G, 8) = bin_id
         """
         theta_id = coord_id[:,1]
-        theta_factor = (theta_id > 0)*1 + ((theta_id - 1) > 0)*(theta_id - 1)*parmt.N_phi
-        phi_factor = (1 - (theta_id == 0))*(1 - (theta_id == (parmt.N_theta-1)))*coord_id[:,2]
-        return coord_id[:,0]*(parmt.N_phi*(parmt.N_theta-2)+2) + theta_factor + phi_factor
+        theta_factor = (theta_id > 0)*1 + ((theta_id - 1) > 0)*(theta_id - 1)*N_phi
+        phi_factor = (1 - (theta_id == 0))*(1 - (theta_id == (N_theta-1)))*coord_id[:,2]
+        return coord_id[:,0]*(N_phi*(N_theta-2) + 2) + theta_factor + phi_factor
     
     #convert q+G to spherical coords
     qG_sph = cartesian_to_spherical(q + G_vectors)
 
     #find bin index and weights simultaneously
-    r_n = np.round((qG_sph[:,0] - parmt.q_min)/parmt.dq - 0.5, n)
+    r_n = np.round((qG_sph[:,0] - q_min)/dq - 0.5, n)
     r_l = np.floor(r_n).astype(np.int32)
     r_l[r_l < 0] = 0
     r_g = np.ceil(r_n).astype(np.int32)
     w_r_l = 1 - r_n % 1
     w_r_g = 1 - w_r_l #if r_l=r_g, only one weight=1, otherwise we're double-counting
 
-    d_phi = 2*np.pi/parmt.N_phi
+    d_phi = 2*np.pi/N_phi
     phi_n = np.round((qG_sph[:,2] + np.pi)/d_phi, n)
     phi_l = np.floor(phi_n).astype(np.int32)
     phi_g = np.ceil(phi_n).astype(np.int32)
     w_phi_l = 1 - phi_n % 1
     w_phi_g = 1 - w_phi_l
-    phi_g[phi_g == parmt.N_phi] = 0 #maps pi to -pi
+    phi_g[phi_g == N_phi] = 0 #maps pi to -pi
 
     #determine closest cos(theta)
     bin_costheta = np.cos(np.unique(bin_centers[:,1])) #unique cos(theta) in bins
     qG_cos = np.cos(qG_sph[:,1])
     theta_l = np.sum(np.round(qG_cos[:,None] - bin_costheta, n) <= 0, axis=1) - 1
-    theta_g = parmt.N_theta - np.sum(np.round(qG_cos[:,None] - bin_costheta, n) >= 0, axis=1)
+    theta_g = N_theta - np.sum(np.round(qG_cos[:,None] - bin_costheta, n) >= 0, axis=1)
 
     #weight according to cos(theta)
     bin_diff = bin_costheta[theta_l] - bin_costheta[theta_g]

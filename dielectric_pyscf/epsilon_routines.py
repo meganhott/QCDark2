@@ -7,12 +7,14 @@ import multiprocessing as mp
 from functools import partial
 from numba import njit
 import h5py
-from scipy.interpolate import LinearNDInterpolator
 
 from dielectric_pyscf.routines import logger, time_wrapper, load_unique_R, makedir, alpha, me
+from dielectric_pyscf.epsilon_utils import epsilon_r, interp_eps
 import dielectric_pyscf.input_parameters as parmt
 import dielectric_pyscf.epsilon_helper as eps
-import dielectric_pyscf.binning as bin
+import dielectric_pyscf.binning as binning
+import dielectric_pyscf.kramers_kronig as kk
+
 
 def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
     if parmt.include_lfe:
@@ -45,8 +47,8 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
     unique_Ri = load_unique_R()
 
     # Generating bins
-    bin_centers = bin.gen_bin_centers()
-    N_ang_bins = (parmt.N_phi*(parmt.N_theta-2)+2)
+    bin_centers = binning.gen_bin_centers(parmt.q_max, parmt.q_min, parmt.dq, parmt.N_theta, parmt.N_phi)
+    N_ang_bins = parmt.N_phi*(parmt.N_theta-2) + 2
 
     # Generate optimal path for 3D overlaps calculation
     einsum_path = np.einsum_path('kbj,kba,kai->kij', mo_coeff_f_conj, np.ones((k_f.shape[0], N_AO, N_AO)), mo_coeff_i)[0]
@@ -101,7 +103,7 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
             logger.info(f'\t\tFinished calculation of Im(eps). Time taken = {(time.time() - start_time1):.2f} s')
 
         start_time1 = time.time()
-        tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, eps_q_im, bin_centers, tot_bin_eps_im, tot_bin_weights)
+        tot_bin_eps_im, tot_bin_weights = binning.bin_eps_q(q, G_q, eps_q_im, bin_centers, tot_bin_eps_im, tot_bin_weights)
 
         if rank == 0 or rank == None:
             logger.info(f'\t\tIm(eps) binned. Time taken = {(time.time() - start_time1):.2f} s.')
@@ -126,32 +128,22 @@ def save_eps(bin_eps, bin_weights, bin_centers):
     f = h5py.File(parmt.store + '/epsilon.hdf5', 'r+') # open hdf5 file
 
     binned_eps = bin_eps/bin_weights[:, None]
-    #f.create_dataset('binned_epsilon', data=binned_eps) # No KK or interpolation - should save only 0 + iIm(eps) for non-LFE
-
     binned_eps_im = np.imag(binned_eps)
-    #binned_eps_kk = eps.kramerskronig_im2re(binned_eps_im) + 1. + 1j*binned_eps_im
-    #f.create_dataset('binned_epsilon_kk', data=binned_eps_kk) # Only KK, no interpolation
-
-    #binned_eps_kk_interp = interp_eps(bin_centers, binned_eps)
-    #f.create_dataset('binned_epsilon_kk_interp', data=binned_eps_kk_interp) # KK then Interpolation
-    
     binned_eps_im_interp = interp_eps(bin_centers, binned_eps_im)
 
     if parmt.include_lfe:
-        kk = eps.kramerskronig_im2re
+        kk_function = kk.kramerskronig_im2re
     else:
-        kk = eps.kramerskronig_im2re_causal
+        kk_function = kk.kramerskronig_im2re_causal
 
-    binned_eps_interp = kk(binned_eps_im_interp) + 1. + 1j*binned_eps_im_interp
-    #f.create_dataset('binned_epsilon_interp_kk', data=binned_eps_interp) # Interpolation and then KK # This slightly reduces noise in ELF compared to KK then interpolation
+    binned_eps_interp = kk_function(binned_eps_im_interp, parmt.E_max, parmt.dE) + 1. + 1j*binned_eps_im_interp
+
     if parmt.save_3d: # Saves 3-dimensional binned epsilon
         f.create_dataset('binned_eps', data=binned_eps_interp)
         f.create_dataset('bin_centers', data=bin_centers)
 
     eps_r = epsilon_r(bin_centers, binned_eps_interp)
     f.create_dataset('epsilon_all', data=eps_r) # angular average, for -E_max to E_max
-
-    #f.create_dataset('bin_centers', data=bin_centers)
 
     # Add attributes from input parameters
     for name, val in parmt.__dict__.items():
@@ -261,7 +253,7 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
     N_E = int(parmt.E_max/parmt.dE*2 + 1) # number of energies to calculate eps at. This in includes -E_max <= E <= E_max
 
     # Generating bins
-    bin_centers = bin.gen_bin_centers()
+    bin_centers = binning.gen_bin_centers(parmt.q_max, parmt.q_min, parmt.dq, parmt.N_theta, parmt.N_phi)
     N_ang_bins = (parmt.N_phi*(parmt.N_theta-2)+2)
 
     # Generate optimal path for 3D overlaps calculation
@@ -357,7 +349,7 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
                 start_time1 = time.time()
                 eps_delta_chunk = eps_delta[:, G_start[i]:G_stop[i], G_start[j]:G_stop[j]] #(E,G_chunk,G'_chunk)
                 
-                eps_lfe = eps.kramerskronig_lfe(eps_delta_chunk)
+                eps_lfe = kk.kramerskronig_lfe(eps_delta_chunk, parmt.E_max, parmt.dE)
 
                 if parmt.debug_logging and (rank == 0 or rank == None):
                     logger.info(f'\t\t\t\tKK finished in {time.time() - start_time1} s.')
@@ -403,8 +395,8 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
 
         #Bin real and imaginary parts - modify binning so both parts done at same time
         start_time = time.time()
-        tot_bin_eps_im, tot_bin_weights = bin.bin_eps_q(q, G_q, np.imag(eps_lfe), bin_centers, tot_bin_eps_im, tot_bin_weights)
-        tot_bin_eps_re, tot_bin_weights_re = bin.bin_eps_q(q, G_q, np.real(eps_lfe), bin_centers, tot_bin_eps_re, tot_bin_weights_re)
+        tot_bin_eps_im, tot_bin_weights = binning.bin_eps_q(q, G_q, np.imag(eps_lfe), bin_centers, tot_bin_eps_im, tot_bin_weights)
+        tot_bin_eps_re, tot_bin_weights_re = binning.bin_eps_q(q, G_q, np.real(eps_lfe), bin_centers, tot_bin_eps_re, tot_bin_weights_re)
 
         if rank == 0 or rank == None:
             logger.info(f'\t\tBinning of eps_LFE completed in {(time.time() - start_time):.2f} s.')
@@ -620,59 +612,3 @@ def get_binned_epsilon(tot_bin_eps, tot_bin_weights):
     binned_eps = tot_bin_eps/tot_bin_weights[:,None]
     #remove nans?
     return(binned_eps)
-
-@time_wrapper(n_tabs=2)
-def kramerskronig_lfe_causal(eps_delta):
-    """
-    Calculates principal value part of Re(eps) and Im(eps) for LFEs. This function is parallelized over G-vectors (over first G-vector of eps_delta).
-
-    Input:
-        eps_delta: np.ndarray of shape (N_G, N_G, N_E): Dirac delta part of dielectric function
-
-    Output: 
-        epa_pv: np.ndarray of shape (N_G, N_G, N_E): Principal value part of dielectric function
-    
-    """
-    eps_delta_re = np.real(eps_delta)
-    eps_delta_im = np.imag(eps_delta)
-    with mp.get_context('fork').Pool(mp.cpu_count()) as p:
-        eps_pv_re = p.map(eps.kramerskronig_im2re_causal, eps_delta_re)
-        eps_pv_im = p.map(eps.kramerskronig_re2im_causal, eps_delta_im)
-    eps_pv = np.array(eps_pv_re) - 1j*np.array(eps_pv_im)
-    return eps_pv
-
-#May want to put functions below into separate post-processing module? 
-
-def epsilon_r(bin_centers, binned_eps, eps_dtype='complex'):
-    """
-    Calculate angular averaged dielectric function eps(|q|, E) from binned epsilon.
-    """
-    N_ang_bins = (parmt.N_phi*(parmt.N_theta-2)+2)
-    r = np.unique(bin_centers[:,0])
-    eps_r = np.zeros((r.shape[0], binned_eps.shape[1]), dtype=eps_dtype)
-    for i, r_i in enumerate(r):
-        eps_ri = binned_eps[i*N_ang_bins:(i+1)*N_ang_bins]
-        eps_r[i] = np.nansum(eps_ri, axis=0) / (N_ang_bins - np.sum(np.isnan(eps_ri).astype(int), axis=0)) #treats nans as 0, want to average over all non-nan entries
-    return eps_r
-
-def interp_eps(bin_centers_sph, binned_eps):
-    """
-    Interpolate missing bins of epsilon. Can be used to interpolate Im(eps) before computing Re(eps) with Kramers-Kronig, or to interpolate Re(eps) and Im(eps) in the LFE case.
-
-    bin_centers input should be in spherical coordinates
-    """
-    bin_centers = bin.spherical_to_cartesian(bin_centers_sph)
-
-    nan_loc = np.where(np.isnan(binned_eps[:,0]))[0] #Find indices of missing bins
-    nan_bins = bin_centers[nan_loc]
-
-    interp_loc = np.where(np.invert(np.isnan(binned_eps[:,0])))[0] #Use remaining bins for interpolation input
-    interp_bins = bin_centers[interp_loc]
-    interp_eps = binned_eps[interp_loc]
-
-    binned_eps_interp = binned_eps.copy()
-
-    interp = LinearNDInterpolator(interp_bins, interp_eps)(nan_bins)
-    binned_eps_interp[nan_loc] = interp #replace nans with interpolated data
-
-    return binned_eps_interp
