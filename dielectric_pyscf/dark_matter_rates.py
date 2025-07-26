@@ -2,6 +2,8 @@ import numpy as np
 import scipy as sp
 import h5py
 
+from dielectric_pyscf.binning import cartesian_to_spherical
+
 # Global constants
 lightSpeed     = 299792.458        # km/s
 alpha          = 1.0/137.03599908  # EM fine-structure constant at low energy
@@ -104,6 +106,17 @@ class df: # Dielectric function class
     def S(self):
         # Dynamic structure factor
         S = self.elf() * self.q[:,None]**2 / (2*np.pi*alpha)
+        return S
+    
+    def elf_anisotropic(self):
+        # Energy loss function
+        elf = np.imag(self.binned_eps) / ((np.imag(self.binned_eps))**2 + np.real(self.binned_eps)**2)
+        return elf
+    
+    def S_anisotropic(self):
+        # Dynamic structure factor
+        q = self.bin_centers[:,0]
+        S = self.elf_anisotropic() * q[:,None]**2 / (2*np.pi*alpha)
         return S
 
 #load angular averaged dielectric function
@@ -358,3 +371,97 @@ def integrate_3d(bin_centers, integrand):
         I  = I + d_vol*integrand[i]
 
     return 4*np.pi*I # where am I missing this 4pi factor????
+
+### Anisotropic dielectric function ###
+
+def get_eta_MB_anisotropic(bin_centers, E, m_X, astro_model, v_earth_dir):   # In units of c^-1
+    """
+    Calculates the integrated Maxwell-Boltzmann distribution eta(v_{min}(q,E)).
+    Inputs:
+        q:             (N_q,) np.ndarray: |q| float in ame
+        E:             (N_E,) np.ndarray: float
+        mX:            float, dark matter mass in eV
+        astro_model:   dict containing astrophysical DM parameters
+    Output:
+        eta:           (N_q, N_E) np.ndarray
+    """
+    vEscape   = astro_model['vEscape']/lightSpeed
+    v0        = astro_model['v0']/lightSpeed
+    
+    v_earth_dir_sph = cartesian_to_spherical(v_earth_dir)
+    vEarth    = np.array([astro_model['vEarth']/lightSpeed, v_earth_dir_sph[1], v_earth_dir_sph[2]])
+
+    q = alpha*m_e * bin_centers[:,0] # converting q to eV
+    th = bin_centers[:,1]
+    phi = bin_centers[:,2]
+
+    K = (v0**3) * (-2.0*pi*(vEscape/v0)*np.exp(-(vEscape/v0)**2) + (pi**1.5)*sp.special.erf(vEscape/v0)) # normalization
+
+    q_dot_vEarth = vEarth[0]*q * np.sin(vEarth[1]*np.sin(th) * np.cos(vEarth[2] - phi) + np.cos(vEarth[1])*np.cos(th))
+
+    v_min = (1/q)[:,None] * np.abs(q_dot_vEarth[:,None] + (q**2/(2*m_X))[:,None] + E[None,:])
+    mask = v_min < vEscape
+
+    g_MB = np.pi*v0**2 / (K * q[:,None]) * (np.exp(-(v_min/v0)**2) - np.exp(-(vEscape/v0)**2)) * mask
+
+    return g_MB #(bin,E)
+
+def momentum_integrand_anisotropic(epsilon, m_X, mediator, astro_model, velocity_dist, v_earth_dir):
+    q = epsilon.bin_centers[:,0]
+    E = epsilon.E
+    #F_DM = get_F_DM(q, m_V)
+    if mediator == 'light':
+        F_DM = 1 / q**2
+    elif mediator == 'heavy':
+        F_DM = np.ones_like(q)
+    else:
+        raise(ValueError('mediator must be set to "light" or "heavy" to determine form of F_DM'))
+     
+    if velocity_dist == 'MB':
+        integrand = q[:,None] * F_DM[:,None]**2 * epsilon.S_anisotropic() * get_eta_MB_anisotropic(epsilon.bin_centers, E, m_X, astro_model, v_earth_dir) #(bin,E)
+    elif velocity_dist == 1:
+        integrand = q[:,None] * F_DM[:,None]**2 * epsilon.S_anisotropic()  
+    return integrand #(bin,E)
+
+def get_dR_dE_anisotropic(epsilon, m_X, mediator, astro_model, screening, velocity_dist, v_earth_dir):
+    """
+    Returns differential rate with respect to energy. This can be used to calculate the total rate or the rate per ionization.
+    Inputs:
+        eps:    hdf5 object
+        m_X:
+        m_V:
+        astro_model:
+    """
+    rho_X = astro_model['rhoX']
+    cross_section = astro_model['sigma_e']
+
+    rho_T = epsilon.M_cell / kg / epsilon.V_cell # density of target in units of kg/bohr^3
+    reduced_mass = m_X * m_e /(m_X + m_e)
+
+    prefactor = (1/rho_T) * (rho_X/m_X)  * (cross_section/reduced_mass**2) / (4*np.pi)
+
+    integrand = momentum_integrand_anisotropic(epsilon, m_X, mediator, astro_model, velocity_dist, v_earth_dir)
+
+    if screening != 'RPA':
+        raise NotImplementedError('Non-RPA screening not implemented for anisotropic calculations')
+    '''
+    # Option to implement different screening
+    if screening in ['RPA', 'TF', 'Lindhard', None]:
+        if screening in ['TF', 'Lindhard', None]:
+            q, E = epsilon.q*alpha*m_e, epsilon.E
+            if screening == 'TF':
+                eps_screening = ThomasFermi(E, q)
+            elif screening == 'Lindhard':
+                eps_screening = Lindhard(E, q, 0.1)
+            elif screening == None:
+                eps_screening = np.ones((q.shape[0], E.shape[0]), dtype='complex')
+            integrand = integrand * np.abs(epsilon.eps)**2 / np.abs(eps_screening)**2 # Replacing RPA screening
+    else:
+        print('Warning: invalid screening specified. Screening must be "RPA", "TF", "Lindhard", or None. Any other inputs will result in the default RPA screening')
+    '''
+    E  = epsilon.E # energy in units of eV
+
+    dR_dE = integrate_3d(epsilon.bin_centers, integrand)
+    dR_dE = prefactor * dR_dE * alpha*m_e  / cm2sec / sec2yr
+
+    return dR_dE, E #(E,)
