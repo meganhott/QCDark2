@@ -198,7 +198,6 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
  
     return tot_bin_eps, tot_bin_weights
 
-@njit
 def bin_eps_q_1d(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     """
     Binning for epsilon calculated along one direction
@@ -225,8 +224,8 @@ def bin_eps_q_1d(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights)
     w_r_l = 1 - r_n % 1
     w_r_g = 1 - w_r_l #if r_l=r_g, only one weight=1, otherwise we're double-counting
 
-    all_closest_bins_id = np.concatenate((r_l, r_g)) #(G*2,) (each group of 2 elements corresponds to one G vector)
-    all_weights = np.concatenate((w_r_l, w_r_g))
+    all_closest_bins_id = np.concatenate([[r_l[i], r_g[i]] for i in range(len(r_l))]) #(G*2,) (each group of 2 elements corresponds to one G vector)
+    all_weights = np.concatenate([[w_r_l[i], w_r_g[i]] for i in range(len(r_l))])
 
     for i, bin_id in enumerate(all_closest_bins_id):
         w = all_weights[i]
