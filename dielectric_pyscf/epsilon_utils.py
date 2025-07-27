@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.interpolate import LinearNDInterpolator
+from scipy.interpolate import LinearNDInterpolator, make_interp_spline
 
 from dielectric_pyscf.binning import spherical_to_cartesian
 
@@ -26,7 +26,10 @@ def interp_eps(bin_centers_sph, binned_eps):
 
     bin_centers input should be in spherical coordinates
     """
-    bin_centers = spherical_to_cartesian(bin_centers_sph)
+    if bin_centers_sph.ndim == 2: # 3D coordinates
+        bin_centers = spherical_to_cartesian(bin_centers_sph)
+    else: # 1D coordinates: bins_centers only have q magnitude
+        bin_centers = bin_centers_sph
 
     nan_loc = np.where(np.isnan(binned_eps[:,0]))[0] #Find indices of missing bins
     nan_bins = bin_centers[nan_loc]
@@ -37,7 +40,10 @@ def interp_eps(bin_centers_sph, binned_eps):
 
     binned_eps_interp = binned_eps.copy()
 
-    interp = LinearNDInterpolator(interp_bins, interp_eps)(nan_bins)
+    if bin_centers_sph.ndim == 2: # 3D
+        interp = LinearNDInterpolator(interp_bins, interp_eps)(nan_bins)
+    else: # 1D
+        interp = make_interp_spline(interp_bins, interp_eps, k=1)(nan_bins) # 1D linear interpolation
     binned_eps_interp[nan_loc] = interp #replace nans with interpolated data
 
     return binned_eps_interp

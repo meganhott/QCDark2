@@ -91,17 +91,20 @@ def construct_all_solid_angles(N_theta, N_phi):
                 solid_angles.append([theta, phi])
     return np.array(solid_angles)
 
-def gen_bin_centers(q_max, q_min, dq, N_theta, N_phi, cartesian=False):
-    Omega = construct_all_solid_angles(N_theta, N_phi)
+def gen_bin_centers(q_max, q_min, dq, N_theta, N_phi, cartesian=False, dir=False):
     qr = np.linspace(q_min + dq*0.5, q_max + dq*0.5, int((q_max - q_min)/dq) + 1)
-    qra = []
-    for q in qr:
-        for O in Omega:
-            qra.append([q, O[0], O[1]])
-    qra = np.array(qra)
-    if cartesian: #Convert from spherical to cartesian
-        qra = spherical_to_cartesian(qra)
-    return np.round(qra, n)
+    if dir:
+        return qr # no angular bins needed if direction already selected
+    else:
+        Omega = construct_all_solid_angles(N_theta, N_phi)
+        qra = []
+        for q in qr:
+            for O in Omega:
+                qra.append([q, O[0], O[1]])
+        qra = np.array(qra)
+        if cartesian: # convert from spherical to cartesian
+            qra = spherical_to_cartesian(qra)
+        return np.round(qra, n)
 
 @njit
 def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
@@ -192,5 +195,42 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
         w = all_weights[i]
         tot_bin_weights[bin_id] += w
         tot_bin_eps[bin_id] += w*eps_q[i//8] #i//8 is G-vector index
+ 
+    return tot_bin_eps, tot_bin_weights
+
+@njit
+def bin_eps_q_1d(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
+    """
+    Binning for epsilon calculated along one direction
+
+    Inputs:
+        bin_centers: (N_bins, ): (r, )
+        eps_q: (G,E)
+        tot_bin_eps: (N_bins,E): total w*eps for all q+G calculated so far
+        tot_bin_weights: (N_bins) weights should be same for all energies 
+    Outputs:
+        updated tot_bin_eps and tot_bin_weights
+    """
+    q_min = np.min(bin_centers)
+    dq = np.unique(bin_centers)[1] - np.unique(bin_centers)[0]
+    
+    #convert q+G to spherical coords
+    qG_sph = cartesian_to_spherical(q + G_vectors)
+
+    #find bin index and weights simultaneously
+    r_n = np.round((qG_sph[:,0] - q_min)/dq - 0.5, n)
+    r_l = np.floor(r_n).astype(np.int32)
+    r_l[r_l < 0] = 0
+    r_g = np.ceil(r_n).astype(np.int32)
+    w_r_l = 1 - r_n % 1
+    w_r_g = 1 - w_r_l #if r_l=r_g, only one weight=1, otherwise we're double-counting
+
+    all_closest_bins_id = np.concatenate((r_l, r_g)) #(G*2,) (each group of 2 elements corresponds to one G vector)
+    all_weights = np.concatenate((w_r_l, w_r_g))
+
+    for i, bin_id in enumerate(all_closest_bins_id):
+        w = all_weights[i]
+        tot_bin_weights[bin_id] += w
+        tot_bin_eps[bin_id] += w*eps_q[i//2] #i//2 is G-vector index
  
     return tot_bin_eps, tot_bin_weights
