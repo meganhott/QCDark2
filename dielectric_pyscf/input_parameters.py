@@ -2,7 +2,7 @@
 This script parses the given input file. Custom default options may be specified below.
 """
 
-defaults = {'mpi':False, 'save_3d':False, 'dir_1d':None, 'effective_core_potential':None, 'pseudo':None, 'orth':False, 'density_fitting':'MDF', 'precision':1e-12, 'precision_R':1e-9, 'q_shift_dir':[1,1,1], 'q_shift':0.01, 'dq':0.02, 'N_theta':9, 'N_phi':16, 'dE':0.1, 'E_max':50.0}
+defaults = {'mpi':False, 'save_3d':False, 'dir_1d':None, 'dir_1d_exact_angle': False, 'effective_core_potential':None, 'pseudo':None, 'orth':False, 'density_fitting':'MDF', 'precision':1e-12, 'precision_R':1e-9, 'q_shift_dir':[1,1,1], 'q_shift':0.01, 'dq':0.02, 'N_theta':9, 'N_phi':16, 'dE':0.1, 'E_max':50.0}
 
 import argparse
 from pyscf.pbc import gto
@@ -360,7 +360,22 @@ try:
         dir_1d == None
     else:
         dir_1d = [float(a) for a in dir_1d.replace('[', '').replace(']', '').split(',')]
+
+    if include_lfe:
+        raise Exception('1D dielectric function calculation is not supported for LFEs. If you only want to calculate the dielectric function along a single axis, you must set include_lfe = False.')
+
 except ValueError:
     ValueError('dir_1d specifies a direction to calculate the 1D dielectric function along, and must be a cartesian coordinate. For example: dir_1d = [1,1,1]')
 except KeyError:
     dir_1d = defaults['dir_1d']
+
+try:
+    dir_1d_exact_angle = d['dir_1d_exact_angle']
+    if dir_1d_exact_angle in true_list:
+        dir_1d_exact_angle = True
+    elif dir_1d_exact_angle in false_list:
+        dir_1d_exact_angle = False
+    else:
+        raise Exception('Input Error: dir_1d_exact_angle must be either True or False.')
+except KeyError:
+    dir_1d_exact_angle = defaults['dir_1d_exact_angle']

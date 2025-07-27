@@ -178,8 +178,8 @@ def get_RPA_dielectric_no_LFE_1d(dark_objects, rank=None, q_start=parmt.q_start,
     
     q_keys = list(unique_q.keys())[q_start:q_stop]
 
-    tot_bin_eps_im = np.zeros((bin_centers.shape[0], int(parmt.E_max/parmt.dE)+1))
-    tot_bin_weights = np.zeros(bin_centers.shape[0])
+    tot_bin_eps_im = np.zeros((bin_centers.shape[0]+1, int(parmt.E_max/parmt.dE)+1))
+    tot_bin_weights = np.zeros(bin_centers.shape[0]+1)
 
     for i_q, q in enumerate(q_keys, start=q_start):
         k_pairs = np.array(unique_q[q])
@@ -195,7 +195,15 @@ def get_RPA_dielectric_no_LFE_1d(dark_objects, rank=None, q_start=parmt.q_start,
         G_q = G_q[np.linalg.norm(q[None, :]+G_q, axis=1) > parmt.q_min - 0.5*parmt.dq]
 
         qpG_sph = binning.cartesian_to_spherical(q + G_q)
-        G_q = G_q[(np.round(qpG_sph[:,1],4) == np.round(dir_sph[1], 4)) & (np.round(qpG_sph[:,2],4) == np.round(dir_sph[2], 4))] # select G along specified direction
+        if parmt.dir_1d_exact_angle: # exactly match angle
+            G_q = G_q[(np.round(qpG_sph[:,1],4) == np.round(dir_sph[1], 4)) & (np.round(qpG_sph[:,2],4) == np.round(dir_sph[2], 4))] # select G along specified direction
+        else: # just match within N_theta and N_phi accuracy
+            costheta_l = np.cos(dir_sph[1] + np.pi/parmt.N_theta/2)
+            costheta_g = np.cos(dir_sph[1] - np.pi/parmt.N_theta/2)
+            phi_l = dir_sph[2] - np.pi/parmt.N_phi
+            phi_g = dir_sph[2] + np.pi/parmt.N_phi
+
+            G_q = G_q[((qpG_sph[:,2] < phi_g) & (qpG_sph[:,2] > phi_l) & (np.cos(qpG_sph[:,1]) < costheta_g) & (np.cos(qpG_sph[:,1]) > costheta_l))]
 
         if rank == 0 or rank == None:
             logger.info(f'\t\tNumber of G vectors = {len(G_q)},')
@@ -221,6 +229,10 @@ def get_RPA_dielectric_no_LFE_1d(dark_objects, rank=None, q_start=parmt.q_start,
             # Save to working directory
             np.save(f'{working_dir}/tot_bin_eps_im.npy', tot_bin_eps_im)
             np.save(f'{working_dir}/tot_bin_weights.npy', tot_bin_weights)
+
+    # Removing extra bins
+    tot_bin_eps_im = tot_bin_eps_im[:-1, :]
+    tot_bin_weights = tot_bin_weights[:-1]
 
     if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
