@@ -184,26 +184,26 @@ except KeyError:
 try:
     q_start = d['q_start']
     if q_start == 'None':
-        q_start = 0
+        q_start = None
     else:
         q_start = int(q_start)
         if q_start < 0 or q_start > N_k:
             raise Exception(f'q_start must be between 0 and the total number of k in k_grid, {N_k}')
 except KeyError:
-    q_start = 0 #default
+    q_start = None #default
 except Exception:
     raise
 
 try:
     q_stop = d['q_stop']
     if q_stop == 'None':
-        q_stop = N_k
+        q_stop = None
     else:
         q_stop = int(q_stop)
         if q_stop < 0 or q_stop > N_k or q_stop < q_start:
-            raise Exception(f'q_stop must be between 0 and the total number of k in k_grid, {N_k}, and must be larger than q_start.')
+            raise Exception(f'q_stop must be between 0 and the total number of unique q (which is often the size of the k_grid, {N_k}), and must be larger than q_start.')
 except KeyError:
-    q_stop = N_k #default
+    q_stop = None #default
 except Exception:
     raise
 
