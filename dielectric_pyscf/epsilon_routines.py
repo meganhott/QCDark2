@@ -200,10 +200,14 @@ def get_RPA_dielectric_no_LFE_1d(dark_objects, rank=None, q_start=parmt.q_start,
         else: # just match within N_theta and N_phi accuracy
             costheta_l = np.cos(dir_sph[1] + np.pi/parmt.N_theta/2)
             costheta_g = np.cos(dir_sph[1] - np.pi/parmt.N_theta/2)
+
+            if np.round(costheta_g, 4) == np.round(costheta_l, 4):
+                costheta_g = 1 #for [0,0,1] - make more general later
+
             phi_l = dir_sph[2] - np.pi/parmt.N_phi
             phi_g = dir_sph[2] + np.pi/parmt.N_phi
 
-            G_q = G_q[((qpG_sph[:,2] < phi_g) & (qpG_sph[:,2] > phi_l) & (np.cos(qpG_sph[:,1]) < costheta_g) & (np.cos(qpG_sph[:,1]) > costheta_l))]
+            G_q = G_q[((qpG_sph[:,2] < phi_g) & (qpG_sph[:,2] > phi_l) & (np.cos(qpG_sph[:,1]) <= costheta_g) & (np.cos(qpG_sph[:,1]) >= costheta_l))]
 
         if rank == 0 or rank == None:
             logger.info(f'\t\tNumber of G vectors = {len(G_q)},')
