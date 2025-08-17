@@ -2,7 +2,7 @@
 This script parses the given input file. Custom default options may be specified below.
 """
 
-defaults = {'mpi':False, 'save_3d':False, 'dir_1d':None, 'dir_1d_exact_angle': False, 'effective_core_potential':None, 'pseudo':None, 'orth':False, 'density_fitting':'MDF', 'precision':1e-12, 'precision_R':1e-9, 'q_shift_dir':[1,1,1], 'q_shift':0.01, 'dq':0.02, 'N_theta':9, 'N_phi':16, 'dE':0.1, 'E_max':50.0}
+defaults = {'mpi':False, 'save_3d':False, 'dir_1d':None, 'dir_1d_exact_angle': False, 'binning_1d':False, 'effective_core_potential':None, 'pseudo':None, 'orth':False, 'density_fitting':'MDF', 'precision':1e-12, 'precision_R':1e-9, 'q_shift_dir':[1,1,1], 'q_shift':0.01, 'dq':0.02, 'N_theta':9, 'N_phi':16, 'dE':0.1, 'E_max':50.0}
 
 import argparse
 from pyscf.pbc import gto
@@ -379,3 +379,14 @@ try:
         raise Exception('Input Error: dir_1d_exact_angle must be either True or False.')
 except KeyError:
     dir_1d_exact_angle = defaults['dir_1d_exact_angle']
+
+try:
+    binning_1d = d['binning_1d']
+    if binning_1d in true_list:
+        binning_1d = True
+    elif binning_1d in false_list:
+        binning_1d = False
+    else:
+        raise Exception('Input Error: binning_1d must be either True or False.')
+except KeyError:
+    binning_1d = defaults['binning_1d']
