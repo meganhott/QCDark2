@@ -90,9 +90,9 @@ def kramerskronig_im2re_causal(im, E_max, dE):
     Computes the Kramers-Kronig transformation of the input imaginary part to obtain the real part. Assumes f(-E) = f(E)* and requires Im[f(0 <= E <= E_max)].
 
     Input:
-        im: np.ndarray (N_E, N_G)
+        im: np.ndarray (N_G, N_E)
     Output:
-        re: np.ndarray (N_E, N_G), Note that Re(eps) = eps_re + 1 
+        re: np.ndarray (N_G, N_E), Note that Re(eps) = eps_re + 1 
     """
     E = np.arange(0, E_max+dE, dE)
     re = np.empty_like(im)
@@ -116,9 +116,9 @@ def kramerskronig_re2im_causal(re, E_max, dE):
     Computes the Kramers-Kronig transformation of the input real part to obtain the imaginary part. Assumes f(-E) = f(E)* and requires Re[f(0 <= E <= E_max)].
 
     Input:
-        re: np.ndarray (N_E, N_G)
+        re: np.ndarray (N_G, N_E)
     Output:
-        im: np.ndarray (N_E, N_G)
+        im: np.ndarray (N_G, N_E)
     """
     E = np.arange(0, E_max+dE, dE)
     im = np.empty_like(re)
