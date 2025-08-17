@@ -28,6 +28,8 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
     else:
         if parmt.dir_1d is not None: # only compute along one direction
             tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE_1d(dark_objects, rank, q_start, q_stop)
+        elif parmt.binning_1d:
+            tot_bin_eps, tot_bin_weights, bin_centers = get_RPA_dielectric_no_LFE_1d_binning(dark_objects, rank, q_start, q_stop)
         else:
             tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE(dark_objects, rank, q_start, q_stop)
 
@@ -206,10 +208,14 @@ def RPA_noLFE_1d(dark_objects, rank=None, q_start=parmt.q_start, q_stop=parmt.q_
         else: # just match within N_theta and N_phi accuracy
             costheta_l = np.cos(dir_sph[1] + np.pi/parmt.N_theta/2)
             costheta_g = np.cos(dir_sph[1] - np.pi/parmt.N_theta/2)
+
+            if np.round(costheta_g, 4) == np.round(costheta_l, 4):
+                costheta_g = 1 #for [0,0,1] - make more general later
+
             phi_l = dir_sph[2] - np.pi/parmt.N_phi
             phi_g = dir_sph[2] + np.pi/parmt.N_phi
 
-            G_q = G_q[((qpG_sph[:,2] < phi_g) & (qpG_sph[:,2] > phi_l) & (np.cos(qpG_sph[:,1]) < costheta_g) & (np.cos(qpG_sph[:,1]) > costheta_l))]
+            G_q = G_q[((qpG_sph[:,2] < phi_g) & (qpG_sph[:,2] > phi_l) & (np.cos(qpG_sph[:,1]) <= costheta_g) & (np.cos(qpG_sph[:,1]) >= costheta_l))]
 
         if rank == 0 or rank == None:
             logger.info(f'\t\tNumber of G vectors = {len(G_q)},')
@@ -243,7 +249,102 @@ def RPA_noLFE_1d(dark_objects, rank=None, q_start=parmt.q_start, q_stop=parmt.q_
     if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
 
-    #shutil.rmtree(working_dir) # delete working directory
+    return 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
+
+@time_wrapper
+def get_RPA_dielectric_no_LFE_1d_binning(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
+    # Reading all relevant data
+    N_AO = len(dark_objects['aos'])
+    ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
+    
+    dft_path = parmt.store + '/DFT/'
+    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')
+    mo_coeff_f_conj = np.load(dft_path + 'mo_coeff_f.npy').conj()
+    mo_en_i = np.load(dft_path + 'mo_en_i.npy')
+    mo_en_f = np.load(dft_path + 'mo_en_f.npy')
+    k_f = np.load(parmt.store + '/k-pts_f.npy')
+
+    q_cuts = dark_objects['R_cutoff_q_points']
+    G_vectors = dark_objects['G_vectors']
+    VCell = dark_objects['V_cell']
+    unique_q = dark_objects['unique_q']
+    N_q = len(unique_q)
+    primgauss_arr, AO_arr, coeff_arr = dark_objects['block_arrays']
+
+    unique_Ri = load_unique_R()
+
+    # Generating bins
+    bin_centers = binning.gen_bin_centers(parmt.q_max, parmt.q_min, parmt.dq, parmt.N_theta, parmt.N_phi, dir=True)
+
+    # Generate optimal path for 3D overlaps calculation
+    einsum_path = np.einsum_path('kbj,kba,kai->kij', mo_coeff_f_conj, np.ones((k_f.shape[0], N_AO, N_AO)), mo_coeff_i)[0]
+    
+    # Make working directory
+    if rank == None:
+        working_dir = parmt.store + '/working_dir'
+    else: #MPI
+        working_dir = parmt.store + f'/working_dir_rank{rank}'
+    makedir(working_dir)
+    makedir(working_dir + '/eps_im')
+
+    if rank == 0 or rank == None:
+        logger.info(f'Total number of q: {N_q}.')
+    if rank == 0: #MPI
+        logger.info(f'{q_stop - q_start} q will be calculated per node. Only rank 0 will be logged.')
+
+    if q_start == None:
+        q_start = 0
+    if q_stop == None:
+        q_stop = N_q
+    
+    q_keys = list(unique_q.keys())[q_start:q_stop]
+
+    tot_bin_eps_im = np.zeros((bin_centers.shape[0]+1, int(parmt.E_max/parmt.dE)+1))
+    tot_bin_weights = np.zeros(bin_centers.shape[0]+1)
+
+    for i_q, q in enumerate(q_keys, start=q_start):
+        k_pairs = np.array(unique_q[q])
+        q = np.array(q)
+
+        if rank == 0 or rank == None:
+            logger.info(f'\ti_q: {i_q + 1}\n\t\tq = {np.array2string(q, precision=5)},')
+
+        start_time = time.time()
+        
+        # Finding relevant G vectors
+        G_q = G_vectors[np.linalg.norm(q[None, :]+G_vectors, axis=1) < parmt.q_max + 1.5*parmt.dq]
+        G_q = G_q[np.linalg.norm(q[None, :]+G_q, axis=1) > parmt.q_min - 0.5*parmt.dq]
+
+        if rank == 0 or rank == None:
+            logger.info(f'\t\tNumber of G vectors = {len(G_q)},')
+
+        # Imaginary part of polarizability for E >= 0
+        if rank == 0 or rank == None:
+            logger.info(f'\t\tStarting calculation of Im(eps) for 0 < E <= {parmt.E_max} eV')
+        start_time1 = time.time()
+
+        eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f[:,iconbot:icontop+1], mo_en_i[:,ivalbot:ivaltop+1], mo_coeff_f_conj[:,:,iconbot:icontop+1], mo_coeff_i[:,:,ivalbot:ivaltop+1], k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
+
+        if rank == 0 or rank == None:
+            logger.info(f'\t\tFinished calculation of Im(eps). Time taken = {(time.time() - start_time1):.2f} s')
+
+        start_time1 = time.time()
+        tot_bin_eps_im, tot_bin_weights = binning.bin_eps_q_1d(q, G_q, eps_q_im, bin_centers, tot_bin_eps_im, tot_bin_weights)
+
+        if rank == 0 or rank == None:
+            logger.info(f'\t\tIm(eps) binned. Time taken = {(time.time() - start_time1):.2f} s.')
+            logger.info(f'\t\tCompleted i_q = {i_q + 1}. Time taken = {(time.time() - start_time):.2f} s.')
+
+        # Save to working directory
+        np.save(f'{working_dir}/tot_bin_eps_im.npy', tot_bin_eps_im)
+        np.save(f'{working_dir}/tot_bin_weights.npy', tot_bin_weights)
+
+    # Removing extra bins
+    tot_bin_eps_im = tot_bin_eps_im[:-1, :]
+    tot_bin_weights = tot_bin_weights[:-1]
+
+    if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
+        save_eps(1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
 
     return 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 
@@ -261,12 +362,17 @@ def save_eps(bin_eps, bin_weights, bin_centers):
 
     binned_eps_interp = kk_function(binned_eps_im_interp, parmt.E_max, parmt.dE) + 1. + 1j*binned_eps_im_interp
 
+    f.create_dataset('binned_eps', data=bin_eps) #before interpolation
     if parmt.dir_1d == None:
-        if parmt.save_3d: # Saves 3-dimensional binned epsilon
-            f.create_dataset('binned_eps', data=binned_eps_interp)
-            f.create_dataset('bin_centers', data=bin_centers)
+        if parmt.binning_1d:
+            eps_r = binned_eps_interp
+        else:
+            if parmt.save_3d: # Saves 3-dimensional binned epsilon
+                f.create_dataset('binned_eps_interp', data=binned_eps_interp)
+                f.create_dataset('bin_centers', data=bin_centers)
+                f.create_dataset('bin_weights', data=bin_weights)
 
-        eps_r = epsilon_r(bin_centers, binned_eps_interp) # angular average, for -E_max to E_max
+            eps_r = epsilon_r(bin_centers, binned_eps_interp) # angular average, for -E_max to E_max
     else:
         eps_r = binned_eps_interp
 
@@ -541,7 +647,8 @@ def RPA_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q
     if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
 
-    shutil.rmtree(f'{working_dir}/eta_qG') # delete large working directory files
+    # delete large working directory files
+    shutil.rmtree(f'{working_dir}/eta_qG')
     os.remove(f'{working_dir}/eps_delta.h5')
 
     return tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
