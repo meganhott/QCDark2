@@ -22,7 +22,7 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
             RPA_LFE_0q(dark_objects, parmt.optical_q_dir)
         else:
             RPA_noLFE_0q(dark_objects, parmt.optical_q_dir)
-    exit()
+        exit()
     if parmt.include_lfe:
         tot_bin_eps, tot_bin_weights, bin_centers = RPA_LFE(dark_objects, rank, q_start, q_stop)
     else:
