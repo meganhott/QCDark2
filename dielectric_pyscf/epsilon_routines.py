@@ -29,7 +29,7 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
         if parmt.dir_1d is not None: # only compute along one direction
             tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE_1d(dark_objects, rank, q_start, q_stop)
         elif parmt.binning_1d:
-            tot_bin_eps, tot_bin_weights, bin_centers = get_RPA_dielectric_no_LFE_1d_binning(dark_objects, rank, q_start, q_stop)
+            tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE_1d_binning(dark_objects, rank, q_start, q_stop)
         else:
             tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE(dark_objects, rank, q_start, q_stop)
 
@@ -252,7 +252,7 @@ def RPA_noLFE_1d(dark_objects, rank=None, q_start=parmt.q_start, q_stop=parmt.q_
     return 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 
 @time_wrapper
-def get_RPA_dielectric_no_LFE_1d_binning(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
+def RPA_noLFE_1d_binning(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
     # Reading all relevant data
     N_AO = len(dark_objects['aos'])
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
@@ -323,7 +323,7 @@ def get_RPA_dielectric_no_LFE_1d_binning(dark_objects: dict, rank=None, q_start=
             logger.info(f'\t\tStarting calculation of Im(eps) for 0 < E <= {parmt.E_max} eV')
         start_time1 = time.time()
 
-        eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f[:,iconbot:icontop+1], mo_en_i[:,ivalbot:ivaltop+1], mo_coeff_f_conj[:,:,iconbot:icontop+1], mo_coeff_i[:,:,ivalbot:ivaltop+1], k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
+        eps_q_im = RPA_noLFE_q(q, mo_en_f[:,iconbot:icontop+1], mo_en_i[:,ivalbot:ivaltop+1], mo_coeff_f_conj[:,:,iconbot:icontop+1], mo_coeff_i[:,:,ivalbot:ivaltop+1], k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
 
         if rank == 0 or rank == None:
             logger.info(f'\t\tFinished calculation of Im(eps). Time taken = {(time.time() - start_time1):.2f} s')
