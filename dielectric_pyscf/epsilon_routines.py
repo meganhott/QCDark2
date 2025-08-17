@@ -17,18 +17,24 @@ import dielectric_pyscf.kramers_kronig as kk
 
 
 def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
+    if parmt.optical_limit:
+        if parmt.include_lfe:
+            RPA_LFE_0q(dark_objects, parmt.optical_q_dir)
+        else:
+            RPA_noLFE_0q(dark_objects, parmt.optical_q_dir)
+    exit()
     if parmt.include_lfe:
-        tot_bin_eps, tot_bin_weights, bin_centers = get_RPA_dielectric_LFE(dark_objects, rank, q_start, q_stop)
+        tot_bin_eps, tot_bin_weights, bin_centers = RPA_LFE(dark_objects, rank, q_start, q_stop)
     else:
         if parmt.dir_1d is not None: # only compute along one direction
-            tot_bin_eps, tot_bin_weights, bin_centers = get_RPA_dielectric_no_LFE_1d(dark_objects, rank, q_start, q_stop)
+            tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE_1d(dark_objects, rank, q_start, q_stop)
         else:
-            tot_bin_eps, tot_bin_weights, bin_centers = get_RPA_dielectric_no_LFE(dark_objects, rank, q_start, q_stop)
+            tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE(dark_objects, rank, q_start, q_stop)
 
     return tot_bin_eps, tot_bin_weights, bin_centers
 
 @time_wrapper
-def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
+def RPA_noLFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
     # Reading all relevant data
     N_AO = len(dark_objects['aos'])
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
@@ -100,7 +106,7 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
             logger.info(f'\t\tStarting calculation of Im(eps) for 0 < E <= {parmt.E_max} eV')
         start_time1 = time.time()
 
-        eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f[:,iconbot:icontop+1], mo_en_i[:,ivalbot:ivaltop+1], mo_coeff_f_conj[:,:,iconbot:icontop+1], mo_coeff_i[:,:,ivalbot:ivaltop+1], k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
+        eps_q_im = RPA_noLFE_q(q, mo_en_f[:,iconbot:icontop+1], mo_en_i[:,ivalbot:ivaltop+1], mo_coeff_f_conj[:,:,iconbot:icontop+1], mo_coeff_i[:,:,ivalbot:ivaltop+1], k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
 
         if rank == 0 or rank == None:
             logger.info(f'\t\tFinished calculation of Im(eps). Time taken = {(time.time() - start_time1):.2f} s')
@@ -128,7 +134,7 @@ def get_RPA_dielectric_no_LFE(dark_objects: dict, rank=None, q_start=parmt.q_sta
     return 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 
 @time_wrapper
-def get_RPA_dielectric_no_LFE_1d(dark_objects, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
+def RPA_noLFE_1d(dark_objects, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
     # Reading all relevant data
     N_AO = len(dark_objects['aos'])
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
@@ -214,7 +220,7 @@ def get_RPA_dielectric_no_LFE_1d(dark_objects, rank=None, q_start=parmt.q_start,
                 logger.info(f'\t\tStarting calculation of Im(eps) for 0 < E <= {parmt.E_max} eV')
             start_time1 = time.time()
 
-            eps_q_im = get_RPA_dielectric_no_LFE_q(q, mo_en_f[:,iconbot:icontop+1], mo_en_i[:,ivalbot:ivaltop+1], mo_coeff_f_conj[:,:,iconbot:icontop+1], mo_coeff_i[:,:,ivalbot:ivaltop+1], k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
+            eps_q_im = RPA_noLFE_q(q, mo_en_f[:,iconbot:icontop+1], mo_en_i[:,ivalbot:ivaltop+1], mo_coeff_f_conj[:,:,iconbot:icontop+1], mo_coeff_i[:,:,ivalbot:ivaltop+1], k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
 
             if rank == 0 or rank == None:
                 logger.info(f'\t\tFinished calculation of Im(eps). Time taken = {(time.time() - start_time1):.2f} s')
@@ -284,8 +290,31 @@ def save_eps(bin_eps, bin_weights, bin_centers):
 
     logger.info(f'Calculation done: dielectric function and input parameters stored as hdf5 file at {parmt.store}/epsilon.hdf5')
 
-def get_RPA_dielectric_no_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank) -> np.ndarray:
-    
+def RPA_noLFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank) -> np.ndarray:
+    """
+    Returns imaginary part of lim_{n->0} |<j(k+q)|exp(i(q+G)r)|ik>|^2/|q+G|^2/(E - (E_{j(k+q)} - E_{ik} + i n)) for one q-vector, summed over i,j,k. 
+
+    Inputs: 
+        q: (3,) q-vector
+        mo_en_f: (k,j): MO energies of final k-grid
+        mo_en_i: (k,i): MO energies of initial k-grid
+        mo_coeff_f_conj: (k,j): MO coefficients of final k-grid (conjugated)
+        mo_coeff_i: (k,i): MO coefficients of intial k-grid
+        k_f: (k,3): final k-grid
+        k_pairs: (k,2): k-grid indices for q-vector
+        primgauss_arr: (N_blocks, N_primgauss, 3) boolean np.ndarray: 
+            Primitive gaussians are included in each block
+        AO_arr: (N_blocks, N_AO) boolean np.ndarray: 
+            Atomic orbitals are included in each block
+        coeff_arr: (N_AO, N_max_primgauss) complex np.ndarray
+            Primgauss coefficients for each AO
+        q_cuts: cut-off points in q for different R_ids
+
+    Outputs:
+        eps_delta:  delta function part of epsilon: Re(eps_delta) corresponds to Im(eps)
+                                                    Im(eps_delta) corresponds to Re(eps) 
+                    shape = (N_G, N_G, int(parmt.E_max/parmt.dE + 1)), prefactor multiplied later.
+    """
     # Prepare computation
     prefactor = 8.*(np.pi**2)*(alpha**2)*me/(VCell*len(k_pairs))/parmt.dE
 
@@ -294,38 +323,15 @@ def get_RPA_dielectric_no_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i
     mo_coeff_i = mo_coeff_i[k_pairs[:,0]] #(k_pair,a,i)
     mo_coeff_f_conj = mo_coeff_f_conj[k_pairs[:,1]] #(k_pair,b,j)
     k_f = k_f[k_pairs[:,1]]
+    N_k = k_f.shape[0]
+    qG = q[None, :] + G_q
 
     # Calculating the delta function in energy
     im_delE = delta_energy(mo_en_i, mo_en_f) #(k,2,a,b)
 
-    qG = q[None, :] + G_q
-
-    epsilon_im = prefactor*RPA_Im_eps_external_prefactor_no_LFE(qG, mo_coeff_f_conj, mo_coeff_i, k_f, im_delE, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank)
-
-    return epsilon_im
-
-def RPA_Im_eps_external_prefactor_no_LFE(qG, mo_coeff_f_conj, mo_coeff_i, k_f, im_delE, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank):
-    """
-    Returns imaginary part of lim_{n->0} |<j(k+q)|exp(i(q+G)r)|ik>|^2/|q+G|^2/(E - (E_{j(k+q)} - E_{ik} + i n)), summed over i,j,k. 
-
-    Inputs: 
-        qG:         np.ndarray, shape = (N_G, 3), q+G vectors
-        primgauss_arr: (N_blocks, N_primgauss, 3) boolean np.ndarray
-            Primitive gaussians are included in each block
-        AO_arr: (N_blocks, N_AO) boolean np.ndarray
-            Atomic orbitals are included in each block
-        coeff_arr: (N_AO, N_max_primgauss) complex np.ndarray
-            Primgauss coefficients for each AO
-        N_AO:       int, number of atomic orbitals
-        q_cuts:     np.ndarray, cut-off points in q for different R_ids.
-    Outputs:
-        eps_delta:  delta function part of epsilon: Re(eps_delta) corresponds to Im(eps)
-                                                    Im(eps_delta) corresponds to Re(eps) 
-                    shape = (N_G, N_G, int(parmt.E_max/parmt.dE + 1)), prefactor multiplied later.
-    """
     # Make k_f, coeff tuples for starmap
     k_tup = []
-    for i_k in range(k_f.shape[0]):
+    for i_k in range(N_k):
         k_tup.append( (i_k, k_f[i_k], mo_coeff_i[i_k], mo_coeff_f_conj[i_k]) )
 
     # Save Im(eps) for each k, then load and combine after calculating for all k
@@ -335,25 +341,22 @@ def RPA_Im_eps_external_prefactor_no_LFE(qG, mo_coeff_f_conj, mo_coeff_i, k_f, i
 
     if rank == None or rank == 0:
         logger.info(f'\t\t\tIm(eps) calculated and saved for all k. Time taken = {(time.time() - start_time):.2f} s.')
-
-    #eps_im = np.sum(np.array(eps_im), axis=0) #(E,G): sum over k
     
-    # Load eps_im to memory
+    # Load eps_im to memory and sum over k
     start_time = time.time()
     N_E = int(parmt.E_max/parmt.dE + 1)
     eps_im = np.zeros((qG.shape[0], N_E), dtype='float')
-    for i_k in range(k_f.shape[0]):
+    for i_k in range(N_k):
         eps_im += np.load(working_dir + f'/eps_im/eps_im_k{i_k}.npy')
 
     if rank == None or rank == 0:
         logger.info(f'\t\t\tIm(eps) loaded to memory and summed over k. Time taken = {(time.time() - start_time):.2f} s.')
 
-    return eps_im #(G,E)
+    return prefactor * eps_im #(G,E)
 
-def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
+def RPA_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
     # Reading all relevant data
     N_AO = len(dark_objects['aos'])
-    ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
     
     dft_path = parmt.store + '/DFT/'
     mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')
@@ -452,7 +455,7 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
 
         eps_delta_h5.close()
 
-        get_RPA_dielectric_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank) # calculate and store delta part of polarizability (E,G,G')
+        RPA_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank) # calculate and store delta part of polarizability (E,G,G')
 
         #Perform Kramers-Kronig transformation to get transition amplitude parts of Re(eps) and Im(eps)
         N_G_chunks = int(np.ceil(N_G/G_per_chunk))
@@ -544,8 +547,10 @@ def get_RPA_dielectric_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start,
     return tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 
 @time_wrapper(n_tabs=2)
-def get_RPA_dielectric_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank):
-    
+def RPA_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k_f, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank):
+    # Prepare computation
+    prefactor = 8.*(np.pi**2)*(alpha**2)*me/(VCell*len(k_pairs))/parmt.dE
+
     mo_en_i = mo_en_i[k_pairs[:,0]] #(k_pair,i)
     mo_en_f = mo_en_f[k_pairs[:,1]] #(k_pair,j)
     mo_coeff_i = mo_coeff_i[k_pairs[:,0]] #(k_pair,a,i)
@@ -553,14 +558,441 @@ def get_RPA_dielectric_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k
     k_f = k_f[k_pairs[:,1]]
     qG = q[None, :] + G_q
 
-    prefactor = 8.*(np.pi**2)*(alpha**2)*me/(VCell*len(k_pairs))/parmt.dE
-
     valbot, valtop, conbot, contop = np.load(parmt.store + '/bands.npy')
+
     # For E >=0, initial states are occupied and final states are unoccupied
     if rank == 0 or rank == None:
         logger.info(f'\t\t\tStarting calculation of delta part of polarizability for 0 < E <= {parmt.E_max} eV')
     start_time = time.time()
+
     im_delE = delta_energy(mo_en_i[:,valbot:valtop+1], mo_en_f[:,conbot:contop+1]) #(k,2,a,b) # Calculating the delta function in energy
+    RPA_body_LFE(qG, k_f, mo_coeff_i[:,:,valbot:valtop+1], mo_coeff_f_conj[:,:,conbot:contop+1], im_delE, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank, prefactor, neg_E=False)
+    
+    if rank == 0 or rank == None:
+        logger.info(f'\t\t\tFinished calculation of delta part of polarizability for 0 < E <= {parmt.E_max} eV. Time taken = {(time.time() - start_time):.2f} s')
+
+    # For E < 0, initial states are unoccupied and final states are occupied
+    if rank == 0 or rank == None:
+        logger.info(f'\t\t\tStarting calculation of delta part of polarizability for -{parmt.E_max} <= E <= 0 eV')
+    start_time = time.time()
+    im_delE = delta_energy(mo_en_i[:,conbot:contop+1], mo_en_f[:,valbot:valtop+1]) #(k,2,a,b)
+    #negate ind?
+    RPA_body_LFE(qG, k_f, mo_coeff_i[:,:,conbot:contop+1], mo_coeff_f_conj[:,:,valbot:valtop+1], im_delE, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank, prefactor, neg_E=True)
+
+    if rank == 0 or rank == None:
+        logger.info(f'\t\t\tFinished calculation of delta part of polarizability for -{parmt.E_max} <= E <= 0 eV. Time taken = {(time.time() - start_time):.2f} s')
+
+
+def RPA_body_LFE(qG, k_f, mo_coeff_i, mo_coeff_f_conj, im_delE, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank, prefactor, neg_E):
+    """
+    Writes spectral part of lim_{n->0} <ik|exp(-i(q+G)r)|j(k+q)> <j(k+q)|exp(i(q+G')r)|ik> / |q+G| / |q+G'| /(E - (E_{j(k+q)} - E_{ik} +/- i n)), summed over i,j,k, to hdf5 file. 
+
+    Inputs: 
+        qG ((N_G, 3) np.ndarray): q + G vectors
+        primgauss_arr ((N_blocks, N_primgauss, 3) boolean np.ndarray):
+            Primitive gaussians are included in each block
+        AO_arr ((N_blocks, N_AO) boolean np.ndarray):
+            Atomic orbitals are included in each block
+        coeff_arr ((N_AO, N_max_primgauss) complex np.ndarray):
+            Primgauss coefficients for each AO
+        q_cuts ((N_q,) np.ndarray): 
+            cut-off points in q for different R_ids.
+    Outputs:
+        eps_delta ((N_G, N_G, int(parmt.E_max/parmt.dE + 1)) np.ndarray):
+            Delta function part of epsilon: Re(eps_delta) corresponds to Im(eps) and Im(eps_delta) corresponds to Re(eps)
+    """
+    if neg_E:
+        ind_sign = -1
+    else:
+        ind_sign = 1
+
+    im_delE_ind = im_delE[:,0,:,:].astype('int') # energy indices (k,i,j)
+    im_delE_rem = im_delE[:,1,:,:] # remainders (k,i,j)
+
+    N_E = int(parmt.E_max/parmt.dE + 1) # Number of E for E <=0 or E>= 0
+    N_G = qG.shape[0] # number of G-vectors
+
+    start_time = time.time()
+    #make k_f, coeff tuples for starmap
+    k_tup = []
+    for i_k in range(k_f.shape[0]):
+        k_tup.append( (i_k, k_f[i_k], mo_coeff_i[i_k], mo_coeff_f_conj[i_k]) )
+
+    #save eta for each k, then load and combine after calculating for all k
+    with mp.get_context('fork').Pool(mp.cpu_count()) as p: #parallelize over k
+        p.starmap(partial(eps.get_3D_overlaps_k, qG=qG, primgauss_arr=primgauss_arr, AO_arr=AO_arr, coeff_arr=coeff_arr, unique_Ri=unique_Ri, q_cuts=q_cuts, path=einsum_path, working_dir=working_dir), k_tup) #(G,k,i,j)
+
+    if rank == None or rank == 0:
+        logger.info(f'\t\t\t\teta_qG calculated for all k and G. Time taken = {(time.time() - start_time):.2f} s.')
+
+    # Load 3D overlaps to memory
+    start_time = time.time()
+    eta_qG = np.empty((k_f.shape[0], mo_coeff_i.shape[2], mo_coeff_f_conj.shape[2], N_G), dtype='complex128')
+    for i_k in range(k_f.shape[0]):
+        eta_qG[i_k] = np.load(working_dir + f'/eta_qG/eta_qG_k{i_k}.npy')
+    eta_qG = eta_qG / np.linalg.norm(qG, axis=1)[None,None,None,:]
+
+    if rank == None or rank == 0:
+        logger.info(f'\t\t\t\t3D overlaps loaded to memory for all G. Time taken = {(time.time() - start_time):.2f} s.')
+
+    # Calculate eps_delta
+    start_time = time.time()
+    
+    if neg_E: #For E < 0
+        prefactor = -1*prefactor
+
+    eps_delta_h5 = h5py.File(working_dir + '/eps_delta.h5', 'r+') #eps_delta hdf5 file
+    eps_delta = eps_delta_h5['eps_delta']
+    
+    chunks = eps_delta.chunks
+    if chunks is not None:
+        E_per_chunk = chunks[0]
+    else:
+        E_per_chunk = 1
+    N_E_chunks = int(np.ceil(N_E/E_per_chunk))
+    E_start = np.arange(0, E_per_chunk*N_E_chunks, E_per_chunk)
+    E_stop = np.append(np.arange(E_per_chunk, E_per_chunk*N_E_chunks, E_per_chunk), N_E)
+
+    if rank == 0 or rank == None:
+        logger.info(f"\t\t\t\tBeginning eps_delta. This will be performed in {N_E_chunks} batches of N_E = {E_per_chunk}")
+
+    for n_E_chunk in range(N_E_chunks):
+        start_time1 = time.time()
+        E_i = E_start[n_E_chunk]
+        E_f = E_stop[n_E_chunk]
+        
+        eps_delta_chunk = eps.delta_GG(im_delE_ind, im_delE_rem, eta_qG, E_i, E_f, N_G, prefactor)
+        
+        if parmt.debug_logging and (rank == 0 or rank == None):
+            logger.info(f'\t\t\t\t\t\tBatch {n_E_chunk} of eps_delta calculated. Time taken = {(time.time() - start_time1):.2f} s.')
+
+        # write to hdf5 only after entire chunk has been calculated
+        start_time1 = time.time()
+        if ind_sign == -1:
+            eps_delta[(ind_sign*E_f + int(parmt.E_max/parmt.dE)):(ind_sign*E_i + int(parmt.E_max/parmt.dE))] = np.flip(eps_delta_chunk, axis=0)
+        else: # ind_sign = 1
+            eps_delta[(ind_sign*E_i + int(parmt.E_max/parmt.dE)):(ind_sign*E_f + int(parmt.E_max/parmt.dE))] = eps_delta_chunk
+        
+        if parmt.debug_logging and (rank == 0 or rank == None):
+            logger.info(f'\t\t\t\t\t\tBatch {n_E_chunk} of eps_delta saved to hdf5. Time taken = {(time.time() - start_time1):.2f} s.')
+
+    eps_delta_h5.close()
+    
+    if rank == None or rank == 0:
+        logger.info(f'\t\t\t\tDelta part of epsilon calculated. Time taken = {(time.time() - start_time):.2f} s.')
+
+    #return np.copy(np.transpose(eps_delta, (1,2,0))) #(G,G',E)
+
+'''
+def RPA_noLFE_0q(dark_objects, q_dir):
+    """
+    Only calculates head and not wings for noLFE in the proper q -> 0 limit
+    """
+    ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
+    
+    dft_path = parmt.store + '/DFT/'
+    
+    mo_coeff = np.load(dft_path + 'mo_coeff_i.npy')
+    mo_en = np.load(dft_path + 'mo_en_i.npy')
+    kpts = np.load(parmt.store + '/k-pts_i.npy')
+
+    N_k = kpts.shape[0]
+    VCell = dark_objects['V_cell'] 
+    cell = dark_objects['cell']
+
+    mo_en_val = mo_en[:,ivalbot:ivaltop+1] #(k,i)
+    mo_en_con = mo_en[:,iconbot:icontop+1] #(k,j)
+    mo_coeff_val = mo_coeff[:,:,ivalbot:ivaltop+1] #(k,a,i)
+    mo_coeff_con = mo_coeff[:,:,iconbot:icontop+1] #(k,b,j)
+
+    #logger.info(f'\tStarting calculation of Im(eps(q -> 0)) for 0 < E <= {parmt.E_max} eV along q = {q_dir} direction.')
+
+    start_time = time.time()
+
+    prefactor = 8.*(np.pi**2)*(alpha**4)*me/(VCell*N_k*parmt.dE) * (alpha*me)**2
+
+    q_dir = np.array(q_dir)
+    q_dir = q_dir/np.linalg.norm(q_dir) # normalize to get unit vector
+
+    eps_im = prefactor * RPA_head(cell, kpts, q_dir, mo_en_val, mo_en_con, mo_coeff_val, mo_coeff_con) #(E,)
+
+    eps_0q = kk.kramerskronig_im2re_causal(eps_im[np.newaxis,:], parmt.E_max, parmt.dE)[0] + 1. + 1j*eps_im # index shenanigans due to optimized KK for multiple G-vectors
+
+    np.save(parmt.store + '/epsilon_0q.npy', eps_0q)
+    print(time.time() - start_time)
+'''
+
+def RPA_noLFE_0q(dark_objects, q_dir, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
+    N_AO = len(dark_objects['aos'])
+    ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
+    
+    dft_path = parmt.store + '/DFT/'
+    mo_coeff = np.load(dft_path + 'mo_coeff_i.npy')
+    mo_en = np.load(dft_path + 'mo_en_i.npy')
+    kpts = np.load(parmt.store + '/k-pts_i.npy')
+
+    N_k = kpts.shape[0]
+    VCell = dark_objects['V_cell'] 
+    cell = dark_objects['cell']
+
+    q_cuts = dark_objects['R_cutoff_q_points']
+    G_vectors = dark_objects['G_vectors']
+    unique_q = dark_objects['unique_q']
+    N_q = len(unique_q)
+    primgauss_arr, AO_arr, coeff_arr = dark_objects['block_arrays']
+    unique_Ri = load_unique_R()
+
+    # Generating bins
+    bin_centers = binning.gen_bin_centers(parmt.q_max, parmt.q_min, parmt.dq, parmt.N_theta, parmt.N_phi)
+    N_ang_bins = parmt.N_phi*(parmt.N_theta-2) + 2
+
+    mo_en_val = mo_en[:,ivalbot:ivaltop+1] #(k,i)
+    mo_en_con = mo_en[:,iconbot:icontop+1] #(k,j)
+    mo_coeff_val = mo_coeff[:,:,ivalbot:ivaltop+1] #(k,a,i)
+    mo_coeff_con = mo_coeff[:,:,iconbot:icontop+1] #(k,b,j)
+
+    # Generate optimal path for 3D overlaps calculation
+    einsum_path = np.einsum_path('kbj,kba,kai->kij', mo_coeff, np.ones((N_k, N_AO, N_AO)), mo_coeff)[0]
+
+    # Make working directory
+    if rank == None:
+        working_dir = parmt.store + '/working_dir'
+    else: #MPI
+        working_dir = parmt.store + f'/working_dir_rank{rank}'
+    makedir(working_dir)
+    makedir(working_dir + '/eps_im')
+
+    if rank == 0 or rank == None:
+        logger.info(f'Total number of q: {N_q}.')
+    if rank == 0: #MPI
+        logger.info(f'{q_stop - q_start} q will be calculated per node. Only rank 0 will be logged.')
+
+    if q_start == None:
+        q_start = 0
+    if q_stop == None:
+        q_stop = N_q
+
+    q_keys = list(unique_q.keys())[q_start:q_stop]
+
+    tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, int(parmt.E_max/parmt.dE)+1))
+    tot_bin_weights = np.zeros(bin_centers.shape[0]+N_ang_bins)
+
+    for i_q, q in enumerate(q_keys, start=q_start):
+        k_pairs = np.array(unique_q[q])
+        q = np.array(q)
+
+        if rank == 0 or rank == None:
+            logger.info(f'\ti_q: {i_q + 1}\n\t\tq = {np.array2string(q, precision=5)},')
+
+        start_time = time.time()
+
+        # Finding relevant G vectors
+        G_q = G_vectors[np.linalg.norm(q[None, :]+G_vectors, axis=1) < parmt.q_max + 1.5*parmt.dq]
+        G_q = G_q[np.linalg.norm(q[None, :]+G_q, axis=1) > parmt.q_min - 0.5*parmt.dq]
+
+        if rank == 0 or rank == None:
+            logger.info(f'\t\tNumber of G vectors = {len(G_q)},')
+
+        # Imaginary part of polarizability for E >= 0
+        if rank == 0 or rank == None:
+            logger.info(f'\t\tStarting calculation of Im(eps) for 0 < E <= {parmt.E_max} eV')
+        start_time1 = time.time()
+
+        # check if q = 0 - if so, then special calculation needs to be done for G = 0. Other G are calculated normally
+        if (q == 0.).all():
+            q_dir = np.array(q_dir)
+            q_dir = q_dir/np.linalg.norm(q_dir) # normalize to get unit vector
+
+            prefactor_head = 8.*(np.pi**2)*(alpha**4)*me/(VCell*N_k*parmt.dE) * (alpha*me)**2
+
+            eps_im_head = prefactor_head * RPA_head(cell, kpts, q_dir, mo_en_val, mo_en_con, mo_coeff_val, mo_coeff_con) #(E,)
+
+            np.save(parmt.store + '/epsilon_0q.npy', eps_im_head)
+
+            if G_q.shape[0] > 1: # calculate other G normally
+                eps_im_body = RPA_noLFE_q(q, mo_en_con, mo_en_val, mo_coeff_con.conj(), mo_coeff_val, kpts, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q[1:], unique_Ri, einsum_path, working_dir, rank)
+
+                #concatenate for binning
+                eps_q_im = np.concatenate((eps_im_head, eps_im_body), axis=0) #(G,E)
+            else:
+                eps_q_im = eps_im_head[np.newaxis,:] #(1,E)
+
+        else: # q != [0,0,0]
+            eps_q_im = RPA_noLFE_q(q, mo_en_con, mo_en_val, mo_coeff_con.conj(), mo_coeff_val, kpts, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
+
+        if rank == 0 or rank == None:
+            logger.info(f'\t\tFinished calculation of Im(eps). Time taken = {(time.time() - start_time1):.2f} s')
+
+        start_time1 = time.time()
+        tot_bin_eps_im, tot_bin_weights = binning.bin_eps_q(q, G_q, eps_q_im, bin_centers, tot_bin_eps_im, tot_bin_weights)
+
+        if rank == 0 or rank == None:
+            logger.info(f'\t\tIm(eps) binned. Time taken = {(time.time() - start_time1):.2f} s.')
+            logger.info(f'\t\tCompleted i_q = {i_q + 1}. Time taken = {(time.time() - start_time):.2f} s.')
+
+        # Save to working directory
+        np.save(f'{working_dir}/tot_bin_eps_im.npy', tot_bin_eps_im)
+        np.save(f'{working_dir}/tot_bin_weights.npy', tot_bin_weights)
+
+    # Removing extra bins
+    tot_bin_eps_im = tot_bin_eps_im[:-N_ang_bins, :]
+    tot_bin_weights = tot_bin_weights[:-N_ang_bins]
+
+    if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
+        save_eps(1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
+
+    #shutil.rmtree(working_dir) # delete working directory
+
+    return 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
+
+def get_nabla_ovlps(cell, k, q_dir, mo_coeff_i, mo_coeff_f):
+    """
+    Returns <ik| q_dir.nabla |jk> MO integrals built from int1e_ipovlp AO integrals for head and wings of dielectric function
+    """
+    ao_ovlp = np.array(cell.pbc_intor('int1e_ipovlp', kpts=k)) #(k,3,a,b)
+    ao_ovlp_dir = np.einsum('x,kxab -> kab', q_dir, ao_ovlp) #(k,a,b)
+
+    mo_ovlp = np.einsum('kai,kbj,kab -> kij', mo_coeff_i.conj(), mo_coeff_f, ao_ovlp_dir) #(k,i,j)
+    return mo_ovlp #(k,i,j)
+
+def RPA_head(cell, k, q_dir, mo_en_i, mo_en_f, mo_coeff_i, mo_coeff_f):
+    """
+    Calculate the head of the dielectric fuction: G = G' = 0 in the q = 0 limit along unit vector q_dir for 0 <= E <= E_max
+    """
+    im_delE = delta_energy(mo_en_i, mo_en_f) #(k,2,i,j)
+
+    en_denom = 1 / (mo_en_f[:,None,:] - mo_en_i[:,:,None]) #(k,i,j)
+
+    mo_ovlp = get_nabla_ovlps(cell, k, q_dir, mo_coeff_i, mo_coeff_f)
+    ovlp = en_denom * mo_ovlp #(k,i,j)
+
+    # following same algorithm as get_eps_im_k 
+    # Make k_f, coeff tuples for starmap
+    N_k = k.shape[0]
+    k_tup = []
+    for i_k in range(N_k):
+        k_tup.append( (i_k, ovlp[i_k]) )
+
+    # Calculate Im(eps) for each k
+    with mp.get_context('fork').Pool(mp.cpu_count()) as p: # parallelize over k
+        eps_im = p.starmap(partial(eps.get_eps_im_k_head, im_delE=im_delE), k_tup)
+    eps_im = np.sum(np.array(eps_im), axis=0) #(k,E) -> (E,)
+    return eps_im #(E,)
+
+def RPA_wings(G, cell, k, q_dir, mo_en_i, mo_en_f, mo_coeff_i, mo_coeff_f, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path, neg_E):
+    """
+    Calculate the wings of the dielectric fuction: G = 0, G' != 0 in the q = 0 limit along unit vector q_dir
+    """
+    im_delE = delta_energy(mo_en_i, mo_en_f) #(k,2,i,j)
+    en_denom = 1 / (mo_en_f[:,None,:] - mo_en_i[:,:,None]) #(k,i,j)
+
+    mo_ovlp = get_nabla_ovlps(cell, k, q_dir, mo_coeff_i, mo_coeff_f)
+    ovlp = en_denom * mo_ovlp #(k,i,j) # <ik|q_dir.nabla|jk>/(Ej-Ei)
+
+    N_k = k.shape[0]
+    k_tup = []
+    for i_k in range(N_k):
+        k_tup.append( (i_k, k[i_k], ovlp[i_k], mo_coeff_i[i_k], mo_coeff_f[i_k].conj()) )
+
+    with mp.get_context('fork').Pool(mp.cpu_count()) as p: # parallelize over k
+        eps_delta_k = p.starmap(partial(eps.get_eps_delta_k_wings, G=G, primgauss_arr=primgauss_arr, AO_arr=AO_arr, coeff_arr=coeff_arr, unique_Ri=unique_Ri, q_cuts=q_cuts, path=path, im_delE=im_delE), k_tup)
+    eps_delta = np.sum(np.array(eps_delta_k), axis=0) #(k,E,G) -> (E,G)
+
+    return eps_delta #(E,G)
+
+def RPA_LFE_0q(dark_objects, q_dir):
+    # This is still a work in process
+    valbot, valtop, conbot, contop = np.load(parmt.store + '/bands.npy')
+    N_AO = len(dark_objects['aos'])
+    dft_path = parmt.store + '/DFT/'
+    
+    mo_coeff = np.load(dft_path + 'mo_coeff_i.npy')
+    mo_en = np.load(dft_path + 'mo_en_i.npy')
+    kpts = np.load(parmt.store + '/k-pts_i.npy')
+
+    N_k = kpts.shape[0]
+    q_cuts = dark_objects['R_cutoff_q_points']
+    G_vectors = dark_objects['G_vectors']
+    primgauss_arr, AO_arr, coeff_arr = dark_objects['block_arrays']
+    unique_Ri = load_unique_R()
+
+    VCell = dark_objects['V_cell'] 
+    cell = dark_objects['cell']
+
+    # Finding relevant G vectors
+    G = G_vectors[np.linalg.norm(G_vectors, axis=1) < parmt.q_max + 1.5*parmt.dq]
+    N_G = G.shape[0]
+    G = G[1:] # remove G = 0 from wings calculation
+
+    # Generate optimal path for 3D overlaps calculation
+    einsum_path = np.einsum_path('kbj,kba,kai->kij', mo_coeff, np.ones((N_k, N_AO, N_AO)), mo_coeff)[0]
+
+    prefactor_head = 8.*(np.pi**2)*(alpha**4)*me/(VCell*N_k*parmt.dE) * (alpha*me)**2
+    prefactor_wings = 8.*(np.pi**2)*(alpha**2)*me/(VCell*N_k)/parmt.dE
+
+    # Calculating head for 0 <= E <= E_max
+    eps_im = prefactor_head * RPA_head(cell, kpts, q_dir, mo_en[:,valbot:valtop+1], mo_en[:,conbot:contop+1], mo_coeff[:,:,valbot:valtop+1], mo_coeff[:,:,conbot:contop+1])
+    # Head for -E_max <= E <= E_max
+    eps_im_head = np.concatenate((-1*np.flip(eps_im)[:-1], eps_im)) #(E,)
+
+    #if rank == 0 or rank == None:
+    logger.info(f'\t\t\tStarting calculation of spectral part of wings of polarizability')
+    start_time = time.time()
+
+    # For E >=0, initial states are occupied and final states are unoccupied
+    eps_delta_wings_p = prefactor_wings * RPA_wings(G, cell, kpts, q_dir, mo_en[:,valbot:valtop+1], mo_en[:,conbot:contop+1], mo_coeff[:,:,valbot:valtop+1], mo_coeff[:,:,conbot:contop+1], primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, einsum_path) #(E,G)
+
+    # For E < 0, initial states are unoccupied and final states are occupied
+    eps_delta_wings_n = -1 * prefactor_wings * RPA_wings(G, cell, kpts, q_dir, mo_en[:,conbot:contop+1], mo_en[:,valbot:valtop+1], mo_coeff[:,:,conbot:contop+1], mo_coeff[:,:,valbot:valtop+1], primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, einsum_path)
+
+    eps_delta_wings = np.concatenate((np.flip(eps_delta_wings_n, axis=0)[:-1], eps_delta_wings_p), axis=0) #(E,G)
+
+    # Body
+    RPA_body_LFE(G, kpts, mo_coeff[:,:,valbot:valtop+1], mo_coeff[:,:,conbot:contop+1].conj(), )
+
+
+
+
+
+    #Take LFE Kramers-Kronig with dummy G' index
+    eps_lfe_head = kk.kramerskronig_lfe(eps_im_head.astype('complex')[:,np.newaxis,np.newaxis], parmt.E_max, parmt.dE)[:,0,0] + 1.
+    eps_lfe_wings = kk.kramerskronig_lfe(eps_delta_wings[:,:,np.newaxis], parmt.E_max, parmt.dE)[:,:,0]
+
+    # Formula for inversion of only first element? - Need body
+
+
+    #np.save(parmt.store + '/epsilon_0q.npy', eps_0q)
+    #print(time.time() - start_time)
+
+@time_wrapper(n_tabs=2)
+def RPA_LFE_0q_q(G, cell, q_dir, mo_en, mo_coeff, k, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, unique_Ri, einsum_path, working_dir, rank):
+    """
+    Wings
+    """
+    N_k = k.shape[0]
+
+    prefactor_head = 8.*(np.pi**2)*(alpha**4)*me/(VCell*N_k*parmt.dE) * (alpha*me)**2
+    prefactor_wings = 8.*(np.pi**2)*(alpha**2)*me/(VCell*N_k)/parmt.dE
+
+    valbot, valtop, conbot, contop = np.load(parmt.store + '/bands.npy')
+    # Calculating head for 0 <= E <= E_max
+    eps_im = prefactor_head * RPA_head(cell, k, q_dir, mo_en[:,valbot:valtop+1], mo_en[:,conbot:contop+1], mo_coeff[:,:,valbot:valtop+1], mo_coeff[:,:,conbot:contop+1])
+    # Head for -E_max <= E <= E_max
+    eps_im_head = np.concatenate((-1*np.flip(eps_im)[:,:-1], eps_im), axis=1).T #(1,E) -> (E,1)
+
+    #if rank == 0 or rank == None:
+    logger.info(f'\t\t\tStarting calculation of spectral part of wings of polarizability')
+    start_time = time.time()
+
+    # For E >=0, initial states are occupied and final states are unoccupied
+    eps_delta_wings_p = prefactor_wings * RPA_wings(G, cell, k, q_dir, mo_en[:,valbot:valtop+1], mo_en[:,conbot:contop+1], mo_coeff[:,:,valbot:valtop+1], mo_coeff[:,:,conbot:contop+1], primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path) #(E,G)
+
+    # For E < 0, initial states are unoccupied and final states are occupied
+    eps_delta_wings_n = -1 * prefactor_wings * RPA_wings(G, cell, k, q_dir, mo_en[:,conbot:contop+1], mo_en[:,valbot:valtop+1], mo_coeff[:,:,conbot:contop+1], mo_coeff[:,:,valbot:valtop+1], primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path)
+
+    eps_delta_wings = np.concatenate((np.flip(eps_delta_wings_n, axis=0)[:-1], eps_delta_wings_p), axis=0) #(E,G)
+
+    im_delE = delta_energy(mo_en[:,valbot:valtop+1], mo_en[:,conbot:contop+1]) #(k,2,i,j) # Calculating the delta function in energy
     RPA_Im_eps_external_prefactor_LFE(qG, k_f, mo_coeff_i[:,:,valbot:valtop+1], mo_coeff_f_conj[:,:,conbot:contop+1], im_delE, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank, prefactor, neg_E=False)
     
     if rank == 0 or rank == None:
@@ -577,13 +1009,12 @@ def get_RPA_dielectric_LFE_q(q, mo_en_f, mo_en_i, mo_coeff_f_conj, mo_coeff_i, k
     if rank == 0 or rank == None:
         logger.info(f'\t\t\tFinished calculation of delta part of polarizability for -{parmt.E_max} <= E <= 0 eV. Time taken = {(time.time() - start_time):.2f} s')
 
-
-def RPA_Im_eps_external_prefactor_LFE(qG, k_f, mo_coeff_i, mo_coeff_f_conj, im_delE, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank, prefactor, neg_E):
+def RPA_Im_eps_external_prefactor_LFE_0q_wings(qG, k_f, mo_coeff_i, mo_coeff_f_conj, im_delE, primgauss_arr, AO_arr, coeff_arr, q_cuts, unique_Ri, einsum_path, working_dir, rank, prefactor, neg_E):
     """
-    Returns delta function part of lim_{n->0} |<j(k+q)|exp(i(q+G)r)|ik>|^2/|q+G|^2/(E - (E_{j(k+q)} - E_{ik} + i n)), summed over i,j,k. 
+    Writes spectral part of lim_{n->0} <ik|exp(-i(q+G)r)|j(k+q)> <j(k+q)|exp(i(q+G')r)|ik> / |q+G| / |q+G'| /(E - (E_{j(k+q)} - E_{ik} +/- i n)), summed over i,j,k, to hdf5 file. 
 
     Inputs: 
-        qG ((N_G, 3) np.ndarray): q+G vectors
+        qG ((N_G, 3) np.ndarray): q + G vectors
         primgauss_arr ((N_blocks, N_primgauss, 3) boolean np.ndarray):
             Primitive gaussians are included in each block
         AO_arr ((N_blocks, N_AO) boolean np.ndarray):

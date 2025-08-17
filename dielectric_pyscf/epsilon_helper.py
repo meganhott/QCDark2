@@ -7,9 +7,73 @@ import dielectric_pyscf.input_parameters as parmt
 alpha = 1/137
 me = 0.51099895000e6 #eV
 
+def delta_G(im_delE_k, ovlp1, ovlp2, N_E):
+    """
+    Returns spectral part of dielectric function (up to a prefactor) for head, wings, and noLFE body for one k
+
+    Inputs:
+        im_delE_k (2,i,j) delta function information
+        ovlp1, ovlp2 (i,j,G) overlap factors
+        N_E: int: number of energies
+    Outputs:
+        eps_delta (E,G)
+
+    """
+    N_G = ovlp1.shape[2]
+    eps_delta = np.zeros((N_E, N_G), dtype='complex')
+
+    i_ind, j_ind = np.nonzero(im_delE_k[0] < N_E)
+    im_delE_ij = im_delE_k[:, i_ind, j_ind] #(2, ij)
+
+    ovlp1_ij = ovlp1[i_ind, j_ind] #(i,j,G) -> (ij,G) #only keeps i,j pairs relevent to delta calculation
+    ovlp2_ij = ovlp2[i_ind, j_ind]
+    ovlp = ovlp1_ij * ovlp2_ij #(ij,G)
+
+    for i in range(ovlp.shape[0]):
+        ind, rem = im_delE_ij[:,i]
+        eps_delta[int(ind)] += rem * ovlp[i] #already checked ind < nE
+        if ind < N_E - 1:
+            eps_delta[int(ind+1)] += (1. - rem) * ovlp[i]
+
+    return eps_delta
+
+def delta_GG(im_delE_ind, im_delE_rem, eta_qG, E_i, E_f, N_G, prefactor):
+    """
+    Returns spectral part of dielectric function for LFE body for one E_i:E_f chunk
+
+    Inputs:
+        im_delE_ind (k,i,j) delta function energy indices
+        im_delE_rem (k,i,j) delta function remainders
+        eta_qG (k,i,j,G) overlap factors
+        E_i: int: initial energy index of chunk
+        E_f: int: final energy index of chunk
+        N_G: int: number of G-vectors
+
+    Outputs:
+        eps_delta_chunk (E_i:E_f,G)
+    """
+    eps_delta_n_min_1 = np.zeros((N_G, N_G), dtype='complex')
+    eps_delta_chunk = np.empty((E_f-E_i, N_G, N_G), dtype='complex')
+
+    for i in range(E_f - E_i):
+        n_E = E_i + i
+        k_ind, i_ind, j_ind = np.where(im_delE_ind == n_E)
+        eta_qG_kij = eta_qG[k_ind, i_ind, j_ind] #(k,i,j,G) -> (kij,G) #only keeps k,i,j elements relevent to delta calculation
+        rem_kij = im_delE_rem[k_ind, i_ind, j_ind]
+
+        eta_qG_kij_sq = np.empty((k_ind.shape[0], eta_qG_kij.shape[1], eta_qG_kij.shape[1]), dtype='complex')
+        eta_qG_kij_sq = gen_outer(eta_qG_kij.conj(), eta_qG_kij, eta_qG_kij_sq, prefactor) #numba optimized function
+
+        eps_delta_n = np.tensordot(rem_kij, eta_qG_kij_sq, axes=(0,0)) 
+        eps_delta_chunk[i] = eps_delta_n + eps_delta_n_min_1
+
+        eps_delta_n_min_1 = np.tensordot(1 - rem_kij, eta_qG_kij_sq, axes=(0,0)) # (1 - rem)*eta_sq
+
+    return eps_delta_chunk
+
 def get_eps_im_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path, im_delE, working_dir):
     """
-    For non-LFE code
+    Returns imaginary part of dielectric function (up to a prefactor) for body of non-LFE
     """
     N_E = int(parmt.E_max/parmt.dE + 1)
 
@@ -17,21 +81,44 @@ def get_eps_im_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_ar
     eta_qG = get_3D_overlaps_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path) #(a,b,G)
     eta_qG = eta_qG / np.linalg.norm(qG, axis=1)[None,None,:] #(a,b,G)
 
-    eps_im = np.zeros((N_E, qG.shape[0]), dtype='float')
+    eps_im = np.real(delta_G(im_delE[i_k], eta_qG, eta_qG.conj(), N_E))
 
-    a_ind, b_ind = np.nonzero(im_delE[i_k,0] < N_E)
-    eta_qG_ab = eta_qG[a_ind, b_ind] #(a,b,G) -> (ab,G) #only keeps a,b pairs relevent to delta calculation
-    eta_qG_sq = (eta_qG_ab*eta_qG_ab.conj()).real #(ab,G)
-    im_delE_ab = im_delE[i_k, :, a_ind, b_ind] #(2, ab)
-
-    for i in range(eta_qG_sq.shape[0]):
-        ind, rem = im_delE_ab[i]
-        eps_im[int(ind)] += rem*eta_qG_sq[i] #already checked ind < nE
-        if ind < N_E - 1:
-            eps_im[int(ind+1)] += (1. - rem)*eta_qG_sq[i]
     np.save(working_dir + f'/eps_im/eps_im_k{i_k}.npy', np.transpose(eps_im, (1,0)).copy())
     #return eps_im
 
+def get_eps_im_k_head(i_k, ovlp, im_delE):
+    """
+    Returns imaginary part of head (G = G' = 0, q -> 0 limit) of dielectric function (up to a prefactor) 
+
+    Inputs:
+        i_k int
+        ovlp (i,j)
+        im_delE (k,i,j)
+    """
+    N_E = int(parmt.E_max/parmt.dE + 1)
+
+    eps_im = np.real(delta_G(im_delE[i_k], ovlp[:,:,np.newaxis], ovlp.conj()[:,:,np.newaxis], N_E))[:,0] #(E,)
+
+    return eps_im
+
+def get_eps_delta_k_wings(i_k, k_f, ovlp, mo_coeff_i, mo_coeff_f_conj, G, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path, im_delE):
+    """
+    Returns spectral part of wings (G = 0, G' != 0, q -> 0 limit) of dielectric function (up to a prefactor) 
+
+    Inputs:
+        i_k int
+        ovlp (i,j)
+        im_delE (k,i,j)
+    """
+    N_E = int(parmt.E_max/parmt.dE + 1)
+
+    #Calculating 3D overlaps
+    eta_qG = get_3D_overlaps_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, G, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path) #(a,b,G)
+    eta_qG = eta_qG / np.linalg.norm(G, axis=1)[None,None,:] #(a,b,G)
+
+    eps_delta = delta_G(im_delE[i_k], ovlp, eta_qG, N_E) #(E,G)
+
+    return eps_delta
 
 def get_3D_overlaps_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path, working_dir=None):
     """

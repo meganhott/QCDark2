@@ -57,18 +57,31 @@ def save_dft(cell):
     dft_instances = os.listdir(dft_path)
     for d in dft_instances:
         dft_dict = json.load(open(f'{dft_path}/{d}/dft_params.txt', 'r'))
-        if all(dft_dict[key] == dft_params[key] for key in dft_dict.keys() if key not in ['dft_instance', 'basis', 'ecp', 'pseudo', 'atom']) and cell.format_atom(dft_dict['atom'], unit=1) == dft_params['atom']: # compare everything except dft_instance and unformatted 
-            dft_params['dft_instance'] = d
-            dft_files = os.listdir(dft_path + '/' + d)
-            if len(dft_files) < 4: # something went wrong with previously calculated DFT, calculation should be started again
-                logger.info(f'There is not a stored DFT cacluation for these input parameters, a new calculation will be performed and stored as {d}.')
-                new_dft = True
-            elif ('mo_en_i_dft.npy' in dft_files) and ('mo_en_f_dft.npy' not in dft_files):
-                logger.info(f'A SCF calculation has been performed for these input parameters as stored as {d} but must be redone for the NSCF calculation')
-                new_dft = True
-            else:
-                logger.info(f'DFT already calculated for these input parameters and stored as {d}')
-                new_dft = False
+
+        if parmt.optical_limit: #only check initial DFT calculation - this is equivalent to q_shift = 0
+            if all(dft_dict[key] == dft_params[key] for key in dft_dict.keys() if key not in ['dft_instance', 'basis', 'ecp', 'pseudo', 'atom', 'q_shift_dir', 'q_shift']) and cell.format_atom(dft_dict['atom'], unit=1) == dft_params['atom']: # compare everything except dft_instance and unformatted atom
+                dft_params['dft_instance'] = d
+                dft_files = os.listdir(dft_path + '/' + d)
+                if len(dft_files) < 4: # something went wrong with previously calculated DFT, calculation should be started again
+                    logger.info(f'There is not a stored DFT cacluation for these input parameters, a new calculation will be performed and stored as {d}.')
+                    new_dft = True
+                else:
+                    logger.info(f'DFT already calculated for these input parameters and stored as {d}')
+                    new_dft = False
+
+        else: # check initial and final DFT calculations
+            if all(dft_dict[key] == dft_params[key] for key in dft_dict.keys() if key not in ['dft_instance', 'basis', 'ecp', 'pseudo', 'atom']) and cell.format_atom(dft_dict['atom'], unit=1) == dft_params['atom']: # compare everything except dft_instance and unformatted atom
+                dft_params['dft_instance'] = d
+                dft_files = os.listdir(dft_path + '/' + d)
+                if len(dft_files) < 4: # something went wrong with previously calculated DFT, calculation should be started again
+                    logger.info(f'There is not a stored DFT cacluation for these input parameters, a new calculation will be performed and stored as {d}.')
+                    new_dft = True
+                elif ('mo_en_i_dft.npy' in dft_files) and ('mo_en_f_dft.npy' not in dft_files):
+                    logger.info(f'A SCF calculation has been performed for these input parameters as stored as {d} but must be redone for the NSCF calculation')
+                    new_dft = True
+                else:
+                    logger.info(f'DFT already calculated for these input parameters and stored as {d}')
+                    new_dft = False
             return new_dft, dft_params
         
     if dft_params['dft_instance'] is None:
@@ -140,17 +153,20 @@ def make_kpts(cell: pbcgto.cell.Cell, dft_params: dict) -> pyscf.pbc.lib.kpts.KP
     logger.info(f'{kpts_i.shape[0]} initial k vectors generated and stored to {parmt.store}/k-pts_i.npy given k-grid:\n\tnk_x = {k_grid[0]}, nk_y = {k_grid[1]}, nk_z = {k_grid[2]}.')
 
     # Save k_f
-    q_shift_dir = np.array(dft_params['q_shift_dir'])
-    q_shift = dft_params['q_shift'] * q_shift_dir / np.linalg.norm(q_shift_dir)
+    if parmt.optical_limit:
+        kpts_f = kpts_i
+    else:
+        q_shift_dir = np.array(dft_params['q_shift_dir'])
+        q_shift = dft_params['q_shift'] * q_shift_dir / np.linalg.norm(q_shift_dir)
 
-    logger.info(f'Selected q shift = {np.array2string(q_shift, precision = 5)}')
+        logger.info(f'Selected q shift = {np.array2string(q_shift, precision = 5)}')
 
-    scaled_center = cell.get_scaled_kpts(q_shift)
+        scaled_center = cell.get_scaled_kpts(q_shift)
 
-    kpts_f = cell.make_kpts(dft_params['k_grid'], wrap_around=True, scaled_center=scaled_center)
+        kpts_f = cell.make_kpts(dft_params['k_grid'], wrap_around=True, scaled_center=scaled_center)
+
+        logger.info(f'{kpts_f.shape[0]} final k vectors generated and stored to {parmt.store}/k-pts_f.npy given k-grid:\n\tnk_x = {dft_params["k_grid"][0]}, nk_y = {dft_params["k_grid"][1]}, nk_z = {dft_params["k_grid"][2]}.')
     np.save(dft_path + '/k-pts_f', kpts_f)
-
-    logger.info(f'{kpts_f.shape[0]} final k vectors generated and stored to {parmt.store}/k-pts_f.npy given k-grid:\n\tnk_x = {dft_params["k_grid"][0]}, nk_y = {dft_params["k_grid"][1]}, nk_z = {dft_params["k_grid"][2]}.')
 
     # Using symmetry breaks many DFT calculations, no longer implemented
     """
@@ -250,23 +266,26 @@ def KS_non_self_consistent_field(kmf: pbcdft.krks_ksymm.KsymAdaptedKRKS, dft_par
         dft_params (dict):
             DFT parameters
     """
-    logger.info('Final State Calculation:')
-    kpts = make_kpts(kmf.cell, dft_params)[1]
+    if parmt.optical_limit:
+        logger.info('Intial k-grid = final k-grid for optical_limit=True, so no non-self-consistent calculation needs to be perfomed.')
+    else:
+        logger.info('Final State Calculation:')
+        kpts = make_kpts(kmf.cell, dft_params)[1]
 
-    energy_k, coeff_k = kmf.get_bands(kpts)
+        energy_k, coeff_k = kmf.get_bands(kpts)
 
-    # Using symmetry breaks many DFT calculations, no longer implemented
-    """
-    enegy_k , coeff_k = kmf.get_bands(kpts.kpts_ibz)
-    energy_k = kpts.transform_mo_energy(ek)
-    coeff_k = kpts.transform_mo_coeff(ck)
-    """
+        # Using symmetry breaks many DFT calculations, no longer implemented
+        """
+        enegy_k , coeff_k = kmf.get_bands(kpts.kpts_ibz)
+        energy_k = kpts.transform_mo_energy(ek)
+        coeff_k = kpts.transform_mo_coeff(ck)
+        """
 
-    dft_path = parmt.DFT_resources_path + '/DFT_resources/' + dft_params['dft_instance']
-    np.save(dft_path + '/mo_en_f_dft.npy', energy_k)
-    np.save(dft_path + '/mo_coeff_f.npy', coeff_k)
+        dft_path = parmt.DFT_resources_path + '/DFT_resources/' + dft_params['dft_instance']
+        np.save(dft_path + '/mo_en_f_dft.npy', energy_k)
+        np.save(dft_path + '/mo_coeff_f.npy', coeff_k)
 
-    logger.info(f'Non self consistent field equations solved for final state k-points. Data is stored to {dft_path}.')
+        logger.info(f'Non-self-consistent field equations solved for final state k-points. Data is stored to {dft_path}.')
 
 @time_wrapper
 def convert_to_eV_and_scissor(cell: pbcgto.cell.Cell, dft_params: dict):
@@ -281,7 +300,10 @@ def convert_to_eV_and_scissor(cell: pbcgto.cell.Cell, dft_params: dict):
     """
     dft_path = parmt.DFT_resources_path + '/DFT_resources/' + dft_params['dft_instance']
     mo_en_i = np.load(dft_path + '/mo_en_i_dft.npy')*alpha*alpha*me # molecular orbital energies for initial k-points, convert to eV
-    mo_en_f = np.load(dft_path + '/mo_en_f_dft.npy')*alpha*alpha*me # molecular orbital energies for final k-points, convert to eV
+    if parmt.optical_limit:
+        mo_en_f = mo_en_i
+    else:
+        mo_en_f = np.load(dft_path + '/mo_en_f_dft.npy')*alpha*alpha*me # molecular orbital energies for final k-points, convert to eV
 
     occ_orb = cell.tot_electrons()//2 # number of occupied orbitals 
     homo = max(mo_en_i[:,:occ_orb].max(), mo_en_f[:,:occ_orb].max()) # energy of highest occupied MO
@@ -302,18 +324,24 @@ def convert_to_eV_and_scissor(cell: pbcgto.cell.Cell, dft_params: dict):
     
     makedir(parmt.store + '/DFT')
     np.save(parmt.store + '/DFT/mo_en_i.npy', mo_en_i)
-    np.save(parmt.store + '/DFT/mo_en_f.npy', mo_en_f)
 
     # Store MO coefficients and k-points in main file as well
     mo_coeff_i = np.load(dft_path + '/mo_coeff_i.npy')
-    mo_coeff_f = np.load(dft_path + '/mo_coeff_f.npy')
     np.save(parmt.store + '/DFT/mo_coeff_i.npy', mo_coeff_i)
-    np.save(parmt.store + '/DFT/mo_coeff_f.npy', mo_coeff_f)
 
     k_i = np.load(dft_path + '/k-pts_i.npy')
-    k_f = np.load(dft_path + '/k-pts_f.npy')
     np.save(parmt.store + '/k-pts_i.npy', k_i)
-    np.save(parmt.store + '/k-pts_f.npy', k_f)
+
+    if parmt.optical_limit: # final kpts same as initial
+        np.save(parmt.store + '/k-pts_f.npy', k_i)
+    else: # if q_shift != 0, also need to store NSCF results
+        np.save(parmt.store + '/DFT/mo_en_f.npy', mo_en_f)
+
+        mo_coeff_f = np.load(dft_path + '/mo_coeff_f.npy')
+        np.save(parmt.store + '/DFT/mo_coeff_f.npy', mo_coeff_f)
+
+        k_f = np.load(dft_path + '/k-pts_f.npy')
+        np.save(parmt.store + '/k-pts_f.npy', k_f)
 
     logger.info('Electronic structure energies updated in files.')
 
@@ -342,7 +370,10 @@ def get_band_indices(dft_params: dict):
             raise Exception('If you want to automatically exclude irrelevant conduction band valence bands, both "numval" and "numcon" must be set to "auto" in input_parameters.')
         else:
             mo_en_i = np.load(parmt.store + '/DFT/mo_en_i.npy')
-            mo_en_f = np.load(parmt.store + '/DFT/mo_en_f.npy')
+            if parmt.optical_limit:
+                mo_en_f = mo_en_i
+            else:
+                mo_en_f = np.load(parmt.store + '/DFT/mo_en_f.npy')
             mo_en = np.concatenate((mo_en_i, mo_en_f), axis=0)
 
             mo_en_min = np.min(mo_en, axis=0) # min and max energies of each band
@@ -361,13 +392,14 @@ def get_band_indices(dft_params: dict):
                     # If the transition energy to all valence bands is larger than E_max, we can discard this conduction band
                     bands_to_discard[i+num_all_val] = False
 
-            # discard these bands and update number of inluded valence and conduction bands
+            # discard these bands and update number of included valence and conduction bands
 
             np.save(parmt.store + '/DFT/mo_en_i.npy', mo_en_i[:, bands_to_discard])
-            np.save(parmt.store + '/DFT/mo_en_f.npy', mo_en_f[:, bands_to_discard])
-
             np.save(parmt.store + '/DFT/mo_coeff_i.npy', np.load(parmt.store + '/DFT/mo_coeff_i.npy')[:,:,bands_to_discard])
-            np.save(parmt.store + '/DFT/mo_coeff_f.npy', np.load(parmt.store + '/DFT/mo_coeff_f.npy')[:,:,bands_to_discard])
+
+            if not parmt.optical_limit:
+                np.save(parmt.store + '/DFT/mo_en_f.npy', mo_en_f[:, bands_to_discard])
+                np.save(parmt.store + '/DFT/mo_coeff_f.npy', np.load(parmt.store + '/DFT/mo_coeff_f.npy')[:,:,bands_to_discard])
 
             new_num_all_val = np.count_nonzero(bands_to_discard[:num_all_val])
             new_num_all_con = np.count_nonzero(bands_to_discard[num_all_val:])
