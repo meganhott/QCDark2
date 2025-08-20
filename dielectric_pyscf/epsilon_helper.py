@@ -116,7 +116,7 @@ def get_eps_delta_k_wings(i_k, k_f, ovlp, mo_coeff_i, mo_coeff_f_conj, G, primga
     eta_qG = get_3D_overlaps_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, G, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path) #(a,b,G)
     eta_qG = eta_qG / np.linalg.norm(G, axis=1)[None,None,:] #(a,b,G)
 
-    eps_delta = delta_G(im_delE[i_k], ovlp, eta_qG, N_E) #(E,G)
+    eps_delta = delta_G(im_delE[i_k], np.repeat(ovlp[:,:,None], eta_qG.shape[2], axis=2), eta_qG, N_E) #(E,G)
 
     return eps_delta
 
