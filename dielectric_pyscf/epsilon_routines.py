@@ -19,9 +19,9 @@ import dielectric_pyscf.kramers_kronig as kk
 def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
     if parmt.optical_limit:
         if parmt.include_lfe:
-            tot_bin_eps, tot_bin_weights, bin_centers = RPA_LFE_0q(dark_objects, parmt.optical_q_dir)
+            tot_bin_eps, tot_bin_weights, bin_centers = RPA_LFE_0q(dark_objects, parmt.optical_q_dir, rank, q_start, q_stop)
         else:
-            tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE_0q(dark_objects, parmt.optical_q_dir)
+            tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE_0q(dark_objects, parmt.optical_q_dir, rank, q_start, q_stop)
 
     else: # optical_limit = False
         if parmt.include_lfe:
