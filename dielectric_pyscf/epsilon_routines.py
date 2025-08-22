@@ -1205,8 +1205,8 @@ def RPA_LFE_0q(dark_objects, q_dir, rank=None, q_start=parmt.q_start, q_stop=par
             q_dir = q_dir/np.linalg.norm(q_dir) # normalize to get unit vector
 
             prefactor_head = 8.*(np.pi**2)*(alpha**4)*me/(VCell*N_k*parmt.dE) * (alpha*me)**2
-            prefactor_wings = 8.*(np.pi**2)*(alpha**2)*me/(VCell*N_k)/parmt.dE
-            prefactor_body = 8.*(np.pi**2)*(alpha**2)*me/(VCell*len(k_pairs))/parmt.dE
+            prefactor_wings = 8.*(np.pi**2)*(alpha**3)*me/(VCell*N_k)/parmt.dE * alpha*me
+            prefactor_body = 8.*(np.pi**2)*(alpha**2)*me/(VCell*N_k)/parmt.dE
 
             # Calculating head for 0 <= E <= E_max
             eps_im_head = prefactor_head * RPA_head(cell, kpts[k_pairs[:,1]], q_dir, mo_en[k_pairs[:,0],valbot:valtop+1], mo_en[k_pairs[:,1],conbot:contop+1], mo_coeff[k_pairs[:,0],:,valbot:valtop+1], mo_coeff[k_pairs[:,1],:,conbot:contop+1]) #(E,)
