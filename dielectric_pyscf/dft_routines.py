@@ -82,7 +82,6 @@ def save_dft(cell):
                 else:
                     logger.info(f'DFT already calculated for these input parameters and stored as {d}')
                     new_dft = False
-            return new_dft, dft_params
         
     if dft_params['dft_instance'] is None:
         if len(dft_instances) == 0:
