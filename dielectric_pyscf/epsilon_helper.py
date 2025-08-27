@@ -37,7 +37,7 @@ def delta_G(im_delE_k, ovlp1, ovlp2, N_E):
 
     return eps_delta
 
-def delta_GG(im_delE_ind, im_delE_rem, eta_qG, E_i, E_f, N_G, prefactor):
+def delta_GG(im_delE_ind, im_delE_rem, eta_qG, E_i, E_f, N_G, prefactor, eps_delta_n_min_1):
     """
     Returns spectral part of dielectric function for LFE body for one E_i:E_f chunk
 
@@ -52,7 +52,6 @@ def delta_GG(im_delE_ind, im_delE_rem, eta_qG, E_i, E_f, N_G, prefactor):
     Outputs:
         eps_delta_chunk (E_i:E_f,G)
     """
-    eps_delta_n_min_1 = np.zeros((N_G, N_G), dtype='complex')
     eps_delta_chunk = np.empty((E_f-E_i, N_G, N_G), dtype='complex')
 
     for i in range(E_f - E_i):
@@ -69,7 +68,7 @@ def delta_GG(im_delE_ind, im_delE_rem, eta_qG, E_i, E_f, N_G, prefactor):
 
         eps_delta_n_min_1 = np.tensordot(1 - rem_kij, eta_qG_kij_sq, axes=(0,0)) # (1 - rem)*eta_sq
 
-    return eps_delta_chunk
+    return eps_delta_chunk, eps_delta_n_min_1
 
 def get_eps_im_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path, im_delE, working_dir):
     """

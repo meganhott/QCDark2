@@ -621,6 +621,7 @@ def RPA_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q
 
         if rank == 0 or rank == None:
             logger.info(f'\tcomplete. Time taken = {(time.time() - start_time_full):.2f} s.')
+        return tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 
     # Removing extra bins 
     tot_bin_eps_im = tot_bin_eps_im[:-N_ang_bins, :]
@@ -748,12 +749,13 @@ def RPA_body_LFE(qG, k_f, mo_coeff_i, mo_coeff_f_conj, im_delE, primgauss_arr, A
     if rank == 0 or rank == None:
         logger.info(f"\t\t\t\tBeginning eps_delta. This will be performed in {N_E_chunks} batches of N_E = {E_per_chunk}")
 
+    eps_delta_n_min_1 = np.zeros((N_G, N_G), dtype='complex')
     for n_E_chunk in range(N_E_chunks):
         start_time1 = time.time()
         E_i = E_start[n_E_chunk]
         E_f = E_stop[n_E_chunk]
         
-        eps_delta_chunk = eps.delta_GG(im_delE_ind, im_delE_rem, eta_qG, E_i, E_f, N_G, prefactor)
+        eps_delta_chunk, eps_delta_n_min_1 = eps.delta_GG(im_delE_ind, im_delE_rem, eta_qG, E_i, E_f, N_G, prefactor, eps_delta_n_min_1)
         
         if parmt.debug_logging and (rank == 0 or rank == None):
             logger.info(f'\t\t\t\t\t\tBatch {n_E_chunk} of eps_delta calculated. Time taken = {(time.time() - start_time1):.2f} s.')
@@ -761,7 +763,7 @@ def RPA_body_LFE(qG, k_f, mo_coeff_i, mo_coeff_f_conj, im_delE, primgauss_arr, A
         # write to hdf5 only after entire chunk has been calculated
         start_time1 = time.time()
         if ind_sign == -1:
-            eps_delta[(ind_sign*E_f + int(parmt.E_max/parmt.dE)):(ind_sign*E_i + int(parmt.E_max/parmt.dE)), N_G_skip:, N_G_skip:] = np.flip(eps_delta_chunk, axis=0)
+            eps_delta[(ind_sign*E_f + int(parmt.E_max/parmt.dE) + 1):(ind_sign*E_i + int(parmt.E_max/parmt.dE) + 1), N_G_skip:, N_G_skip:] = np.flip(eps_delta_chunk, axis=0)
         else: # ind_sign = 1
             eps_delta[(ind_sign*E_i + int(parmt.E_max/parmt.dE)):(ind_sign*E_f + int(parmt.E_max/parmt.dE)), N_G_skip:, N_G_skip:] = eps_delta_chunk
         
