@@ -21,7 +21,10 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
         if parmt.include_lfe:
             tot_bin_eps, tot_bin_weights, bin_centers = RPA_LFE_0q(dark_objects, parmt.optical_q_dir, rank, q_start, q_stop)
         else:
-            tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE_0q(dark_objects, parmt.optical_q_dir, rank, q_start, q_stop)
+            if parmt.dir_1d is not None: # only compute along one direction
+                tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE_0q_1d(dark_objects, parmt.optical_q_dir, rank, q_start, q_stop)
+            else:
+                tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE_0q(dark_objects, parmt.optical_q_dir, rank, q_start, q_stop)
 
     else: # optical_limit = False
         if parmt.include_lfe:
@@ -929,6 +932,145 @@ def RPA_noLFE_0q(dark_objects, q_dir, rank=None, q_start=parmt.q_start, q_stop=p
     # Removing extra bins
     tot_bin_eps_im = tot_bin_eps_im[:-N_ang_bins, :]
     tot_bin_weights = tot_bin_weights[:-N_ang_bins]
+
+    if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
+        save_eps(1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
+
+    #shutil.rmtree(working_dir) # delete working directory
+
+    return 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
+
+def RPA_noLFE_0q_1d(dark_objects, q_dir, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
+    N_AO = len(dark_objects['aos'])
+    ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
+    
+    dft_path = parmt.store + '/DFT/'
+    mo_coeff = np.load(dft_path + 'mo_coeff_i.npy')
+    mo_en = np.load(dft_path + 'mo_en_i.npy')
+    kpts = np.load(parmt.store + '/k-pts_i.npy')
+
+    N_k = kpts.shape[0]
+    VCell = dark_objects['V_cell'] 
+    cell = dark_objects['cell']
+
+    q_cuts = dark_objects['R_cutoff_q_points']
+    G_vectors = dark_objects['G_vectors']
+    unique_q = dark_objects['unique_q']
+    N_q = len(unique_q)
+    primgauss_arr, AO_arr, coeff_arr = dark_objects['block_arrays']
+    unique_Ri = load_unique_R()
+
+    dir_1d = parmt.dir_1d
+    dir_sph = binning.cartesian_to_spherical(np.array([dir_1d]))[0]
+
+    # Generating bins
+    bin_centers = binning.gen_bin_centers(parmt.q_max, parmt.q_min, parmt.dq, parmt.N_theta, parmt.N_phi, dir=True)
+
+    mo_en_val = mo_en[:,ivalbot:ivaltop+1] #(k,i)
+    mo_en_con = mo_en[:,iconbot:icontop+1] #(k,j)
+    mo_coeff_val = mo_coeff[:,:,ivalbot:ivaltop+1] #(k,a,i)
+    mo_coeff_con = mo_coeff[:,:,iconbot:icontop+1] #(k,b,j)
+
+    # Generate optimal path for 3D overlaps calculation
+    einsum_path = np.einsum_path('kbj,kba,kai->kij', mo_coeff, np.ones((N_k, N_AO, N_AO)), mo_coeff)[0]
+
+    # Make working directory
+    if rank == None:
+        working_dir = parmt.store + '/working_dir'
+    else: #MPI
+        working_dir = parmt.store + f'/working_dir_rank{rank}'
+    makedir(working_dir)
+    makedir(working_dir + '/eps_im')
+
+    if rank == 0 or rank == None:
+        logger.info(f'Total number of q: {N_q}.')
+    if rank == 0: #MPI
+        logger.info(f'{q_stop - q_start} q will be calculated per node. Only rank 0 will be logged.')
+
+    if q_start == None:
+        q_start = 0
+    if q_stop == None:
+        q_stop = N_q
+
+    q_keys = list(unique_q.keys())[q_start:q_stop]
+
+    tot_bin_eps_im = np.zeros((bin_centers.shape[0]+1, int(parmt.E_max/parmt.dE)+1))
+    tot_bin_weights = np.zeros(bin_centers.shape[0]+1)
+
+    for i_q, q in enumerate(q_keys, start=q_start):
+        k_pairs = np.array(unique_q[q])
+        q = np.array(q)
+
+        if rank == 0 or rank == None:
+            logger.info(f'\ti_q: {i_q + 1}\n\t\tq = {np.array2string(q, precision=5)},')
+
+        start_time = time.time()
+
+        # Finding relevant G vectors
+        G_q = G_vectors[np.linalg.norm(q[None, :]+G_vectors, axis=1) < parmt.q_max + 1.5*parmt.dq]
+        G_q = G_q[np.linalg.norm(q[None, :]+G_q, axis=1) > parmt.q_min - 0.5*parmt.dq]
+
+        qpG_sph = binning.cartesian_to_spherical(q + G_q)
+        if parmt.dir_1d_exact_angle: # exactly match angle
+            G_q = G_q[(np.round(qpG_sph[:,1],4) == np.round(dir_sph[1], 4)) & (np.round(qpG_sph[:,2],4) == np.round(dir_sph[2], 4))] # select G along specified direction
+        else: # just match within N_theta and N_phi accuracy
+            costheta_l = np.cos(dir_sph[1] + np.pi/parmt.N_theta/2)
+            costheta_g = np.cos(dir_sph[1] - np.pi/parmt.N_theta/2)
+
+            if np.round(costheta_g, 4) == np.round(costheta_l, 4):
+                costheta_g = 1 #for [0,0,1] - make more general later
+
+            phi_l = dir_sph[2] - np.pi/parmt.N_phi
+            phi_g = dir_sph[2] + np.pi/parmt.N_phi
+
+            G_q = G_q[((qpG_sph[:,2] < phi_g) & (qpG_sph[:,2] > phi_l) & (np.cos(qpG_sph[:,1]) <= costheta_g) & (np.cos(qpG_sph[:,1]) >= costheta_l))]
+
+        if rank == 0 or rank == None:
+            logger.info(f'\t\tNumber of G vectors = {len(G_q)},')
+
+        if len(G_q) != 0:
+            # Imaginary part of polarizability for E >= 0
+            if rank == 0 or rank == None:
+                logger.info(f'\t\tStarting calculation of Im(eps) for 0 < E <= {parmt.E_max} eV')
+            start_time1 = time.time()
+
+            # check if q = 0 - if so, then special calculation needs to be done for G = 0. Other G are calculated normally
+            if (q == 0.).all():
+                q_dir = np.array(q_dir)
+                q_dir = q_dir/np.linalg.norm(q_dir) # normalize to get unit vector
+
+                prefactor_head = 8.*(np.pi**2)*(alpha**4)*me/(VCell*N_k*parmt.dE) * (alpha*me)**2
+
+                eps_im_head = prefactor_head * RPA_head(cell, kpts, q_dir, mo_en_val, mo_en_con, mo_coeff_val, mo_coeff_con) #(E,)
+
+                if G_q.shape[0] > 1: # calculate other G normally
+                    eps_im_body = RPA_noLFE_q(q, mo_en_con, mo_en_val, mo_coeff_con.conj(), mo_coeff_val, kpts, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q[1:], unique_Ri, einsum_path, working_dir, rank)
+
+                    #concatenate for binning
+                    eps_q_im = np.concatenate((eps_im_head[np.newaxis,:], eps_im_body), axis=0) #(G,E)
+                else:
+                    eps_q_im = eps_im_head[np.newaxis,:] #(1,E)
+
+            else: # q != [0,0,0]
+                eps_q_im = RPA_noLFE_q(q, mo_en_con, mo_en_val, mo_coeff_con.conj(), mo_coeff_val, kpts, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
+
+            if rank == 0 or rank == None:
+                logger.info(f'\t\tFinished calculation of Im(eps). Time taken = {(time.time() - start_time1):.2f} s')
+
+            start_time1 = time.time()
+            tot_bin_eps_im, tot_bin_weights = binning.bin_eps_q_1d(q, G_q, eps_q_im, bin_centers, tot_bin_eps_im, tot_bin_weights)
+
+            if rank == 0 or rank == None:
+                logger.info(f'\t\tIm(eps) binned. Time taken = {(time.time() - start_time1):.2f} s.')
+                logger.info(f'\t\tCompleted i_q = {i_q + 1}. Time taken = {(time.time() - start_time):.2f} s.')
+
+            # Save to working directory
+            np.save(f'{working_dir}/tot_bin_eps_im.npy', tot_bin_eps_im)
+            np.save(f'{working_dir}/tot_bin_weights.npy', tot_bin_weights)
+
+    # Removing extra bins
+    tot_bin_eps_im = tot_bin_eps_im[:-1, :]
+    tot_bin_weights = tot_bin_weights[:-1]
 
     if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
