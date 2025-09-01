@@ -901,8 +901,6 @@ def RPA_noLFE_0q(dark_objects, q_dir, rank=None, q_start=parmt.q_start, q_stop=p
 
             eps_im_head = prefactor_head * RPA_head(cell, kpts, q_dir, mo_en_val, mo_en_con, mo_coeff_val, mo_coeff_con) #(E,)
 
-            np.save(parmt.store + '/epsilon_0q.npy', eps_im_head)
-
             if G_q.shape[0] > 1: # calculate other G normally
                 eps_im_body = RPA_noLFE_q(q, mo_en_con, mo_en_val, mo_coeff_con.conj(), mo_coeff_val, kpts, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q[1:], unique_Ri, einsum_path, working_dir, rank)
 
@@ -1250,8 +1248,8 @@ def RPA_LFE_0q(dark_objects, q_dir, rank=None, q_start=parmt.q_start, q_stop=par
 
             eps_delta[:,0,0] = eps_delta_head
 
-            eps_delta[:,0,1:] = eps_delta_wings
-            eps_delta[:,1:,0] = -1*eps_delta_wings.conj()
+            eps_delta[:,0,1:] = eps_delta_wings.conj()
+            eps_delta[:,1:,0] = eps_delta_wings
 
             eps_delta_h5.close()
 
