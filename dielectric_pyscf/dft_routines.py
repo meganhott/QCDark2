@@ -68,13 +68,14 @@ def save_dft(cell):
                 else:
                     logger.info(f'DFT already calculated for these input parameters and stored as {d}')
                     new_dft = False
+                break
 
         else: # check initial and final DFT calculations
             if all(dft_dict[key] == dft_params[key] for key in dft_dict.keys() if key not in ['dft_instance', 'basis', 'ecp', 'pseudo', 'atom']) and cell.format_atom(dft_dict['atom'], unit=1) == dft_params['atom']: # compare everything except dft_instance and unformatted atom
                 dft_params['dft_instance'] = d
                 dft_files = os.listdir(dft_path + '/' + d)
                 if len(dft_files) < 4: # something went wrong with previously calculated DFT, calculation should be started again
-                    logger.info(f'There is not a stored DFT cacluation for these input parameters, a new calculation will be performed and stored as {d}.')
+                    logger.info(f'There is not a stored DFT calculation for these input parameters, a new calculation will be performed and stored as {d}.')
                     new_dft = True
                 elif ('mo_en_i_dft.npy' in dft_files) and ('mo_en_f_dft.npy' not in dft_files):
                     logger.info(f'A SCF calculation has been performed for these input parameters as stored as {d} but must be redone for the NSCF calculation')
@@ -82,6 +83,7 @@ def save_dft(cell):
                 else:
                     logger.info(f'DFT already calculated for these input parameters and stored as {d}')
                     new_dft = False
+                break
         
     if dft_params['dft_instance'] is None:
         if len(dft_instances) == 0:
@@ -89,7 +91,7 @@ def save_dft(cell):
         else:
             dft_params['dft_instance'] = 'DFT_' + str(max([int(d.split('_')[1]) for d in dft_instances]) + 1)
 
-        logger.info(f'There is not a stored DFT cacluation for these input parameters, a new calculation will be performed and stored as {dft_params["dft_instance"]}.')
+        logger.info(f'There is not a stored DFT calculation for these input parameters, a new calculation will be performed and stored as {dft_params["dft_instance"]}.')
         makedir(f'{dft_path}/{dft_params["dft_instance"]}')
         json.dump(dft_params, open(f'{dft_path}/{dft_params["dft_instance"]}/dft_params.txt', 'w')) # save dft parameters
         new_dft = True
