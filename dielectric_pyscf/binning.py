@@ -140,6 +140,8 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     """
     N_theta = np.unique(bin_centers[:,1]).shape[0]
     N_phi = np.unique(bin_centers[:,2]).shape[0]
+    N_ang_bins = N_phi*(N_theta-2) + 2
+
     q_min = np.min(bin_centers[:,0])
     dq = np.unique(bin_centers[:,0])[1] - np.unique(bin_centers[:,0])[0]
 
@@ -151,7 +153,7 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
         theta_id = coord_id[:,1]
         theta_factor = (theta_id > 0)*1 + ((theta_id - 1) > 0)*(theta_id - 1)*N_phi
         phi_factor = (1 - (theta_id == 0))*(1 - (theta_id == (N_theta-1)))*coord_id[:,2]
-        return coord_id[:,0]*(N_phi*(N_theta-2) + 2) + theta_factor + phi_factor
+        return coord_id[:,0]*N_ang_bins + theta_factor + phi_factor
     
     #convert q+G to spherical coords
     qG_sph = cartesian_to_spherical(q + G_vectors)
@@ -195,6 +197,10 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
         w = all_weights[i]
         tot_bin_weights[bin_id] += w
         tot_bin_eps[bin_id] += w*eps_q[i//8] #i//8 is G-vector index
+
+    # remove first bins for optical limit
+    #tot_bin_weights[:N_ang_bins] = 0
+    #tot_bin_eps[:N_ang_bins] = 0
  
     return tot_bin_eps, tot_bin_weights
 
@@ -231,5 +237,9 @@ def bin_eps_q_1d(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights)
         w = all_weights[i]
         tot_bin_weights[bin_id] += w
         tot_bin_eps[bin_id] += w*eps_q[i//2] #i//2 is G-vector index
+
+    # remove first bin for optical limit
+    tot_bin_weights[0] = 0
+    tot_bin_eps[0] = 0
  
     return tot_bin_eps, tot_bin_weights

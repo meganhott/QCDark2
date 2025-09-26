@@ -5,6 +5,7 @@ This script parses the given input file. Custom default options may be specified
 defaults = {'mpi':False, 'save_3d':False, 'dir_1d':None, 'dir_1d_exact_angle': False, 'binning_1d':False, 'optical_limit':False, 'effective_core_potential':None, 'pseudo':None, 'orth':False, 'density_fitting':'MDF', 'precision':1e-12, 'precision_R':1e-9, 'q_shift_dir':[1,1,1], 'q_shift':0.01, 'dq':0.02, 'N_theta':9, 'N_phi':16, 'dE':0.1, 'E_max':50.0}
 
 import argparse
+import numpy as np
 from pyscf.pbc import gto
 
 parser = argparse.ArgumentParser()
@@ -168,17 +169,40 @@ except KeyError:
 try:
     q_shift_dir = [float(q) for q in d['q_shift_dir'].replace(']', '').replace('[', '').split(',')]
 except ValueError:
-    raise ValueError('The direction of the shift in the final state Monkhorst-Pack k-grid must be specified as a vector in reciprocal space. For example, to shift in the k_x direction, q_shift_dir = [1,0,0]')
+    raise ValueError('The direction of the shift in the final state Monkhorst-Pack k-grid must be specified as a vector in reciprocal space. For example, to shift in the k_x direction, q_shift_dir = [1,0,0]. This does not need to be specified if q_shift_mag = 0.')
 except KeyError:
     q_shift_dir = defaults['q_shift_dir']
 
 try:
     q_shift = float(d['q_shift_mag'])
 except ValueError:
-    raise ValueError('The magnitude of the shift in the final state Monkhorst-Pack grid must be a float (in units of inverse bohr). If this is set too large, interpolation of small bins may be impossible.')
+    raise ValueError('The magnitude of the shift in the final state Monkhorst-Pack grid must be a float (in units of inverse bohr). If this is set too large, interpolation of small bins may be impossible. This can be set to 0.')
 except KeyError:
     q_shift = defaults['q_shift']
 
+if q_shift == 0:
+    optical_limit = True
+    q_shift_dir = None
+else:
+    optical_limit = False
+
+try:
+    dq = float(d['dq'])
+
+    test_cell = gto.M(a=lattice_vectors, atom=atom)
+    R = test_cell.reciprocal_vectors()
+    R_mag = np.linalg.norm(R, axis=0)
+    dk = R_mag / k_grid # distance between k-grid points
+    if (dq > dk).any():
+        optical_first_bins = False
+        print(f'Warning: The selected magnitude of q-bins (dq = {dq}) is larger than the distance between points in the DFT k-grid along each reciprocal lattice vector (dk = {dk}). It is recommended to make dq < all dk for proper q -> 0 behavior.')
+        # This problem occurs for calculations both with and without a q-shift
+    else:
+        optical_first_bins = True
+except ValueError:
+    raise ValueError('The size of momentum bins, dq, must be a float (in units of inverse bohr).')
+except KeyError:
+    dq = defaults['dq'] #inverse bohr, default
 
 ### Dielectric function calculation parameters ###
 try:
@@ -230,13 +254,6 @@ except KeyError:
     include_lfe = False #default
 
 ### Binning parameters ###
-try:
-    dq = float(d['dq'])
-except ValueError:
-    raise ValueError('The size of momentum bins, dq, must be a float (in units of inverse bohr).')
-except KeyError:
-    dq = defaults['dq'] #inverse bohr, default
-
 try:
     q_max = float(d['q_max'])
 except ValueError:
@@ -390,24 +407,3 @@ try:
         raise Exception('Input Error: binning_1d must be either True or False.')
 except KeyError:
     binning_1d = defaults['binning_1d']
-
-try:
-    optical_limit = d['optical_limit']
-    if optical_limit in true_list:
-        optical_limit = True
-    elif optical_limit in false_list:
-        optical_limit = False
-    else:
-        raise Exception('Input Error: optical_limit must be either True or False.')
-except KeyError:
-    optical_limit = defaults['optical_limit']
-
-try:
-    optical_q_dir = d['optical_q_dir']
-    if optical_q_dir == 'None':
-        optical_q_dir == None
-    else:
-        optical_q_dir = [float(a) for a in optical_q_dir.replace('[', '').replace(']', '').split(',')]
-except KeyError:
-    optical_q_dir = None
-    # add check for None if optical_limit = True

@@ -22,9 +22,9 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
             tot_bin_eps, tot_bin_weights, bin_centers = RPA_LFE_0q(dark_objects, parmt.optical_q_dir, rank, q_start, q_stop)
         else:
             if parmt.dir_1d is not None: # only compute along one direction
-                tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE_0q_1d(dark_objects, parmt.optical_q_dir, rank, q_start, q_stop)
+                tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE_0q_1d(dark_objects, rank, q_start, q_stop)
             else:
-                tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE_0q(dark_objects, parmt.optical_q_dir, rank, q_start, q_stop)
+                tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE_0q(dark_objects, rank, q_start, q_stop)
 
     else: # optical_limit = False
         if parmt.include_lfe:
@@ -51,10 +51,13 @@ def RPA_noLFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt
     mo_en_i = np.load(dft_path + 'mo_en_i.npy')
     mo_en_f = np.load(dft_path + 'mo_en_f.npy')
     k_f = np.load(parmt.store + '/k-pts_f.npy')
+    k_i = np.load(parmt.store + '/k-pts_i.npy')
+    N_k = k_i.shape[0]
 
     q_cuts = dark_objects['R_cutoff_q_points']
     G_vectors = dark_objects['G_vectors']
     VCell = dark_objects['V_cell']
+    cell = dark_objects['cell']
     unique_q = dark_objects['unique_q']
     N_q = len(unique_q)
     primgauss_arr, AO_arr, coeff_arr = dark_objects['block_arrays']
@@ -132,6 +135,31 @@ def RPA_noLFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt
     tot_bin_eps_im = tot_bin_eps_im[:-N_ang_bins, :]
     tot_bin_weights = tot_bin_weights[:-N_ang_bins]
 
+    if parmt.optical_first_bins:
+        # Calculate first bins with optical limit
+        start_time1 = time.time()
+        q_dir = np.array(parmt.q_shift_dir)
+        q_dir = q_dir/np.linalg.norm(q_dir) # normalize to get unit vector
+        prefactor_head = 8.*(np.pi**2)*(alpha**4)*me/(VCell*N_k*parmt.dE) * (alpha*me)**2
+        eps_im_head_q_dir = RPA_head(cell, k_i, q_dir, mo_en_i[:,ivalbot:ivaltop+1], mo_en_i[:,iconbot:icontop+1], mo_coeff_i[:,:,ivalbot:ivaltop+1], mo_coeff_i[:,:,iconbot:icontop+1]) #(3,3,E)
+
+        q_dir = parmt.q_shift_dir
+        if q_dir == 'all': # calculate first bins separately
+            q_dirs = bin_centers[:N_ang_bins]
+            q_dirs[:,0] = 1 # make unit vectors
+            q_dirs = binning.spherical_to_cartesian(q_dirs) #convert to cartesian
+        else: # calculate q -> in one direction only
+            q_dir = np.array(q_dir)
+            q_dirs = np.repeat((q_dir/np.linalg.norm(q_dir))[np.newaxis,:], N_ang_bins, axis=0) # normalize to get unit vector
+
+        eps_im_head = prefactor_head * np.einsum('bi,bj,ije -> be', q_dirs, q_dirs, eps_im_head_q_dir) #(bins, E)
+
+        tot_bin_eps_im[:N_ang_bins] = eps_im_head
+        tot_bin_weights[:N_ang_bins] = 1
+
+        if rank == 0 or rank == None:
+                logger.info(f'\tFirst bins recalculated with optical limit. Time taken = {(time.time() - start_time1):.2f} s.')
+
     if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
 
@@ -151,10 +179,13 @@ def RPA_noLFE_1d(dark_objects, rank=None, q_start=parmt.q_start, q_stop=parmt.q_
     mo_en_i = np.load(dft_path + 'mo_en_i.npy')
     mo_en_f = np.load(dft_path + 'mo_en_f.npy')
     k_f = np.load(parmt.store + '/k-pts_f.npy')
+    k_i = np.load(parmt.store + '/k-pts_i.npy')
+    N_k = k_i.shape[0]
 
     q_cuts = dark_objects['R_cutoff_q_points']
     G_vectors = dark_objects['G_vectors']
     VCell = dark_objects['V_cell']
+    cell = dark_objects['cell']
     unique_q = dark_objects['unique_q']
     N_q = len(unique_q)
     primgauss_arr, AO_arr, coeff_arr = dark_objects['block_arrays']
@@ -249,6 +280,18 @@ def RPA_noLFE_1d(dark_objects, rank=None, q_start=parmt.q_start, q_stop=parmt.q_
     # Removing extra bins
     tot_bin_eps_im = tot_bin_eps_im[:-1, :]
     tot_bin_weights = tot_bin_weights[:-1]
+
+    # Calculate first bin with optical limit
+    start_time1 = time.time()
+    q_dir = np.array(parmt.q_shift_dir)
+    q_dir = q_dir/np.linalg.norm(q_dir) # normalize to get unit vector
+    prefactor_head = 8.*(np.pi**2)*(alpha**4)*me/(VCell*N_k*parmt.dE) * (alpha*me)**2
+    eps_im_head = prefactor_head * RPA_head(cell, k_i, q_dir, mo_en_i[:,ivalbot:ivaltop+1], mo_en_i[:,iconbot:icontop+1], mo_coeff_i[:,:,ivalbot:ivaltop+1], mo_coeff_i[:,:,iconbot:icontop+1]) #(E,)
+    tot_bin_eps_im[0] = eps_im_head
+    tot_bin_weights[0] = 1
+
+    if rank == 0 or rank == None:
+        logger.info(f'\tFirst bin recalculated with optical limit. Time taken = {(time.time() - start_time1):.2f} s.')
 
     if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
@@ -474,10 +517,13 @@ def RPA_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q
     mo_en_i = np.load(dft_path + 'mo_en_i.npy')
     mo_en_f = np.load(dft_path + 'mo_en_f.npy')
     k_f = np.load(parmt.store + '/k-pts_f.npy')
+    k_i = np.load(parmt.store + '/k-pts_i.npy')
+    N_k = k_i.shape[0]
 
     q_cuts = dark_objects['R_cutoff_q_points']
     G_vectors = dark_objects['G_vectors']
     VCell = dark_objects['V_cell']
+    cell = dark_objects['cell']
     unique_q = dark_objects['unique_q']
     N_q = len(unique_q)
     primgauss_arr, AO_arr, coeff_arr = dark_objects['block_arrays']
@@ -630,6 +676,12 @@ def RPA_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q
     tot_bin_eps_im = tot_bin_eps_im[:-N_ang_bins, :]
     tot_bin_eps_re = tot_bin_eps_re[:-N_ang_bins, :]
     tot_bin_weights = tot_bin_weights[:-N_ang_bins]
+
+    # Calculate first bin with optical limit
+    start_time1 = time.time()
+    q_dir = np.array(parmt.q_shift_dir)
+    q_dir = q_dir/np.linalg.norm(q_dir) # normalize to get unit vector
+    prefactor_head = 8.*(np.pi**2)*(alpha**4)*me/(VCell*N_k*parmt.dE) * (alpha*me)**2
 
     if rank is None: # No MPI: dielectric function has been calculated for all q and can be saved
         save_eps(tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers)
@@ -819,7 +871,7 @@ def RPA_noLFE_0q(dark_objects, q_dir):
     print(time.time() - start_time)
 '''
 
-def RPA_noLFE_0q(dark_objects, q_dir, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
+def RPA_noLFE_0q(dark_objects, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
     N_AO = len(dark_objects['aos'])
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
     
@@ -897,20 +949,21 @@ def RPA_noLFE_0q(dark_objects, q_dir, rank=None, q_start=parmt.q_start, q_stop=p
 
         # check if q = 0 - if so, then special calculation needs to be done for G = 0. Other G are calculated normally
         if (q == 0.).all():
-            q_dir = np.array(q_dir)
-            q_dir = q_dir/np.linalg.norm(q_dir) # normalize to get unit vector
+            first_bins = binning.spherical_to_cartesian(bin_centers[:N_ang_bins]) #bins closest to origin
 
             prefactor_head = 8.*(np.pi**2)*(alpha**4)*me/(VCell*N_k*parmt.dE) * (alpha*me)**2
 
-            eps_im_head = prefactor_head * RPA_head(cell, kpts, q_dir, mo_en_val, mo_en_con, mo_coeff_val, mo_coeff_con) #(E,)
+            eps_im_head = prefactor_head * RPA_head(cell, kpts, mo_en_val, mo_en_con, mo_coeff_val, mo_coeff_con, first_bins) #(first_bins, E)
 
             if G_q.shape[0] > 1: # calculate other G normally
                 eps_im_body = RPA_noLFE_q(q, mo_en_con, mo_en_val, mo_coeff_con.conj(), mo_coeff_val, kpts, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q[1:], unique_Ri, einsum_path, working_dir, rank)
 
                 #concatenate for binning
-                eps_q_im = np.concatenate((eps_im_head, eps_im_body), axis=0) #(G,E)
+                eps_q_im = np.concatenate((eps_im_head, eps_im_body), axis=0) #(first_bins+G,E)
+                G_q = np.concatenate((first_bins, G_q[1:]), axis=0) # G = 0 is replaced by first bins for optical limit
             else:
-                eps_q_im = eps_im_head[np.newaxis,:] #(1,E)
+                eps_q_im = eps_im_head #(first_bins, E)
+                G_q = first_bins
 
         else: # q != [0,0,0]
             eps_q_im = RPA_noLFE_q(q, mo_en_con, mo_en_val, mo_coeff_con.conj(), mo_coeff_val, kpts, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
@@ -940,7 +993,7 @@ def RPA_noLFE_0q(dark_objects, q_dir, rank=None, q_start=parmt.q_start, q_stop=p
 
     return 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 
-def RPA_noLFE_0q_1d(dark_objects, q_dir, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
+def RPA_noLFE_0q_1d(dark_objects, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
     N_AO = len(dark_objects['aos'])
     ivalbot, ivaltop, iconbot, icontop = np.load(parmt.store + '/bands.npy')
     
@@ -960,8 +1013,9 @@ def RPA_noLFE_0q_1d(dark_objects, q_dir, rank=None, q_start=parmt.q_start, q_sto
     primgauss_arr, AO_arr, coeff_arr = dark_objects['block_arrays']
     unique_Ri = load_unique_R()
 
-    dir_1d = parmt.dir_1d
-    dir_sph = binning.cartesian_to_spherical(np.array([dir_1d]))[0]
+    dir_1d = np.array(parmt.dir_1d)
+    dir_1d = dir_1d/np.linalg.norm(dir_1d)
+    dir_sph = binning.cartesian_to_spherical(dir_1d[np.newaxis])[0]
 
     # Generating bins
     bin_centers = binning.gen_bin_centers(parmt.q_max, parmt.q_min, parmt.dq, parmt.N_theta, parmt.N_phi, dir=True)
@@ -1036,20 +1090,23 @@ def RPA_noLFE_0q_1d(dark_objects, q_dir, rank=None, q_start=parmt.q_start, q_sto
 
             # check if q = 0 - if so, then special calculation needs to be done for G = 0. Other G are calculated normally
             if (q == 0.).all():
-                q_dir = np.array(q_dir)
-                q_dir = q_dir/np.linalg.norm(q_dir) # normalize to get unit vector
+                first_bins = dir_sph # get correct angles
+                first_bins[0] = bin_centers[0] # get correct q magnitude
+                first_bins = binning.spherical_to_cartesian(first_bins[np.newaxis]) #(1,3) 
 
                 prefactor_head = 8.*(np.pi**2)*(alpha**4)*me/(VCell*N_k*parmt.dE) * (alpha*me)**2
 
-                eps_im_head = prefactor_head * RPA_head(cell, kpts, q_dir, mo_en_val, mo_en_con, mo_coeff_val, mo_coeff_con) #(E,)
+                eps_im_head = prefactor_head * RPA_head(cell, kpts, mo_en_val, mo_en_con, mo_coeff_val, mo_coeff_con, first_bins) #(1,E)
 
                 if G_q.shape[0] > 1: # calculate other G normally
                     eps_im_body = RPA_noLFE_q(q, mo_en_con, mo_en_val, mo_coeff_con.conj(), mo_coeff_val, kpts, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q[1:], unique_Ri, einsum_path, working_dir, rank)
 
                     #concatenate for binning
-                    eps_q_im = np.concatenate((eps_im_head[np.newaxis,:], eps_im_body), axis=0) #(G,E)
+                    eps_q_im = np.concatenate((eps_im_head, eps_im_body), axis=0) #(G,E)
+                    G_q = np.concatenate((first_bins, G_q[1:]), axis=0) # G = 0 is replaced by first bin for optical limit
                 else:
-                    eps_q_im = eps_im_head[np.newaxis,:] #(1,E)
+                    eps_q_im = eps_im_head #(1,E)
+                    G_q = first_bins
 
             else: # q != [0,0,0]
                 eps_q_im = RPA_noLFE_q(q, mo_en_con, mo_en_val, mo_coeff_con.conj(), mo_coeff_val, kpts, k_pairs, primgauss_arr, AO_arr, coeff_arr, q_cuts, VCell, G_q, unique_Ri, einsum_path, working_dir, rank)
@@ -1079,17 +1136,17 @@ def RPA_noLFE_0q_1d(dark_objects, q_dir, rank=None, q_start=parmt.q_start, q_sto
 
     return 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 
-def get_nabla_ovlps(cell, k, q_dir, mo_coeff_i, mo_coeff_f):
+def get_nabla_ovlps(cell, k, mo_coeff_i, mo_coeff_f):
     """
-    Returns <ik| q_dir.nabla |jk> MO integrals built from int1e_ipovlp AO integrals for head and wings of dielectric function
+    Returns <ik| nabla |jk> MO integrals built from int1e_ipovlp AO integrals for head and wings of dielectric function
     """
     ao_ovlp = np.array(cell.pbc_intor('int1e_ipovlp', kpts=k)) #(k,3,a,b)
-    ao_ovlp_dir = np.einsum('x,kxab -> kab', q_dir, ao_ovlp) #(k,a,b)
+    #ao_ovlp_dir = np.einsum('x,kxab -> kab', q_dir, ao_ovlp) #(k,a,b)
 
-    mo_ovlp = np.einsum('kai,kbj,kab -> kij', mo_coeff_i.conj(), mo_coeff_f, ao_ovlp_dir) #(k,i,j)
-    return mo_ovlp #(k,i,j)
+    mo_ovlp = np.einsum('kai,kbj,knab -> knij', mo_coeff_i.conj(), mo_coeff_f, ao_ovlp) #(k,3,i,j)
+    return mo_ovlp #(k,3,i,j)
 
-def RPA_head(cell, k, q_dir, mo_en_i, mo_en_f, mo_coeff_i, mo_coeff_f):
+def RPA_head(cell, k, mo_en_i, mo_en_f, mo_coeff_i, mo_coeff_f, first_bins):
     """
     Calculate the head of the dielectric fuction: G = G' = 0 in the q = 0 limit along unit vector q_dir for 0 <= E <= E_max
     """
@@ -1097,8 +1154,8 @@ def RPA_head(cell, k, q_dir, mo_en_i, mo_en_f, mo_coeff_i, mo_coeff_f):
 
     en_denom = 1 / (mo_en_f[:,None,:] - mo_en_i[:,:,None]) #(k,i,j)
 
-    mo_ovlp = get_nabla_ovlps(cell, k, q_dir, mo_coeff_i, mo_coeff_f)
-    ovlp = en_denom * mo_ovlp #(k,i,j)
+    mo_ovlp = get_nabla_ovlps(cell, k, mo_coeff_i, mo_coeff_f) #(k,3,i,j)
+    ovlp = en_denom[:,None,:,:] * mo_ovlp #(k,3,i,j)
 
     # following same algorithm as get_eps_im_k 
     # Make k_f, coeff tuples for starmap
@@ -1109,9 +1166,16 @@ def RPA_head(cell, k, q_dir, mo_en_i, mo_en_f, mo_coeff_i, mo_coeff_f):
 
     # Calculate Im(eps) for each k
     with mp.get_context('fork').Pool(mp.cpu_count()) as p: # parallelize over k
-        eps_im = p.starmap(partial(eps.get_eps_im_k_head, im_delE=im_delE), k_tup)
-    eps_im = np.sum(np.array(eps_im), axis=0) #(k,E) -> (E,)
-    return eps_im #(E,)
+        eps_im_t = p.starmap(partial(eps.get_eps_im_k_head, im_delE=im_delE), k_tup) #(k,E,3,3)
+    eps_im_t = np.sum(np.array(eps_im_t), axis=0) #(k,E,3,3) -> (E,3,3)
+
+    # optical limit for all first bins around origin
+    first_bins[:,0] = 1 # setting magnitude to 1 since we want unit vectors
+    q_dir = first_bins
+
+    eps_im = np.einsum('bx,by,exy -> be', q_dir, q_dir, eps_im_t)
+
+    return eps_im #(first bins, E)
 
 def RPA_wings(G, cell, k, q_dir, mo_en_i, mo_en_f, mo_coeff_i, mo_coeff_f, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path):
     """

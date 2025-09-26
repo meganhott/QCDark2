@@ -35,7 +35,7 @@ def delta_G(im_delE_k, ovlp1, ovlp2, N_E):
         if ind < N_E - 1:
             eps_delta[int(ind+1)] += (1. - rem) * ovlp[i]
 
-    return eps_delta
+    return eps_delta #(E,G)
 
 def delta_GG(im_delE_ind, im_delE_rem, eta_qG, E_i, E_f, N_G, prefactor, eps_delta_n_min_1):
     """
@@ -91,14 +91,20 @@ def get_eps_im_k_head(i_k, ovlp, im_delE):
 
     Inputs:
         i_k int
-        ovlp (i,j)
-        im_delE (k,i,j)
+        ovlp (3,i,j)
+        im_delE (k,2,i,j)
+        q_dir (bins,3)
+    Output:
+        eps_im_t (3,3,E): optical limit tensor
     """
     N_E = int(parmt.E_max/parmt.dE + 1)
 
-    eps_im = np.real(delta_G(im_delE[i_k], ovlp[:,:,np.newaxis], ovlp.conj()[:,:,np.newaxis], N_E))[:,0] #(E,)
+    ovlp_t = np.einsum('xij, yij -> ijxy', ovlp, ovlp).reshape((ovlp.shape[1], ovlp.shape[2], 9)) #(i,j,3,3) -> (i,j,9)
 
-    return eps_im
+    # treat each xy component as G vector in delta_G function
+    eps_im_t = np.real(delta_G(im_delE[i_k], ovlp_t, ovlp_t.conj(), N_E)).reshape((N_E,3,3))
+
+    return eps_im_t #(E,3,3)
 
 def get_eps_delta_k_wings(i_k, k_f, ovlp, mo_coeff_i, mo_coeff_f_conj, G, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path, im_delE):
     """
