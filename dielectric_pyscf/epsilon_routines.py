@@ -21,11 +21,14 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
         raise NotImplementedError('1D dielectric function has not yet been added to general RPA function')
 
     # load stuff
+    band_ids = np.load(parmt.store + '/bands.npy')
     dft_path = parmt.store + '/DFT/'
     mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')
     mo_en_i = np.load(dft_path + 'mo_en_i.npy')
     k_i = np.load(parmt.store + '/k-pts_i.npy')
     k_f = np.load(parmt.store + '/k-pts_f.npy')
+
+    unique_Ri = load_unique_R()
 
     if parmt.optical_limit:
         mo_coeff_f_conj = mo_coeff_i.conj()
@@ -37,9 +40,9 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
     # prefactors for susceptibility
     V_cell = dark_objects['V_cell']
     N_k = k_i.shape[0]
-    prefactor_head = 8.*(np.pi**2)*(alpha**4)*me/(V_cell*N_k*parmt.dE) * (alpha*me)**2
-    prefactor_wings = 8.*(np.pi**2)*(alpha**3)*me/(V_cell*N_k)/parmt.dE * alpha*me
-    prefactor_body = 8.*(np.pi**2)*(alpha**2)*me/(V_cell*N_k)/parmt.dE
+    #prefactor_head = 8.*(np.pi**2)*(alpha**4)*me/(V_cell*N_k*parmt.dE) * (alpha*me)**2
+    #prefactor_wings = 8.*(np.pi**2)*(alpha**3)*me/(V_cell*N_k)/parmt.dE * alpha*me
+    prefactor = 8.*(np.pi**2)*(alpha**2)*me/(V_cell*N_k*parmt.dE)
 
     # Make working directory
     if rank == None:
@@ -98,6 +101,7 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
         mo_coeff_f_conj_q = mo_coeff_f_conj[k_pairs[:,1]] #(k_pair,b,j)
         mo_en_i_q = mo_en_i[k_pairs[:,0]] #(k_pair,i)
         mo_en_f_q = mo_en_f[k_pairs[:,1]] #(k_pair,j)
+        k_i_q = k_i[k_pairs[:,1]]
         k_f_q = k_f[k_pairs[:,1]]
 
         # Calculating the delta function in energy
@@ -141,10 +145,7 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
             logger.info(f'\t\tNumber of G vectors = {len(G_q)},')
 
         # send to RPA function
-        eps_q, bins_q = RPA_function(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_coeff_f_conj_q, k_f_q, einsum_path, working_dir, rank, optical_limit)
-        # options: optical limit or standard, noLFE or LFE
-        # return tot_bin_eps_im, tot_bin_eps_re, tot_bin_weights
-        
+        eps_q, bins_q = RPA_function(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_coeff_f_conj_q, k_i_q, k_f_q, band_ids, N_E, bin_centers[:N_ang_bins], unique_Ri, einsum_path, working_dir, rank, optical_limit, prefactor)
 
         # Bin epsilon
         #Bin real and imaginary parts - modify binning so both parts done at same time
@@ -162,7 +163,7 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
         np.save(f'{working_dir}/tot_bin_weights.npy', tot_bin_weights)
 
         if rank == 0 or rank == None:
-            logger.info(f'\tcomplete. Time taken = {(time.time() - start_time_q):.2f} s.')
+            logger.info(f'\t\tCompleted i_q = {i_q + 1}. Time taken = {(time.time() - start_time_q):.2f} s.')
 
     # Removing extra bins 
     tot_bin_eps_im = tot_bin_eps_im[:-N_ang_bins, :]
@@ -178,14 +179,69 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
 
     return tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 
+def RPA_noLFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_coeff_f_conj_q, k_i_q, k_f_q, band_ids, N_E, first_bins, unique_Ri, einsum_path, working_dir, rank, optical_limit, prefactor):
+    if G_q.shape[0] == 0 and not optical_limit:
+        logger.info('\t\tNo contributions from this q')
+        return np.zeros((0,N_E), dtype='complex'), np.zeros((0,3))
+    else:
+        if rank == 0 or rank == None:
+            logger.info(f'\t\tStarting calculation of Im(eps) for 0 < E <= {parmt.E_max} eV')
+        start_time1 = time.time()
+    
+    ivalbot, ivaltop, iconbot, icontop = band_ids
 
-def RPA_noLFE_gen_q(tot_bin_eps_im, tot_bin_weights, bin_centers):
+    if G_q.shape[0] == 0:
+        eps_q = np.zeros((0,N_E), dtype='complex')
+    else:
+        # Calculating the delta function in energy
+        im_delE = delta_energy(mo_en_i_q[:,ivalbot:ivaltop+1], mo_en_f_q[:,iconbot:icontop+1]) #(k,2,a,b)
 
-    return 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
+        # Make k_f, coeff tuples for starmap
+        N_k = k_f_q.shape[0]
+        k_tup = []
+        for i_k in range(N_k):
+            k_tup.append( (i_k, k_f_q[i_k], mo_coeff_i_q[i_k], mo_coeff_f_conj_q[i_k]) )
 
-def RPA_LFE_gen_q(tot_bin_eps_re, tot_bin_eps_im, tot_bin_weights, bin_centers):
+        # Save Im(eps) for each k, then load and combine after calculating for all k
+        start_time = time.time()
+        with mp.get_context('fork').Pool(mp.cpu_count()) as p: # parallelize over k
+            p.starmap(partial(eps.get_eps_im_k, qG=q[None, :] + G_q, primgauss_arr=dark_objects['primgauss_arr'], AO_arr=dark_objects['AO_arr'], coeff_arr=dark_objects['coeff_arr'], unique_Ri=unique_Ri, q_cuts=dark_objects['R_cutoff_q_points'], path=einsum_path, im_delE=im_delE, working_dir=working_dir), k_tup)
 
-    return tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
+        if rank == None or rank == 0:
+            logger.info(f'\t\t\tIm(eps) calculated and saved for all k. Time taken = {(time.time() - start_time):.2f} s.')
+        
+        # Load eps_im to memory and sum over k
+        start_time = time.time()
+        N_E = int(parmt.E_max/parmt.dE + 1)
+        eps_im = np.zeros((G_q.shape[0], N_E), dtype='float')
+        for i_k in range(N_k):
+            eps_im += np.load(working_dir + f'/eps_im/eps_im_k{i_k}.npy')
+        eps_q = 1j*eps_im
+        
+        if rank == None or rank == 0:
+            logger.info(f'\t\t\tIm(eps) loaded to memory and summed over k. Time taken = {(time.time() - start_time):.2f} s.')
+
+    bins_q = G_q
+
+    if optical_limit:
+        start_time = time.time()
+        eps_head = 1j * alpha**4 * me**2 * RPA_head(dark_objects['cell'], k_i_q, mo_en_i_q[:,ivalbot:ivaltop+1], mo_en_i_q[:,iconbot:icontop+1], mo_coeff_i_q[:,:,ivalbot:ivaltop+1], mo_coeff_i_q[:,:,iconbot:icontop+1], first_bins)
+
+        bins_q = np.concatenate((first_bins, bins_q), axis=0)
+        eps_q = np.concatenate((eps_head, eps_q), axis=0)
+
+        logger.info(f'\t\t\tOptical limit computed for bins closest to origin. Time taken = {(time.time() - start_time):.2f} s.')
+
+    if rank == None or rank == 0:
+        logger.info(f'\t\tFinished calculation of Im(eps). Time taken = {(time.time() - start_time1):.2f} s')
+   
+    return prefactor*eps_q, bins_q
+
+def RPA_LFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_coeff_f_conj_q, k_i_q, k_f_q, band_ids, N_E, first_bins, unique_Ri, einsum_path, working_dir, rank, optical_limit, prefactor):
+
+    ivalbot, ivaltop, iconbot, icontop = band_ids
+
+    return prefactor*eps_q, bins_q
 
 @time_wrapper
 def RPA_noLFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
