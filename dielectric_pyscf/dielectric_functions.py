@@ -58,12 +58,8 @@ def main_setup() -> dict:
     dark_objects = dielectric_RPA(cell, dark_objects, dft_params)
     return dark_objects
 
-def main_eps(dark_objects: dict):
-    #Calculate and save interpolated 3D binned epsilon
-    eps_routines.get_RPA_dielectric(dark_objects)
-
-def main_eps_mpi(dark_objects: dict, rank: int, q_start: int, q_stop: int):
-    bin_eps, bin_weights, bin_centers = eps_routines.get_RPA_dielectric(dark_objects, rank=rank, q_start=q_start, q_stop=q_stop)
+def main_eps(dark_objects, rank, q_start, q_stop):
+    bin_eps, bin_weights, bin_centers = eps_routines.get_RPA_dielectric(dark_objects, rank, q_start, q_stop)
     return bin_eps, bin_weights, bin_centers
 
 if __name__ == '__main__':

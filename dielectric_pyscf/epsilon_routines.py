@@ -17,27 +17,175 @@ import dielectric_pyscf.kramers_kronig as kk
 
 
 def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
+    if parmt.dir_1d is not None:
+        raise NotImplementedError('1D dielectric function has not yet been added to general RPA function')
+
+    # load stuff
+    dft_path = parmt.store + '/DFT/'
+    mo_coeff_i = np.load(dft_path + 'mo_coeff_i.npy')
+    mo_en_i = np.load(dft_path + 'mo_en_i.npy')
+    k_i = np.load(parmt.store + '/k-pts_i.npy')
+    k_f = np.load(parmt.store + '/k-pts_f.npy')
+
     if parmt.optical_limit:
-        if parmt.include_lfe:
-            tot_bin_eps, tot_bin_weights, bin_centers = RPA_LFE_0q(dark_objects, parmt.optical_q_dir, rank, q_start, q_stop)
-        else:
-            if parmt.dir_1d is not None: # only compute along one direction
-                tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE_0q_1d(dark_objects, rank, q_start, q_stop)
-            else:
-                tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE_0q(dark_objects, rank, q_start, q_stop)
+        mo_coeff_f_conj = mo_coeff_i.conj()
+        mo_en_f = mo_en_i
+    else:
+        mo_coeff_f_conj = np.load(dft_path + 'mo_coeff_f.npy').conj()
+        mo_en_f = np.load(dft_path + 'mo_en_f.npy')
 
-    else: # optical_limit = False
-        if parmt.include_lfe:
-            tot_bin_eps, tot_bin_weights, bin_centers = RPA_LFE(dark_objects, rank, q_start, q_stop)
-        else:
-            if parmt.dir_1d is not None: # only compute along one direction
-                tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE_1d(dark_objects, rank, q_start, q_stop)
-            elif parmt.binning_1d:
-                tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE_1d_binning(dark_objects, rank, q_start, q_stop)
-            else:
-                tot_bin_eps, tot_bin_weights, bin_centers = RPA_noLFE(dark_objects, rank, q_start, q_stop)
+    # prefactors for susceptibility
+    V_cell = dark_objects['V_cell']
+    N_k = k_i.shape[0]
+    prefactor_head = 8.*(np.pi**2)*(alpha**4)*me/(V_cell*N_k*parmt.dE) * (alpha*me)**2
+    prefactor_wings = 8.*(np.pi**2)*(alpha**3)*me/(V_cell*N_k)/parmt.dE * alpha*me
+    prefactor_body = 8.*(np.pi**2)*(alpha**2)*me/(V_cell*N_k)/parmt.dE
 
-    return tot_bin_eps, tot_bin_weights, bin_centers
+    # Make working directory
+    if rank == None:
+        working_dir = parmt.store + '/working_dir'
+    else: #MPI
+        working_dir = parmt.store + f'/working_dir_rank{rank}'
+    makedir(working_dir)
+
+    # Generate optimal path for 3D overlaps calculation
+    N_AO = len(dark_objects['aos'])
+    einsum_path = np.einsum_path('kbj,kba,kai->kij', mo_coeff_f_conj, np.ones((k_f.shape[0], N_AO, N_AO)), mo_coeff_i)[0]
+
+    if parmt.dir_1d is not None: # only compute along one direction
+        N_ang_bins = 1
+    else:
+        N_ang_bins = parmt.N_phi*(parmt.N_theta-2) + 2
+
+    if parmt.include_lfe: #LFE
+        N_E = int(2*parmt.E_max/parmt.dE) + 1 # -E_max < E < E_max for LFEs
+        makedir(working_dir + '/eta_qG')
+        RPA_function = RPA_LFE_gen_q
+    else: #noLFE
+        N_E = int(parmt.E_max/parmt.dE) + 1 # 0 < E < E_max for noLFE
+        makedir(working_dir + '/eps_im')
+        RPA_function = RPA_noLFE_gen_q
+    
+    bin_centers = binning.gen_bin_centers(parmt.q_max, parmt.q_min, parmt.dq, parmt.N_theta, parmt.N_phi)
+    tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, N_E))
+    tot_bin_eps_re = np.zeros((bin_centers.shape[0]+N_ang_bins, N_E))
+    tot_bin_weights = np.zeros(bin_centers.shape[0]+N_ang_bins)
+
+    N_q = len(dark_objects['unique_q'])
+    if q_start == None:
+        q_start = 0
+    if q_stop == None:
+        q_stop = N_q
+    
+    if rank == 0 or rank == None:
+        logger.info(f'Total number of q: {N_q}.')
+    if rank == 0: #MPI
+        logger.info(f'{q_stop - q_start} q will be calculated per node. Only rank 0 will be logged.')
+
+    q_keys = list(dark_objects['unique_q'].keys())[q_start:q_stop]
+    G_vectors = dark_objects['G_vectors']
+
+    for i_q, q in enumerate(q_keys, start=q_start):
+        k_pairs = np.array(dark_objects['unique_q'][q])
+        q = np.array(q)
+
+        if rank == 0 or rank == None:
+            logger.info(f'\ti_q: {i_q + 1}\n\t\tq = {np.array2string(q, precision=5)},')
+
+        start_time_q = time.time()
+
+        mo_coeff_i_q = mo_coeff_i[k_pairs[:,0]] #(k_pair,a,i)
+        mo_coeff_f_conj_q = mo_coeff_f_conj[k_pairs[:,1]] #(k_pair,b,j)
+        mo_en_i_q = mo_en_i[k_pairs[:,0]] #(k_pair,i)
+        mo_en_f_q = mo_en_f[k_pairs[:,1]] #(k_pair,j)
+        k_f_q = k_f[k_pairs[:,1]]
+
+        # Calculating the delta function in energy
+        #im_delE = delta_energy(mo_en_i_q, mo_en_f_q) #(k,2,a,b)
+
+        # Finding relevant G vectors
+        G_q = G_vectors[np.linalg.norm(q[None, :]+G_vectors, axis=1) < parmt.q_max + 1.5*parmt.dq]
+
+        # Incorporate 1D later
+        """
+        if parmt.dir_1d is not None: # 1D calculation selects G-vectors along specific direction, dir_1d
+            dir_sph = binning.cartesian_to_spherical(np.array(parmt.dir_1d)[np.newaxis])[0]
+            qpG_sph = binning.cartesian_to_spherical(q + G_q)
+
+            if parmt.dir_1d_exact_angle: # exactly match angle
+                G_q = G_q[(np.round(qpG_sph[:,1],4) == np.round(dir_sph[1], 4)) & (np.round(qpG_sph[:,2],4) == np.round(dir_sph[2], 4))] # select G along specified direction
+            else: # just match within N_theta and N_phi accuracy
+                costheta_l = np.cos(dir_sph[1] + np.pi/parmt.N_theta/2)
+                costheta_g = np.cos(dir_sph[1] - np.pi/parmt.N_theta/2)
+
+                if np.round(costheta_g, 4) == np.round(costheta_l, 4):
+                    costheta_g = 1 #for [0,0,1] - make more general later
+
+                phi_l = dir_sph[2] - np.pi/parmt.N_phi
+                phi_g = dir_sph[2] + np.pi/parmt.N_phi
+
+                G_q = G_q[((qpG_sph[:,2] < phi_g) & (qpG_sph[:,2] > phi_l) & (np.cos(qpG_sph[:,1]) <= costheta_g) & (np.cos(qpG_sph[:,1]) >= costheta_l))]
+        """
+
+        if (np.linalg.norm(q) < parmt.dq) and (parmt.dq < parmt.q_shift):
+            # Remove G = 0 if |q| < dq and dq < dk (if it would contribute to first bin)
+            # This also removes some contributions to second bins, but these would be inaccurate anyway?
+            G_q = G_q[1:] 
+            optical_limit = True # compute G = 0 contribution with optical limit
+        else:
+            optical_limit = False
+
+        G_q = G_q[np.linalg.norm(q[None, :]+G_q, axis=1) > parmt.q_min - 0.5*parmt.dq]
+
+        if rank == 0 or rank == None:
+            logger.info(f'\t\tNumber of G vectors = {len(G_q)},')
+
+        # send to RPA function
+        eps_q, bins_q = RPA_function(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_coeff_f_conj_q, k_f_q, einsum_path, working_dir, rank, optical_limit)
+        # options: optical limit or standard, noLFE or LFE
+        # return tot_bin_eps_im, tot_bin_eps_re, tot_bin_weights
+        
+
+        # Bin epsilon
+        #Bin real and imaginary parts - modify binning so both parts done at same time
+        start_time = time.time()
+        tot_bin_eps_im, tot_bin_weights = binning.bin_eps_q(q, G_q, np.imag(eps_q), bin_centers, tot_bin_eps_im, tot_bin_weights)
+        if parmt.include_lfe:
+            tot_bin_eps_re, tot_bin_weights_re = binning.bin_eps_q(q, G_q, np.real(eps_q), bin_centers, tot_bin_eps_re, tot_bin_weights)
+            # tot_bin_weights_re is same as tot_bin_weights
+
+        if rank == 0 or rank == None:
+            logger.info(f'\t\tBinning of epsilon completed in {(time.time() - start_time):.2f} s.')
+
+        # Save to working directory
+        np.save(f'{working_dir}/tot_bin_eps.npy', tot_bin_eps_re + 1j*tot_bin_eps_im)
+        np.save(f'{working_dir}/tot_bin_weights.npy', tot_bin_weights)
+
+        if rank == 0 or rank == None:
+            logger.info(f'\tcomplete. Time taken = {(time.time() - start_time_q):.2f} s.')
+
+    # Removing extra bins 
+    tot_bin_eps_im = tot_bin_eps_im[:-N_ang_bins, :]
+    tot_bin_eps_re = tot_bin_eps_re[:-N_ang_bins, :]
+    tot_bin_weights = tot_bin_weights[:-N_ang_bins]
+
+    # Delete large working directory files
+    if parmt.include_lfe:
+        shutil.rmtree(f'{working_dir}/eta_qG')
+        os.remove(f'{working_dir}/eps_delta.h5')
+    else:
+        shutil.rmtree(f'{working_dir}/eps_im')
+
+    return tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
+
+
+def RPA_noLFE_gen_q(tot_bin_eps_im, tot_bin_weights, bin_centers):
+
+    return 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
+
+def RPA_LFE_gen_q(tot_bin_eps_re, tot_bin_eps_im, tot_bin_weights, bin_centers):
+
+    return tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 
 @time_wrapper
 def RPA_noLFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
@@ -670,7 +818,6 @@ def RPA_LFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q
 
         if rank == 0 or rank == None:
             logger.info(f'\tcomplete. Time taken = {(time.time() - start_time_full):.2f} s.')
-        return tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 
     # Removing extra bins 
     tot_bin_eps_im = tot_bin_eps_im[:-N_ang_bins, :]
