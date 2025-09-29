@@ -31,7 +31,9 @@ def initialize_cell() -> tuple[do_routines.pbcgto.cell.Cell, dict]:
         'primindices': primindices[0],
         'atom_locs': primindices[1],
         'R_vectors': R_vectors,
-        'block_arrays': [primgauss_arr, AO_arr, coeff_arr],
+        'primgauss_arr': primgauss_arr,
+        'AO_arr': AO_arr,
+        'coeff_arr': coeff_arr,
         'V_cell': V_cell,
         'cell': cell
     }
