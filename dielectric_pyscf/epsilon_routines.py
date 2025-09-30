@@ -144,23 +144,26 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
         if rank == 0 or rank == None:
             logger.info(f'\t\tNumber of G vectors = {len(G_q)},')
 
-        # send to RPA function
-        eps_q, bins_q = RPA_function(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_coeff_f_conj_q, k_i_q, k_f_q, band_ids, N_E, bin_centers[:N_ang_bins], unique_Ri, einsum_path, working_dir, rank, optical_limit, prefactor)
+        if G_q.shape[0] == 0 and not optical_limit:
+            logger.info('\t\tNo contributions from this q')
+        else:
+            # send to RPA function
+            eps_q, bins_q = RPA_function(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_coeff_f_conj_q, k_i_q, k_f_q, band_ids, N_E, bin_centers[:N_ang_bins], unique_Ri, einsum_path, working_dir, rank, optical_limit, prefactor)
 
-        # Bin epsilon
-        #Bin real and imaginary parts - modify binning so both parts done at same time
-        start_time = time.time()
-        tot_bin_eps_im, tot_bin_weights = binning.bin_eps_q(q, G_q, np.imag(eps_q), bin_centers, tot_bin_eps_im, tot_bin_weights)
-        if parmt.include_lfe:
-            tot_bin_eps_re, tot_bin_weights_re = binning.bin_eps_q(q, G_q, np.real(eps_q), bin_centers, tot_bin_eps_re, tot_bin_weights)
-            # tot_bin_weights_re is same as tot_bin_weights
+            # Bin epsilon
+            #Bin real and imaginary parts - modify binning so both parts done at same time
+            start_time = time.time()
+            tot_bin_eps_im, tot_bin_weights = binning.bin_eps_q(q, G_q, np.imag(eps_q), bin_centers, tot_bin_eps_im, tot_bin_weights)
+            if parmt.include_lfe:
+                tot_bin_eps_re, tot_bin_weights_re = binning.bin_eps_q(q, G_q, np.real(eps_q), bin_centers, tot_bin_eps_re, tot_bin_weights)
+                # tot_bin_weights_re is same as tot_bin_weights
 
-        if rank == 0 or rank == None:
-            logger.info(f'\t\tBinning of epsilon completed in {(time.time() - start_time):.2f} s.')
+            if rank == 0 or rank == None:
+                logger.info(f'\t\tBinning of epsilon completed in {(time.time() - start_time):.2f} s.')
 
-        # Save to working directory
-        np.save(f'{working_dir}/tot_bin_eps.npy', tot_bin_eps_re + 1j*tot_bin_eps_im)
-        np.save(f'{working_dir}/tot_bin_weights.npy', tot_bin_weights)
+            # Save to working directory
+            np.save(f'{working_dir}/tot_bin_eps.npy', tot_bin_eps_re + 1j*tot_bin_eps_im)
+            np.save(f'{working_dir}/tot_bin_weights.npy', tot_bin_weights)
 
         if rank == 0 or rank == None:
             logger.info(f'\t\tCompleted i_q = {i_q + 1}. Time taken = {(time.time() - start_time_q):.2f} s.')
@@ -180,15 +183,12 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
     return tot_bin_eps_re + 1j*tot_bin_eps_im, tot_bin_weights, bin_centers
 
 def RPA_noLFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_coeff_f_conj_q, k_i_q, k_f_q, band_ids, N_E, first_bins, unique_Ri, einsum_path, working_dir, rank, optical_limit, prefactor):
-    if G_q.shape[0] == 0 and not optical_limit:
-        logger.info('\t\tNo contributions from this q')
-        return np.zeros((0,N_E), dtype='complex'), np.zeros((0,3))
-    else:
-        if rank == 0 or rank == None:
-            logger.info(f'\t\tStarting calculation of Im(eps) for 0 < E <= {parmt.E_max} eV')
-        start_time1 = time.time()
+    if rank == 0 or rank == None:
+        logger.info(f'\t\tStarting calculation of Im(eps) for 0 < E <= {parmt.E_max} eV')
+    start_time1 = time.time()
     
     ivalbot, ivaltop, iconbot, icontop = band_ids
+    qG = q[None, :] + G_q
 
     if G_q.shape[0] == 0:
         eps_q = np.zeros((0,N_E), dtype='complex')
@@ -205,7 +205,7 @@ def RPA_noLFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo
         # Save Im(eps) for each k, then load and combine after calculating for all k
         start_time = time.time()
         with mp.get_context('fork').Pool(mp.cpu_count()) as p: # parallelize over k
-            p.starmap(partial(eps.get_eps_im_k, qG=q[None, :] + G_q, primgauss_arr=dark_objects['primgauss_arr'], AO_arr=dark_objects['AO_arr'], coeff_arr=dark_objects['coeff_arr'], unique_Ri=unique_Ri, q_cuts=dark_objects['R_cutoff_q_points'], path=einsum_path, im_delE=im_delE, working_dir=working_dir), k_tup)
+            p.starmap(partial(eps.get_eps_im_k, qG=qG, primgauss_arr=dark_objects['primgauss_arr'], AO_arr=dark_objects['AO_arr'], coeff_arr=dark_objects['coeff_arr'], unique_Ri=unique_Ri, q_cuts=dark_objects['R_cutoff_q_points'], path=einsum_path, im_delE=im_delE, working_dir=working_dir), k_tup)
 
         if rank == None or rank == 0:
             logger.info(f'\t\t\tIm(eps) calculated and saved for all k. Time taken = {(time.time() - start_time):.2f} s.')
@@ -221,7 +221,7 @@ def RPA_noLFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo
         if rank == None or rank == 0:
             logger.info(f'\t\t\tIm(eps) loaded to memory and summed over k. Time taken = {(time.time() - start_time):.2f} s.')
 
-    bins_q = G_q
+    bins_q = qG
 
     if optical_limit:
         start_time = time.time()
@@ -238,10 +238,113 @@ def RPA_noLFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo
     return prefactor*eps_q, bins_q
 
 def RPA_LFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_coeff_f_conj_q, k_i_q, k_f_q, band_ids, N_E, first_bins, unique_Ri, einsum_path, working_dir, rank, optical_limit, prefactor):
-
+    
+    N_G = G_q.shape[0]
+    qG = q[None, :] + G_q
     ivalbot, ivaltop, iconbot, icontop = band_ids
 
-    return prefactor*eps_q, bins_q
+    # **Creating hdf5 file to store large intermediate array**
+    eps_delta_h5 = h5py.File(working_dir + '/eps_delta.h5', 'w') #eps_delta with be stored to hdf5 for each energy
+
+    # Determining chunks used to store data
+    E_per_chunk, G_per_chunk = get_hdf5_chunks(N_E, N_G, 2**30) # want to read/write in 1 GB chunks later
+    eps_delta_h5.create_dataset('eps_delta', (N_E, N_G, N_G), dtype='complex', chunks=(E_per_chunk, G_per_chunk, G_per_chunk))
+
+    if rank == 0 or rank == None:
+        logger.info(f'\t\tAn hdf5 dataset has been created to store intermediate results. The shape is (N_E={N_E}, N_G={N_G}, N_G={N_G}) saved in chunks of ({E_per_chunk}, {G_per_chunk}, {G_per_chunk}).')
+
+    eps_delta_h5.close()
+
+    # **Calculate and store spectral part of polarizability (E,G,G')**
+
+    # For E >=0, initial states are occupied and final states are unoccupied
+    if rank == 0 or rank == None:
+        logger.info(f'\t\t\tStarting calculation of delta part of polarizability for 0 < E <= {parmt.E_max} eV')
+    start_time = time.time()
+
+    im_delE = delta_energy(mo_en_i_q[:,ivalbot:ivaltop+1], mo_en_f_q[:,iconbot:icontop+1]) #(k,2,a,b) # Calculating the delta function in energy
+
+    RPA_body_LFE(qG, k_f_q, mo_coeff_i_q[:,:,ivalbot:ivaltop+1], mo_coeff_f_conj_q[:,:,iconbot:icontop+1], im_delE, dark_objects['primgauss_arr'], dark_objects['AO_arr'], dark_objects['coeff_arr'], dark_objects['R_cutoff_q_points'], unique_Ri, einsum_path, working_dir, rank, prefactor, neg_E=False)
+    
+    if rank == 0 or rank == None:
+        logger.info(f'\t\t\tFinished calculation of delta part of polarizability for 0 < E <= {parmt.E_max} eV. Time taken = {(time.time() - start_time):.2f} s')
+
+    # For E < 0, initial states are unoccupied and final states are occupied
+    if rank == 0 or rank == None:
+        logger.info(f'\t\t\tStarting calculation of delta part of polarizability for -{parmt.E_max} <= E <= 0 eV')
+    start_time = time.time()
+
+    im_delE = delta_energy(mo_en_i_q[:,iconbot:icontop+1], mo_en_f_q[:,ivalbot:ivaltop+1]) #(k,2,a,b)
+
+    RPA_body_LFE(qG, k_f_q, mo_coeff_i_q[:,:,iconbot:icontop+1], mo_coeff_f_conj_q[:,:,ivalbot:ivaltop+1], im_delE, dark_objects['primgauss_arr'], dark_objects['AO_arr'], dark_objects['coeff_arr'], dark_objects['R_cutoff_q_points'], unique_Ri, einsum_path, working_dir, rank, prefactor, neg_E=True)
+
+    if rank == 0 or rank == None:
+        logger.info(f'\t\t\tFinished calculation of delta part of polarizability for -{parmt.E_max} <= E <= 0 eV. Time taken = {(time.time() - start_time):.2f} s')
+
+
+    # **Perform Kramers-Kronig transformation to get PV parts of Re(eps) and Im(eps)**
+    N_G_chunks = int(np.ceil(N_G/G_per_chunk))
+    if rank == 0 or rank == None:
+        logger.info(f"\t\tBeginning Kramers-Kronig transform of eps_delta. This will be performed in {N_G_chunks**2} batches of (N_E={N_E}, N_G={G_per_chunk}, N_G'={G_per_chunk}) arrays.")
+
+    G_start = np.arange(0, G_per_chunk*N_G_chunks, G_per_chunk)
+    G_stop = np.append(np.arange(G_per_chunk, G_per_chunk*N_G_chunks, G_per_chunk), N_G)
+
+    eps_delta_h5 = h5py.File(working_dir + '/eps_delta.h5', 'r+')
+    eps_delta = eps_delta_h5['eps_delta']
+    start_time = time.time()
+    for i in range(N_G_chunks):
+        for j in range(N_G_chunks):
+            start_time1 = time.time()
+            eps_delta_chunk = eps_delta[:, G_start[i]:G_stop[i], G_start[j]:G_stop[j]] #(E,G_chunk,G'_chunk)
+            
+            eps_lfe = kk.kramerskronig_lfe(eps_delta_chunk, parmt.E_max, parmt.dE)
+
+            if parmt.debug_logging and (rank == 0 or rank == None):
+                logger.info(f'\t\t\t\tKK finished in {time.time() - start_time1} s.')
+
+            start_time2 = time.time()
+            eps_delta[:, G_start[i]:G_stop[i], G_start[j]:G_stop[j]] = eps_lfe + np.identity(N_G)[None, G_start[i]:G_stop[i], G_start[j]:G_stop[j]] #add eps_pv and identity to existing eps_lfe
+
+            if parmt.debug_logging and (rank == 0 or rank == None):
+                logger.info(f'\t\t\t\tWriting to hdf5 finished in {time.time() - start_time2} s.')
+                logger.info(f'\t\t\tBatch {(i+1)*N_G_chunks + (j+1)} finished in {time.time() - start_time1} s.')
+
+    if rank == 0 or rank == None:
+        logger.info(f'\t\tKramers-Kronig transform completed in {(time.time() - start_time):.2f} s.')
+
+    # **Perform matrix inverse and take inverse of diagonal**
+    N_E_chunks = int(np.ceil(N_E/E_per_chunk))
+
+    if rank == 0 or rank == None:
+        logger.info(f"\t\tBeginning inversion of eps_delta to obtain eps_LFE. This will be performed in {N_E_chunks} batches of (N_E={E_per_chunk}, N_G={N_G}, N_G'={N_G}) arrays.")
+
+    E_start = np.arange(0, E_per_chunk*N_E_chunks, E_per_chunk)
+    E_stop = np.append(np.arange(E_per_chunk, E_per_chunk*N_E_chunks, E_per_chunk), N_E)
+
+    eps_lfe = np.empty((N_E, N_G), dtype='complex')
+    start_time = time.time()
+    for i in range(N_E_chunks):
+        start_time1 = time.time()
+        eps_delta_chunk = eps_delta[E_start[i]:E_stop[i]]
+
+        if E_per_chunk == 1: # eps_delta_chunk will be 2d
+            eps_lfe[E_start[i]:E_stop[i]] = (1/np.diagonal(np.linalg.inv(eps_delta_chunk), axis1=0, axis2=1))
+        else: # eps_delta_chunk will be 3d
+            eps_lfe[E_start[i]:E_stop[i]] = (1/np.diagonal(np.linalg.inv(eps_delta_chunk), axis1=1, axis2=2)) #make general diagonal function? write this whole function with numba? Is inv faster if we transpose first? (E,G,G') -> (G,E)
+
+        if parmt.debug_logging and (rank == 0 or rank == None):
+            logger.info(f'\t\t\tBatch {i+1} finished in {time.time() - start_time1} s.')
+
+    eps_delta_h5.close()
+    eps_lfe = eps_lfe.transpose((1,0)).copy() #(G,E)
+
+    if rank == 0 or rank == None:
+        logger.info(f'\t\tInversion completed and eps_LFE calculated in {(time.time() - start_time):.2f} s.')
+
+    bins_q = qG
+
+    return eps_lfe, bins_q
 
 @time_wrapper
 def RPA_noLFE(dark_objects: dict, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
