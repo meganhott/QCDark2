@@ -107,7 +107,7 @@ def gen_bin_centers(q_max, q_min, dq, N_theta, N_phi, cartesian=False, dir=False
         return np.round(qra, n)
 
 @njit
-def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
+def bin_eps_q(bins_q, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     """
     Notes:
     - We need to calculate phi weights before correcting for edge cases. For example, if we need to correct phi_bin=pi to phi_bin=-pi for some phi, then weighting after the correction will cause huge weight since phi_bin - phi ~ 2pi. On the other hand, we need to calculate theta weights after correcting for edge cases near 0 and pi
@@ -156,10 +156,10 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
         return coord_id[:,0]*N_ang_bins + theta_factor + phi_factor
     
     #convert q+G to spherical coords
-    qG_sph = cartesian_to_spherical(q + G_vectors)
+    bins_q_sph = cartesian_to_spherical(bins_q)
 
     #find bin index and weights simultaneously
-    r_n = np.round((qG_sph[:,0] - q_min)/dq - 0.5, n)
+    r_n = np.round((bins_q_sph[:,0] - q_min)/dq - 0.5, n)
     r_l = np.floor(r_n).astype(np.int32)
     r_l[r_l < 0] = 0
     r_g = np.ceil(r_n).astype(np.int32)
@@ -167,7 +167,7 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
     w_r_g = 1 - w_r_l #if r_l=r_g, only one weight=1, otherwise we're double-counting
 
     d_phi = 2*np.pi/N_phi
-    phi_n = np.round((qG_sph[:,2] + np.pi)/d_phi, n)
+    phi_n = np.round((bins_q_sph[:,2] + np.pi)/d_phi, n)
     phi_l = np.floor(phi_n).astype(np.int32)
     phi_g = np.ceil(phi_n).astype(np.int32)
     w_phi_l = 1 - phi_n % 1
@@ -176,7 +176,7 @@ def bin_eps_q(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights):
 
     #determine closest cos(theta)
     bin_costheta = np.cos(np.unique(bin_centers[:,1])) #unique cos(theta) in bins
-    qG_cos = np.cos(qG_sph[:,1])
+    qG_cos = np.cos(bins_q_sph[:,1])
     theta_l = np.sum(np.round(qG_cos[:,None] - bin_costheta, n) <= 0, axis=1) - 1
     theta_g = N_theta - np.sum(np.round(qG_cos[:,None] - bin_costheta, n) >= 0, axis=1)
 
@@ -220,10 +220,10 @@ def bin_eps_q_1d(q, G_vectors, eps_q, bin_centers, tot_bin_eps, tot_bin_weights)
     dq = np.unique(bin_centers)[1] - np.unique(bin_centers)[0]
     
     #convert q+G to spherical coords
-    qG_sph = cartesian_to_spherical(q + G_vectors)
+    bins_q_sph = cartesian_to_spherical(q + G_vectors)
 
     #find bin index and weights simultaneously
-    r_n = np.round((qG_sph[:,0] - q_min)/dq - 0.5, n)
+    r_n = np.round((bins_q_sph[:,0] - q_min)/dq - 0.5, n)
     r_l = np.floor(r_n).astype(np.int32)
     r_l[r_l < 0] = 0
     r_g = np.ceil(r_n).astype(np.int32)

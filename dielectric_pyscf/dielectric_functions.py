@@ -49,6 +49,7 @@ def dielectric_RPA(cell: do_routines.pbcgto.cell.Cell, dark_objects: dict, dft_p
     dark_objects['unique_q'] = do_routines.get_1BZ_q_points(cell)
     dark_objects['R_cutoffs'] = do_routines.primgauss_1D_overlaps(dark_objects)
     dark_objects['R_cutoff_q_points'] = do_routines.store_R_ids(dark_objects)
+    dark_objects['unique_Ri'] = do_routines.load_unique_R()
     return dark_objects
 
 def main_setup() -> dict:

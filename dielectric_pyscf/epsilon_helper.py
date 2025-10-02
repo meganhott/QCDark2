@@ -99,10 +99,10 @@ def get_eps_im_k_head(i_k, ovlp, im_delE):
     """
     N_E = int(parmt.E_max/parmt.dE + 1)
 
-    ovlp_t = np.einsum('xij, yij -> ijxy', ovlp, ovlp).reshape((ovlp.shape[1], ovlp.shape[2], 9)) #(i,j,3,3) -> (i,j,9)
+    ovlp_t = np.einsum('xij, yij -> ijxy', ovlp, ovlp.conj()).reshape((ovlp.shape[1], ovlp.shape[2], 9)) #(i,j,3,3) -> (i,j,9)
 
     # treat each xy component as G vector in delta_G function
-    eps_im_t = np.real(delta_G(im_delE[i_k], ovlp_t, ovlp_t.conj(), N_E)).reshape((N_E,3,3))
+    eps_im_t = np.real(delta_G(im_delE[i_k], ovlp_t, np.ones_like(ovlp_t), N_E)).reshape((N_E,3,3))
 
     return eps_im_t #(E,3,3)
 
@@ -112,18 +112,20 @@ def get_eps_delta_k_wings(i_k, k_f, ovlp, mo_coeff_i, mo_coeff_f_conj, G, primga
 
     Inputs:
         i_k int
-        ovlp (i,j)
-        im_delE (k,i,j)
+        ovlp (3,i,j)
+        im_delE (k,2,i,j)
     """
     N_E = int(parmt.E_max/parmt.dE + 1)
 
     #Calculating 3D overlaps
-    eta_qG = get_3D_overlaps_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, G, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path) #(a,b,G)
-    eta_qG = eta_qG / np.linalg.norm(G, axis=1)[None,None,:] #(a,b,G)
+    eta_qG = get_3D_overlaps_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, G, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path) #(i,j,G)
+    eta_qG = eta_qG / np.linalg.norm(G, axis=1)[None,None,:] #(i,j,G)
 
-    eps_delta = delta_G(im_delE[i_k], np.repeat(ovlp[:,:,None], eta_qG.shape[2], axis=2), eta_qG, N_E) #(E,G)
+    eps_delta = np.zeros((3, N_E, G.shape[0]), dytpe='complex')
+    for i in range(3): # for each direction of nabla overlaps
+        eps_delta[i] = delta_G(im_delE[i_k], np.repeat(ovlp[i,:,:,None], eta_qG.shape[2], axis=2), eta_qG, N_E) #(E,G)
 
-    return eps_delta
+    return eps_delta #(3,E,G)
 
 def get_3D_overlaps_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path, working_dir=None):
     """

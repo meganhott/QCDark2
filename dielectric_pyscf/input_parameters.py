@@ -168,6 +168,9 @@ except KeyError:
 
 try:
     q_shift_dir = [float(q) for q in d['q_shift_dir'].replace(']', '').replace('[', '').split(',')]
+
+    if q_shift_dir == [0., 0., 0.]:
+        raise Exception('q_shift_dir cannot be [0,0,0]')
 except ValueError:
     raise ValueError('The direction of the shift in the final state Monkhorst-Pack k-grid must be specified as a vector in reciprocal space. For example, to shift in the k_x direction, q_shift_dir = [1,0,0]. This does not need to be specified if q_shift_mag = 0.')
 except KeyError:
