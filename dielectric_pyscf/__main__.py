@@ -2,7 +2,7 @@
 #from dielectric_pyscf.dielectric_functions import main
 import numpy as np
 import dielectric_pyscf.input_parameters as parmt
-from dielectric_pyscf.dielectric_functions import main_setup, main_eps, main_eps_mpi
+from dielectric_pyscf.dielectric_functions import main_setup, main_eps
 from dielectric_pyscf.epsilon_routines import save_eps
 
 def get_q_start_stop(N_q, N_nodes):

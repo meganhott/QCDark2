@@ -71,6 +71,7 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
     tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, N_E))
     tot_bin_eps_re = np.zeros((bin_centers.shape[0]+N_ang_bins, N_E))
     tot_bin_weights = np.zeros(bin_centers.shape[0]+N_ang_bins)
+    tot_bin_weights_re = np.zeros(bin_centers.shape[0]+N_ang_bins)
 
     N_q = len(dark_objects['unique_q'])
     if q_start == None:
@@ -99,8 +100,8 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
         mo_coeff_f_conj_q = mo_coeff_f_conj[k_pairs[:,1]] #(k_pair,b,j)
         mo_en_i_q = mo_en_i[k_pairs[:,0]] #(k_pair,i)
         mo_en_f_q = mo_en_f[k_pairs[:,1]] #(k_pair,j)
-        k_i_q = k_i[k_pairs[:,1]]
-        k_f_q = k_f[k_pairs[:,1]]
+        k_i_q = k_i[k_pairs[:,0]] #(k,3)
+        k_f_q = k_f[k_pairs[:,1]] #(k,3)
 
         # Calculating the delta function in energy
         #im_delE = delta_energy(mo_en_i_q, mo_en_f_q) #(k,2,a,b)
@@ -149,11 +150,10 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
             eps_q, bins_q = RPA_function(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_coeff_f_conj_q, k_i_q, k_f_q, band_ids, N_E, bin_centers[:N_ang_bins], einsum_path, working_dir, rank, optical_limit, prefactor)
 
             # Bin epsilon
-            #Bin real and imaginary parts - modify binning so both parts done at same time
             start_time = time.time()
             tot_bin_eps_im, tot_bin_weights = binning.bin_eps_q(bins_q, np.imag(eps_q), bin_centers, tot_bin_eps_im, tot_bin_weights)
             if parmt.include_lfe:
-                tot_bin_eps_re, _ = binning.bin_eps_q(bins_q, np.real(eps_q), bin_centers, tot_bin_eps_re, tot_bin_weights)
+                tot_bin_eps_re, tot_bin_weights_re = binning.bin_eps_q(bins_q, np.real(eps_q), bin_centers, tot_bin_eps_re, tot_bin_weights_re)
                 # tot_bin_weights_re is same as tot_bin_weights
 
             if rank == 0 or rank == None:
@@ -205,7 +205,7 @@ def RPA_noLFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo
         N_k = k_f_q.shape[0]
         k_tup = []
         for i_k in range(N_k):
-            k_tup.append( (i_k, k_f_q[i_k], mo_coeff_i_q[i_k], mo_coeff_f_conj_q[i_k]) )
+            k_tup.append( (i_k, k_f_q[i_k], mo_coeff_i_q[i_k,:,ivalbot:ivaltop+1], mo_coeff_f_conj_q[i_k,:,iconbot:icontop+1]) )
 
         # Save Im(eps) for each k, then load and combine after calculating for all k
         start_time = time.time()
@@ -341,7 +341,6 @@ def RPA_LFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_c
         if rank == 0 or rank == None:
             logger.info(f'\t\t\tFinished calculation of head and wings (q -> 0 limit). Time taken = {(time.time() - start_time):.2f} s')
 
-
     # **Perform Kramers-Kronig transformation to get PV parts of Re(eps) and Im(eps)**
     N_G_chunks = int(np.ceil(N_G/G_per_chunk))
     if rank == 0 or rank == None:
@@ -391,7 +390,7 @@ def RPA_LFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_c
         if E_per_chunk == 1: # eps_delta_chunk will be 2d
             eps_lfe[E_start[i]:E_stop[i]] = (1/np.diagonal(np.linalg.inv(eps_delta_chunk), axis1=0, axis2=1))
         else: # eps_delta_chunk will be 3d
-            eps_lfe[E_start[i]:E_stop[i]] = (1/np.diagonal(np.linalg.inv(eps_delta_chunk), axis1=1, axis2=2)) #make general diagonal function? write this whole function with numba? Is inv faster if we transpose first? (E,G,G') -> (G,E)
+            eps_lfe[E_start[i]:E_stop[i]] = (1/np.diagonal(np.linalg.inv(eps_delta_chunk), axis1=1, axis2=2))
 
         if parmt.debug_logging and (rank == 0 or rank == None):
             logger.info(f'\t\t\tBatch {i+1} finished in {time.time() - start_time1} s.')
