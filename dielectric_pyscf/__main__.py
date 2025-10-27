@@ -48,6 +48,7 @@ if parmt.mpi:
         q_start = np.empty((N_nodes), dtype='int')
         q_stop = np.empty((N_nodes), dtype='int')
 
+    comm.Barrier()
 
     dark_objects = comm.bcast(dark_objects, root=0) #broadcast dark_objects to all nodes
     comm.Bcast(q_start, root=0)
