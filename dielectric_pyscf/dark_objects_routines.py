@@ -7,7 +7,7 @@ from functools import partial
 import pyscf.pbc.gto as pbcgto
 import pyscf.lib.exceptions
 
-from dielectric_pyscf.routines import logger, time_wrapper, makedir, load_unique_R, get_all_unique_nums_in_array
+from dielectric_pyscf.routines import logger, time_wrapper, makedir, get_all_unique_nums_in_array
 import dielectric_pyscf.input_parameters as parmt
 import dielectric_pyscf.cartesian_moments as cartmoments
 
@@ -435,3 +435,13 @@ def store_R_ids(dark_objects: dict):
         logger.info(f'\tq > \t{q_cuts[-1]:.2f} amu, N_R = \t{R_id.shape[0]},')
         np.save(parmt.store + f'/R_ids/{i}', R_id)
     return np.array(q_cuts)
+
+def load_unique_R():
+    """
+    Loads unique R in each dimension from saved 1D intgrals.
+    """
+    unique_Ri = []
+    for dim in range(3):
+        dir = f'{parmt.store}/primgauss_1d_integrals/dim_{dim}/Ru.npy'
+        unique_Ri.append(np.load(dir))
+    return unique_Ri

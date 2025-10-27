@@ -2,7 +2,7 @@
 #from dielectric_pyscf.dielectric_functions import main
 import numpy as np
 import dielectric_pyscf.input_parameters as parmt
-from dielectric_pyscf.dielectric_functions import main_setup, main_eps, main_eps_mpi
+from dielectric_pyscf.dielectric_functions import main_setup, main_eps
 from dielectric_pyscf.epsilon_routines import save_eps
 
 def get_q_start_stop(N_q, N_nodes):
@@ -57,7 +57,7 @@ if parmt.mpi:
     q_start = q_start[rank]
     q_stop = q_stop[rank]
 
-    bin_eps, bin_weights, bin_centers = main_eps_mpi(dark_objects, rank=rank, q_start=q_start, q_stop=q_stop)
+    bin_eps, bin_weights, bin_centers = main_eps(dark_objects, rank=rank, q_start=q_start, q_stop=q_stop)
 
     #gather Im(eps) and weights from all nodes
     bin_eps_rec = None
@@ -81,4 +81,6 @@ else:
     logger.info('MPI = off. All calculations will be done on one node.')
 
     dark_objects = main_setup()
-    main_eps(dark_objects)
+    bin_eps, bin_weights, bin_centers = main_eps(dark_objects, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop)
+
+    save_eps(bin_eps, bin_weights, bin_centers)

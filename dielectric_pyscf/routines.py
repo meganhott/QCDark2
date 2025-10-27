@@ -110,16 +110,6 @@ def get_all_unique_vectors_in_array(array: np.ndarray, round_to: int = None) -> 
     unq = np.unique(array, axis=0)
     return unq
 
-def load_unique_R():
-    """
-    Loads unique R in each dimension from saved 1D intgrals.
-    """
-    unique_Ri = []
-    for dim in range(3):
-        dir = f'{parmt.store}/primgauss_1d_integrals/dim_{dim}/Ru.npy'
-        unique_Ri.append(np.load(dir))
-    return unique_Ri
-
 # Initialize log
 makedir(parmt.store, log=False)
 logger = logging
