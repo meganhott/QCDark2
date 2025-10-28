@@ -14,6 +14,8 @@ import dielectric_pyscf.epsilon_helper as eps
 import dielectric_pyscf.binning as binning
 import dielectric_pyscf.kramers_kronig as kk
 
+optical_limit_override = True
+
 @time_wrapper
 def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
     if parmt.dir_1d is not None:
@@ -26,6 +28,8 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
     mo_en_i = np.load(dft_path + 'mo_en_i.npy')
     k_i = np.load(parmt.store + '/k-pts_i.npy')
     k_f = np.load(parmt.store + '/k-pts_f.npy')
+
+    dk = np.max(np.linalg.norm(dark_objects['cell'].reciprocal_vectors(), axis=1)/np.array(parmt.k_grid)) # maximum k-grid spacing
 
     if parmt.optical_limit:
         mo_coeff_f_conj = mo_coeff_i.conj()
@@ -124,8 +128,9 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
 
                 G_q = G_q[((qpG_sph[:,2] < phi_g) & (qpG_sph[:,2] > phi_l) & (np.cos(qpG_sph[:,1]) <= costheta_g) & (np.cos(qpG_sph[:,1]) >= costheta_l))]
         """
+        global optical_limit_override
 
-        if (np.linalg.norm(q) < parmt.dq) and (parmt.dq < parmt.q_shift):
+        if (np.linalg.norm(q) < parmt.dq) and (parmt.dq < dk) and optical_limit_override:
             # Remove G = 0 if |q| < dq and dq < dk (if it would contribute to first bin)
             # This also removes some contributions to second bins, but these would be inaccurate anyway?
             G_q = G_q[1:] 
@@ -252,15 +257,27 @@ def RPA_noLFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo
         start_time = time.time()
         eps_head = 1j * alpha**4 * me**2 * RPA_head(dark_objects['cell'], k_i_q, mo_en_i_q[:,ivalbot:ivaltop+1], mo_en_i_q[:,iconbot:icontop+1], mo_coeff_i_q[:,:,ivalbot:ivaltop+1], mo_coeff_i_q[:,:,iconbot:icontop+1], first_bins)
 
-        bins_q = np.concatenate((first_bins, bins_q), axis=0)
+        bins_q = np.concatenate((binning.spherical_to_cartesian(first_bins), bins_q), axis=0)
         eps_q = np.concatenate((eps_head, eps_q), axis=0)
 
         logger.info(f'\t\t\tOptical limit computed for bins closest to origin. Time taken = {(time.time() - start_time):.2f} s.')
+
+        global optical_limit_override
+        optical_limit_override = False # only computes optical limit once
 
     if rank == None or rank == 0:
         logger.info(f'\t\tFinished calculation of Im(eps). Time taken = {(time.time() - start_time1):.2f} s')
    
     return prefactor*eps_q, bins_q
+
+"""
+def RPA_noLFE_optical_limit(dark_objects, mo_en_i_q, mo_coeff_i_q, k_i_q, bands_ids, first_bins, prefactor):
+    start_time = time.time()
+    eps_head = 1j * alpha**4 * me**2 * RPA_head(dark_objects['cell'], k_i_q, mo_en_i_q[:,ivalbot:ivaltop+1], mo_en_i_q[:,iconbot:icontop+1], mo_coeff_i_q[:,:,ivalbot:ivaltop+1], mo_coeff_i_q[:,:,iconbot:icontop+1], first_bins)
+
+    logger.info(f'\t\t\tOptical limit computed for bins closest to origin. Time taken = {(time.time() - start_time):.2f} s.')
+    return prefactor*eps_head, first_bins
+"""
 
 def RPA_LFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_coeff_f_conj_q, k_i_q, k_f_q, band_ids, N_E, first_bins, einsum_path, working_dir, rank, optical_limit, prefactor):
     """
@@ -385,6 +402,9 @@ def RPA_LFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_c
 
         if rank == 0 or rank == None:
             logger.info(f'\t\t\tFinished calculation of head and wings (q -> 0 limit). Time taken = {(time.time() - start_time):.2f} s')
+
+        global optical_limit_override
+        optical_limit_override = False # only computes optical limit once
 
     # **Perform Kramers-Kronig transformation to get PV parts of Re(eps) and Im(eps)**
     N_G_chunks = int(np.ceil(N_G/G_per_chunk))
@@ -618,9 +638,9 @@ def RPA_head(cell, k, mo_en_i, mo_en_f, mo_coeff_i, mo_coeff_f, first_bins):
     eps_im_t = np.sum(np.array(eps_im_t), axis=0) #(k,E,3,3) -> (E,3,3)
 
     # Optical limit for all first bins around origin
-    first_bins[:,0] = 1 # setting magnitude to 1 since we want unit vectors
-    q_dir = first_bins
-
+    q_dir = first_bins.copy()
+    q_dir[:,0] = 1 # setting magnitude to 1 since we want unit vectors
+    
     eps_im = np.einsum('bx,by,exy -> be', q_dir, q_dir, eps_im_t)
 
     return eps_im #(first bins, E)
