@@ -130,11 +130,13 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
         """
         global optical_limit_override
 
-        if (np.linalg.norm(q) < parmt.dq) and (parmt.dq < dk) and optical_limit_override:
+        if (np.linalg.norm(q) < parmt.dq) and (parmt.dq < dk):
             # Remove G = 0 if |q| < dq and dq < dk (if it would contribute to first bin)
             # This also removes some contributions to second bins, but these would be inaccurate anyway?
             G_q = G_q[1:] 
             optical_limit = True # compute G = 0 contribution with optical limit
+        elif optical_limit_override:
+            optical_limit = True
         else:
             optical_limit = False
 
@@ -640,6 +642,7 @@ def RPA_head(cell, k, mo_en_i, mo_en_f, mo_coeff_i, mo_coeff_f, first_bins):
     # Optical limit for all first bins around origin
     q_dir = first_bins.copy()
     q_dir[:,0] = 1 # setting magnitude to 1 since we want unit vectors
+    q_dir = binning.spherical_to_cartesian(q_dir) # convert back to cartesian for dot product
     
     eps_im = np.einsum('bx,by,exy -> be', q_dir, q_dir, eps_im_t)
 
