@@ -379,6 +379,7 @@ def primgauss_1D_overlaps(dark_objects: dict) -> list[np.ndarray]:
     primindices = dark_objects['primindices']
     atom_locs = dark_objects['atom_locs']
     q, G = np.load(parmt.store + '/unique_q.npy'), dark_objects['G_vectors']
+    q = np.concatenate((q, [[0,0,0]]), axis=0) #append 0 for optical limit
     Rv = dark_objects['R_vectors']
     logger.info("Generating overlaps of 1D primitve gaussians.")
     makedir(parmt.store + '/primgauss_1d_integrals/')
