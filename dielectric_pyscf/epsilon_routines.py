@@ -14,8 +14,6 @@ import dielectric_pyscf.epsilon_helper as eps
 import dielectric_pyscf.binning as binning
 import dielectric_pyscf.kramers_kronig as kk
 
-optical_limit_override = True
-
 @time_wrapper
 def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
     if parmt.dir_1d is not None:
@@ -70,6 +68,7 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
     
     # Generate bins
     bin_centers = binning.gen_bin_centers(parmt.q_max, parmt.q_min, parmt.dq, parmt.N_theta, parmt.N_phi)
+    first_bins = bin_centers[:N_ang_bins]
     tot_bin_eps_im = np.zeros((bin_centers.shape[0]+N_ang_bins, N_E))
     tot_bin_eps_re = np.zeros((bin_centers.shape[0]+N_ang_bins, N_E))
     tot_bin_weights = np.zeros(bin_centers.shape[0]+N_ang_bins)
@@ -88,6 +87,30 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
 
     q_keys = list(dark_objects['unique_q'].keys())[q_start:q_stop]
     G_vectors = dark_objects['G_vectors']
+
+    if (np.linalg.norm(q_keys, axis=1) > parmt.dq).all() and (parmt.dq < dk) and (q_start == 0):
+        # If any |q| < dq for any q, the optical limit will be computed in the loop over q. otherwise, do optical limit now
+        if rank == 0 or rank == None:
+            logger.info(f'\tStarting q -> 0 optical limit calculation for bins closest to origin.')
+
+        start_time = time.time()
+        ivalbot, ivaltop, iconbot, icontop = band_ids
+        bins_q = binning.spherical_to_cartesian(first_bins)
+        if parmt.include_lfe:
+            # run full LFE calculate with mo_coeff_f = mo_coeff_i
+            G_q = G_vectors[np.linalg.norm(G_vectors, axis=1) < parmt.q_max + 1.5*parmt.dq][1:]
+
+            eps_q, _ = RPA_function(np.array([0,0,0]), G_q, dark_objects, mo_en_i, mo_en_i, mo_coeff_i, mo_coeff_i.conj(), k_i, k_i, band_ids, N_E, first_bins, einsum_path, working_dir, rank, True, prefactor)
+
+            tot_bin_eps_im, tot_bin_weights = binning.bin_eps_q(bins_q, np.imag(eps_q)[:N_ang_bins], bin_centers, tot_bin_eps_im, tot_bin_weights)
+            tot_bin_eps_re, tot_bin_weights_re = binning.bin_eps_q(bins_q, np.real(eps_q)[:N_ang_bins], bin_centers, tot_bin_eps_re, tot_bin_weights_re)
+        else:
+            eps_head = prefactor * alpha**4 * me**2 * RPA_head(dark_objects['cell'], k_i, mo_en_i[:,ivalbot:ivaltop+1], mo_en_i[:,iconbot:icontop+1], mo_coeff_i[:,:,ivalbot:ivaltop+1], mo_coeff_i[:,:,iconbot:icontop+1], first_bins)
+
+            tot_bin_eps_im, tot_bin_weights = binning.bin_eps_q(bins_q, eps_head, bin_centers, tot_bin_eps_im, tot_bin_weights)
+
+        if rank == 0 or rank == None:
+            logger.info(f'\tOptical limit computed for bins closest to origin. Time taken = {(time.time() - start_time):.2f} s.')
 
     for i_q, q in enumerate(q_keys, start=q_start):
         k_pairs = np.array(dark_objects['unique_q'][q])
@@ -128,15 +151,12 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
 
                 G_q = G_q[((qpG_sph[:,2] < phi_g) & (qpG_sph[:,2] > phi_l) & (np.cos(qpG_sph[:,1]) <= costheta_g) & (np.cos(qpG_sph[:,1]) >= costheta_l))]
         """
-        global optical_limit_override
 
         if (np.linalg.norm(q) < parmt.dq) and (parmt.dq < dk):
             # Remove G = 0 if |q| < dq and dq < dk (if it would contribute to first bin)
             # This also removes some contributions to second bins, but these would be inaccurate anyway?
             G_q = G_q[1:] 
             optical_limit = True # compute G = 0 contribution with optical limit
-        elif optical_limit_override:
-            optical_limit = True
         else:
             optical_limit = False
 
@@ -149,7 +169,7 @@ def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=pa
             logger.info('\t\tNo contributions from this q')
         else:
             # Send to RPA function
-            eps_q, bins_q = RPA_function(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_coeff_f_conj_q, k_i_q, k_f_q, band_ids, N_E, bin_centers[:N_ang_bins], einsum_path, working_dir, rank, optical_limit, prefactor)
+            eps_q, bins_q = RPA_function(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_coeff_f_conj_q, k_i_q, k_f_q, band_ids, N_E, first_bins, einsum_path, working_dir, rank, optical_limit, prefactor)
 
             # Bin epsilon
             start_time = time.time()
@@ -264,9 +284,6 @@ def RPA_noLFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo
 
         logger.info(f'\t\t\tOptical limit computed for bins closest to origin. Time taken = {(time.time() - start_time):.2f} s.')
 
-        global optical_limit_override
-        optical_limit_override = False # only computes optical limit once
-
     if rank == None or rank == 0:
         logger.info(f'\t\tFinished calculation of Im(eps). Time taken = {(time.time() - start_time1):.2f} s')
    
@@ -310,20 +327,7 @@ def RPA_LFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_c
     """
     N_G = G_q.shape[0]
     qG = q[None, :] + G_q
-    bins_q = qG
     ivalbot, ivaltop, iconbot, icontop = band_ids
-
-    if optical_limit:
-        print(f'Warning: directional optical limit is not yet implemented for LFEs. The dielectric function for q -> will be calculated in the q_shift_dir = {parmt.q_shift_dir} direction only. This direction can be specified in the input file.')
-
-        # check if material is iostropic - to be implemented
-
-        N_G = N_G + 1 # determine how many "extra" N_G required for optical bins - just one for now
-        N_G_skip = 1 # skip first G indices of eps_delta when saving body
-
-        bins_q = np.concatenate((first_bins, bins_q), axis=0)
-    else:
-        N_G_skip = 0
 
     # **Creating hdf5 file to store large intermediate array**
     eps_delta_h5 = h5py.File(working_dir + '/eps_delta.h5', 'w') # eps_delta with be stored to hdf5 for each energy
@@ -347,7 +351,7 @@ def RPA_LFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_c
     # Calculating the delta function in energy
     im_delE = delta_energy(mo_en_i_q[:,ivalbot:ivaltop+1], mo_en_f_q[:,iconbot:icontop+1]) #(k,2,a,b)
 
-    RPA_body_LFE(qG, k_f_q, mo_coeff_i_q[:,:,ivalbot:ivaltop+1], mo_coeff_f_conj_q[:,:,iconbot:icontop+1], im_delE, dark_objects, einsum_path, working_dir, rank, prefactor, neg_E=False, N_G_skip=N_G_skip)
+    RPA_body_LFE(qG, k_f_q, mo_coeff_i_q[:,:,ivalbot:ivaltop+1], mo_coeff_f_conj_q[:,:,iconbot:icontop+1], im_delE, dark_objects, einsum_path, working_dir, rank, prefactor, neg_E=False)
     
     if rank == 0 or rank == None:
         logger.info(f'\t\t\tFinished calculation of delta part of polarizability for 0 < E <= {parmt.E_max} eV. Time taken = {(time.time() - start_time):.2f} s')
@@ -359,14 +363,23 @@ def RPA_LFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_c
 
     im_delE = delta_energy(mo_en_i_q[:,iconbot:icontop+1], mo_en_f_q[:,ivalbot:ivaltop+1]) #(k,2,a,b)
 
-    RPA_body_LFE(qG, k_f_q, mo_coeff_i_q[:,:,iconbot:icontop+1], mo_coeff_f_conj_q[:,:,ivalbot:ivaltop+1], im_delE, dark_objects, einsum_path, working_dir, rank, prefactor, neg_E=True, N_G_skip=N_G_skip)
+    RPA_body_LFE(qG, k_f_q, mo_coeff_i_q[:,:,iconbot:icontop+1], mo_coeff_f_conj_q[:,:,ivalbot:ivaltop+1], im_delE, dark_objects, einsum_path, working_dir, rank, prefactor, neg_E=True)
 
     if rank == 0 or rank == None:
         logger.info(f'\t\t\tFinished calculation of delta part of polarizability for -{parmt.E_max} <= E <= 0 eV. Time taken = {(time.time() - start_time):.2f} s')
 
     if optical_limit:
-        q_dir = np.array(parmt.q_shift_dir)
-        q_dir = q_dir / np.linalg.norm(q_dir) 
+        # check if cyrstal is isotropic - then optical limit will be the same in all directions
+        if len(np.unique(np.linalg.norm(dark_objects['cell'].lattice_vectors(), axis=1))) == 1:
+            # currently just checks if all lattice vectors are the same magnitude
+            q_dir = np.array([1,0,0])[np.newaxis,:]
+            isotropic = True
+        else:
+            q_dir = first_bins
+            isotropic = False
+        N_q_dir = q_dir.shape[0]
+        N_first_bins = first_bins.shape[0]
+        bins_q = np.concatenate((binning.spherical_to_cartesian(first_bins), qG), axis=0)
 
         start_time = time.time()
         if rank == 0 or rank == None:
@@ -378,35 +391,34 @@ def RPA_LFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_c
         prefactor_wings = 8.*(np.pi**2)*(alpha**3)*me/(VCell*N_k)/parmt.dE * alpha*me
 
         # Calculating head for 0 <= E <= E_max
-        eps_im_head = prefactor_head * RPA_head(dark_objects['cell'], k_i_q, mo_en_i_q[:,ivalbot:ivaltop+1], mo_en_i_q[:,iconbot:icontop+1], mo_coeff_i_q[:,:,ivalbot:ivaltop+1], mo_coeff_i_q[:,:,iconbot:icontop+1], q_dir[np.newaxis,:]) #(E,)
+        eps_im_head = prefactor_head * RPA_head(dark_objects['cell'], k_i_q, mo_en_i_q[:,ivalbot:ivaltop+1], mo_en_i_q[:,iconbot:icontop+1], mo_coeff_i_q[:,:,ivalbot:ivaltop+1], mo_coeff_i_q[:,:,iconbot:icontop+1], q_dir) #(q_dir, E)
 
         # Head for -E_max <= E <= E_max
-        eps_delta_head = np.concatenate((-1*np.flip(eps_im_head)[:-1], eps_im_head)).astype('complex') #(E,)
+        eps_delta_head = np.concatenate((-1*np.flip(eps_im_head, axis=1)[:,:-1], eps_im_head), axis=1).astype('complex') #(q_dir, E)
 
         # Wings
-        eps_delta_wings_p = prefactor_wings * RPA_wings(G_q, k_i_q, mo_en_i_q[:,ivalbot:ivaltop+1], mo_en_i_q[:,iconbot:icontop+1], mo_coeff_i_q[:,:,ivalbot:ivaltop+1], mo_coeff_i_q[:,:,iconbot:icontop+1], q_dir[np.newaxis,:], dark_objects, einsum_path)[0] #(E,G)
+        eps_delta_wings_p = prefactor_wings * RPA_wings(G_q, k_i_q, mo_en_i_q[:,ivalbot:ivaltop+1], mo_en_i_q[:,iconbot:icontop+1], mo_coeff_i_q[:,:,ivalbot:ivaltop+1], mo_coeff_i_q[:,:,iconbot:icontop+1], q_dir, dark_objects, einsum_path) #(q_dir, E, G)
         # indexing first axis since we currently only calculate in one direction
 
-        eps_delta_wings_n = -1 * prefactor_wings * RPA_wings(G_q, k_i_q, mo_en_i_q[:,iconbot:icontop+1], mo_en_i_q[:,ivalbot:ivaltop+1], mo_coeff_i_q[:,:,iconbot:icontop+1], mo_coeff_i_q[:,:,ivalbot:ivaltop+1], q_dir[np.newaxis,:], dark_objects, einsum_path)[0]
+        eps_delta_wings_n = -1 * prefactor_wings * RPA_wings(G_q, k_i_q, mo_en_i_q[:,iconbot:icontop+1], mo_en_i_q[:,ivalbot:ivaltop+1], mo_coeff_i_q[:,:,iconbot:icontop+1], mo_coeff_i_q[:,:,ivalbot:ivaltop+1], q_dir, dark_objects, einsum_path)
 
         # Concatenate wings along energy and write to hdf5 along with head
-        eps_delta_wings = np.concatenate((np.flip(eps_delta_wings_n, axis=0)[:-1], eps_delta_wings_p), axis=0) #(E,G)
+        eps_delta_wings = np.concatenate((np.flip(eps_delta_wings_n, axis=1)[:,:-1], eps_delta_wings_p), axis=1) #(q_dir, E, G)
 
+        # create datasets for head and wings
         eps_delta_h5 = h5py.File(working_dir + '/eps_delta.h5', 'r+')
-        eps_delta = eps_delta_h5['eps_delta']
-
-        eps_delta[:,0,0] = eps_delta_head
-
-        eps_delta[:,0,1:] = eps_delta_wings.conj()
-        eps_delta[:,1:,0] = eps_delta_wings
-
+        eps_delta_h5.create_dataset('eps_delta_head_wings', (N_E, N_q_dir, N_G+1), dtype='complex') #B = wings.conj(), C = wings
+        eps_delta_head_wings = eps_delta_h5['eps_delta_head_wings']
+        eps_delta_head_wings[:,:,0] = np.transpose(eps_delta_head, (1,0))
+        eps_delta_head_wings[:,:,1:] = np.transpose(eps_delta_wings, (1,0,2))
         eps_delta_h5.close()
 
         if rank == 0 or rank == None:
             logger.info(f'\t\t\tFinished calculation of head and wings (q -> 0 limit). Time taken = {(time.time() - start_time):.2f} s')
-
-        global optical_limit_override
-        optical_limit_override = False # only computes optical limit once
+    else:
+        N_q_dir = 0
+        N_first_bins = 0
+        bins_q = qG
 
     # **Perform Kramers-Kronig transformation to get PV parts of Re(eps) and Im(eps)**
     N_G_chunks = int(np.ceil(N_G/G_per_chunk))
@@ -436,6 +448,11 @@ def RPA_LFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_c
                 logger.info(f'\t\t\t\tWriting to hdf5 finished in {time.time() - start_time2} s.')
                 logger.info(f'\t\t\tBatch {(i+1)*N_G_chunks + (j+1)} finished in {time.time() - start_time1} s.')
 
+    if optical_limit:
+        eps_delta_head_wings = eps_delta_h5['eps_delta_head_wings'] #(E,first_bins,G+1)
+        eps_lfe = kk.kramerskronig_lfe(eps_delta_head_wings[:], parmt.E_max, parmt.dE)
+        eps_delta_head_wings[:] = eps_lfe + np.identity(N_G + 1)[None, 0]
+
     if rank == 0 or rank == None:
         logger.info(f'\t\tKramers-Kronig transform completed in {(time.time() - start_time):.2f} s.')
 
@@ -448,36 +465,40 @@ def RPA_LFE_gen_q(q, G_q, dark_objects, mo_en_i_q, mo_en_f_q, mo_coeff_i_q, mo_c
     E_start = np.arange(0, E_per_chunk*N_E_chunks, E_per_chunk)
     E_stop = np.append(np.arange(E_per_chunk, E_per_chunk*N_E_chunks, E_per_chunk), N_E)
 
-    eps_lfe = np.empty((N_E, N_G), dtype='complex')
+    eps_lfe = np.zeros((N_E, N_G + N_first_bins), dtype='complex')
     start_time = time.time()
     for i in range(N_E_chunks):
         start_time1 = time.time()
         eps_delta_chunk = eps_delta[E_start[i]:E_stop[i]]
 
-        if E_per_chunk == 1: # eps_delta_chunk will be 2d
-            eps_lfe[E_start[i]:E_stop[i]] = (1/np.diagonal(np.linalg.inv(eps_delta_chunk), axis1=0, axis2=1))
-        else: # eps_delta_chunk will be 3d
-            eps_lfe[E_start[i]:E_stop[i]] = (1/np.diagonal(np.linalg.inv(eps_delta_chunk), axis1=1, axis2=2))
+        D_inv = np.linalg.inv(eps_delta_chunk)
+
+        if optical_limit:
+            eps_delta_head_chunk = eps_delta_head_wings[E_start[i]:E_stop[i],:,0] #(E,first_bin)
+            eps_delta_wings_chunk = eps_delta_head_wings[E_start[i]:E_stop[i],:,1:] #(E,first_bin,G)
+
+            if isotropic: # write same to all directions
+                M_inv_head, M_inv_body = eps.block_inversion_diag(eps_delta_head_chunk[:,0], eps_delta_wings_chunk[:,0].conj(), eps_delta_wings_chunk[:,0], D_inv)
+                eps_lfe[E_start[i]:E_stop[i],:N_first_bins] = M_inv_head[:,None]
+                eps_lfe[E_start[i]:E_stop[i],N_first_bins:] += M_inv_body
+            else:
+                for j in range(N_first_bins):
+                    M_inv_head, M_inv_body = eps.block_inversion_diag(eps_delta_head_chunk[:,j], eps_delta_wings_chunk[:,j].conj(), eps_delta_wings_chunk[:,j], D_inv)
+                    eps_lfe[E_start[i]:E_stop[i],j] = M_inv_head
+                    eps_lfe[E_start[i]:E_stop[i],N_first_bins:] += M_inv_body / N_first_bins # averaging body over different head+wings directions
+        else:
+            eps_lfe[E_start[i]:E_stop[i]] = (1/np.diagonal(D_inv, axis1=1, axis2=2))
 
         if parmt.debug_logging and (rank == 0 or rank == None):
             logger.info(f'\t\t\tBatch {i+1} finished in {time.time() - start_time1} s.')
 
     eps_delta_h5.close()
-    eps_lfe = eps_lfe.transpose((1,0)).copy() #(G,E)
+    eps_lfe = eps_lfe.transpose((1,0)).copy() #(first_bins+G,E)
 
     if rank == 0 or rank == None:
         logger.info(f'\t\tInversion completed and eps_LFE calculated in {(time.time() - start_time):.2f} s.')
 
-    if optical_limit:
-        # anisotropic optical limit not yet implemented - optical limit in q_shift_dir will be written to all first bins
-        N_first_bins = first_bins.shape[0]
-        eps_q = np.empty((N_first_bins + N_G-1), dtype='complex')
-        eps_q[:N_first_bins] = eps_lfe[0]
-        eps_q[N_first_bins:] = eps_lfe[N_first_bins+1:]
-    else:
-        eps_q = eps_lfe
-
-    return eps_q, bins_q
+    return eps_lfe, bins_q
 
 def RPA_body_LFE(qG, k_f, mo_coeff_i, mo_coeff_f_conj, im_delE, dark_objects, einsum_path, working_dir, rank, prefactor, neg_E, N_G_skip=0):
     """

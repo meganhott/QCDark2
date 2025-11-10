@@ -121,7 +121,7 @@ def get_eps_delta_k_wings(i_k, k_f, ovlp, mo_coeff_i, mo_coeff_f_conj, G, primga
     eta_qG = get_3D_overlaps_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, G, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path) #(i,j,G)
     eta_qG = eta_qG / np.linalg.norm(G, axis=1)[None,None,:] #(i,j,G)
 
-    eps_delta = np.zeros((3, N_E, G.shape[0]), dytpe='complex')
+    eps_delta = np.zeros((3, N_E, G.shape[0]), dtype='complex')
     for i in range(3): # for each direction of nabla overlaps
         eps_delta[i] = delta_G(im_delE[i_k], np.repeat(ovlp[i,:,:,None], eta_qG.shape[2], axis=2), eta_qG, N_E) #(E,G)
 
@@ -207,3 +207,25 @@ def gen_outer(A, B, C, prefactor):
             for k in range(B.shape[1]):
                 C[i,j,k] = A[i,j]*B[i,k]
     return prefactor*C
+
+def block_inversion_diag(A, B, C, D_inv):
+    """
+    Computes the diagonal components of the [[A, B],[C, D]] matrix using blockwise inversion.
+
+    Inputs:
+        A: (N_E,) (head)
+        B: (N_E, N_G) (wing)
+        C: (N_E, N_G) (wing)
+        D: (N_E, N_G, N_G) (body)
+    Outputs:
+        M_inv_head_diag: (N_E,)
+        M_inv_body_diag: (N_E, N_G)
+    """
+    MD_schur_inv = 1 / (A - np.einsum('eg,egh,eh -> e', B, D_inv, C))
+
+    N_E = A.shape[0]
+    N_G = B.shape[1] + 1
+
+    G = np.einsum('eh,e,eg -> ehg', C, MD_schur_inv, B)
+    M_inv_diag = 1/np.diagonal(D_inv + (D_inv @ G @ D_inv), axis1=1, axis2=2)
+    return 1/MD_schur_inv, M_inv_diag
