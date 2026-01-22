@@ -3,8 +3,8 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dielectric_pyscf"
-description = "Calculation of finite momentum RPA dielectric function"
+name = "qcdark2"
+description = "Computation of dark matter-electron scattering rates in crystals with finite momentum RPA dielectric function"
 readme = "README.md"
 license.text = "CC0-1.0"
 version = "2.0.0"
