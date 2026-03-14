@@ -8,6 +8,7 @@ Solar-reflected DM fluxes for a massless mediator:
         Solar reflection of dark matter with dark-photon mediators,  
         Journal of Cosmology and Astroparticle Physics 2024 (2024) 023   
         [2404.10066] (https://doi.org/10.1088/1475-7516/2024/07/023)  
+        github: https://github.com/hlxuhep/Solar-Reflected-Dark-Matter-Flux  
 
 Ionization yield for Si at 100K:  
     p100K.dat  
