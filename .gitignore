@@ -11,3 +11,4 @@ dielectric_pyscf/rpa_dielectric_cython.c*
 dielectric_pyscf/build
 /bandstructure_plot.py
 /DFT_resources.zip
+build/
