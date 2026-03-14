@@ -4,19 +4,3 @@ QCDark2 computes the RPA dielectric function $\epsilon(\omega, \mathbf{q})$ at f
 - We include a notebook showing examples of DM calculations: [DM_calculations](examples/DM_calculations.ipynb)  
 
 RPA dielectric functions for new functions can also be computed from scratch. To do so, this repository can be downloaded and installed as a python package.  
-
-Requirements:
- - python > 3.9.6
- - pyscf > 2.9.0
-
-To install on system (from QEDark2 directory):  
-```
-pip install .
-```
-qedark2 can then be imported as a package in a python shell (see example notebook [DM_calculations](examples/DM_calculations.ipynb))  
-
-To run a new dielectric function calculation:
-```
-python3 -m qcdark2.dielectric_pyscf input_file.in
-```
-Example input files can be found in [materials](qcdark2/materials/).
