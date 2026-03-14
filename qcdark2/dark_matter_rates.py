@@ -2,8 +2,6 @@ import numpy as np
 import scipy as sp
 import h5py
 
-from dielectric_pyscf.binning import cartesian_to_spherical
-
 # Global constants
 lightSpeed     = 299792.458        # km/s
 alpha          = 1.0/137.03599908  # EM fine-structure constant at low energy
