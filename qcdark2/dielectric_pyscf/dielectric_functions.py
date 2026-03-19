@@ -8,11 +8,11 @@ QCDark branch to calculate the dielectric function:
     authors: github: @meganhott; github: @asingal14
 """
 
-import dielectric_pyscf.dark_objects_routines as do_routines
-import dielectric_pyscf.dft_routines as dft_routines
-import dielectric_pyscf.epsilon_routines as eps_routines
-import dielectric_pyscf.utils as utils
-import dielectric_pyscf.input_parameters as parmt
+import qcdark2.dielectric_pyscf.dark_objects_routines as do_routines
+import qcdark2.dielectric_pyscf.dft_routines as dft_routines
+import qcdark2.dielectric_pyscf.epsilon_routines as eps_routines
+import qcdark2.dielectric_pyscf.utils as utils
+import qcdark2.dielectric_pyscf.input_parameters as parmt
 
 def initialize_cell() -> tuple[do_routines.pbcgto.cell.Cell, dict]:
     cell = do_routines.build_cell_from_input()

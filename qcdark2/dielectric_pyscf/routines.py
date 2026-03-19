@@ -13,7 +13,7 @@ import logging
 import numpy as np
 from functools import wraps, partial
 
-import dielectric_pyscf.input_parameters as parmt
+import qcdark2.dielectric_pyscf.input_parameters as parmt
 
 ##==== Constants in the whole calculation ============
 c = 299792458.                                          # c in m/s

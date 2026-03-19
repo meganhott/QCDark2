@@ -9,8 +9,8 @@ from pyscf.dft.xc.utils import format_xc_code
 
 import pyscf.lib
 
-import dielectric_pyscf.input_parameters as parmt
-from dielectric_pyscf.routines import logger, time_wrapper, makedir
+import qcdark2.dielectric_pyscf.input_parameters as parmt
+from qcdark2.dielectric_pyscf.routines import logger, time_wrapper, makedir
 
 # Constants
 me = 0.51099895000e6 # eV

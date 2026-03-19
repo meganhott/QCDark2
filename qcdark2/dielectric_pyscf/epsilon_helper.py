@@ -1,7 +1,7 @@
 import numpy as np
 import numba as nb
 
-import dielectric_pyscf.input_parameters as parmt
+import qcdark2.dielectric_pyscf.input_parameters as parmt
 
 #Constants
 alpha = 1/137

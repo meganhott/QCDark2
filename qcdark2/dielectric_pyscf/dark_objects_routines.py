@@ -7,9 +7,9 @@ from functools import partial
 import pyscf.pbc.gto as pbcgto
 import pyscf.lib.exceptions
 
-from dielectric_pyscf.routines import logger, time_wrapper, makedir, get_all_unique_nums_in_array
-import dielectric_pyscf.input_parameters as parmt
-import dielectric_pyscf.cartesian_moments as cartmoments
+from qcdark2.dielectric_pyscf.routines import logger, time_wrapper, makedir, get_all_unique_nums_in_array
+import qcdark2.dielectric_pyscf.input_parameters as parmt
+import qcdark2.dielectric_pyscf.cartesian_moments as cartmoments
 
 @time_wrapper
 def build_cell_from_input() -> pbcgto.cell.Cell:

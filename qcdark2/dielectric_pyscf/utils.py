@@ -6,8 +6,8 @@ import numpy as np
 import scipy
 import pyscf
 
-import dielectric_pyscf.input_parameters as parmt
-from dielectric_pyscf.routines import logger, time_wrapper
+import qcdark2.dielectric_pyscf.input_parameters as parmt
+from qcdark2.dielectric_pyscf.routines import logger, time_wrapper
  
 @time_wrapper
 def check_requirements() -> None:

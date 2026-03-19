@@ -1,4 +1,4 @@
-save_path = /gpfs/scratch/mhott/dielectric_pyscf_results
+save_path = .
 name = test_Ge_cc-pvtz_pbe_10k_7q_lfe
 
 include_lfe = True

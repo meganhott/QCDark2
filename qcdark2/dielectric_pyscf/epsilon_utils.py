@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.interpolate import LinearNDInterpolator, make_interp_spline
 
-from dielectric_pyscf.binning import spherical_to_cartesian
+from qcdark2.dielectric_pyscf.binning import spherical_to_cartesian
 
 # Post-processing functions for the dielectric function.
 

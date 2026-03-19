@@ -1,9 +1,8 @@
-#import dielectric_pyscf.utils as utils
-#from dielectric_pyscf.dielectric_functions import main
 import numpy as np
-import dielectric_pyscf.input_parameters as parmt
-from dielectric_pyscf.dielectric_functions import main_setup, main_eps
-from dielectric_pyscf.epsilon_routines import save_eps
+
+import qcdark2.dielectric_pyscf.input_parameters as parmt
+from qcdark2.dielectric_pyscf.dielectric_functions import main_setup, main_eps
+from qcdark2.dielectric_pyscf.epsilon_routines import save_eps
 
 def get_q_start_stop(N_q, N_nodes):
     if parmt.q_stop is not None:
@@ -30,7 +29,7 @@ if parmt.mpi:
     N_nodes = comm.Get_size()
 
     if rank == 0: #pyscf calculations and dark_objects setup done on one node
-        from dielectric_pyscf.routines import logger
+        from qcdark2.dielectric_pyscf.routines import logger
         logger.info(f'MPI = on. Dielectric function calculations for each q will be split among {N_nodes} nodes after initial pyscf DFT calculations.')
 
         dark_objects = main_setup()
@@ -77,7 +76,7 @@ if parmt.mpi:
         save_eps(bin_eps_rec, bin_weights_rec, bin_centers)
 
 else:
-    from dielectric_pyscf.routines import logger
+    from qcdark2.dielectric_pyscf.routines import logger
     logger.info('MPI = off. All calculations will be done on one node.')
 
     dark_objects = main_setup()

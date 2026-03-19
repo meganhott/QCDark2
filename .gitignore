@@ -12,3 +12,4 @@ dielectric_pyscf/build
 /bandstructure_plot.py
 /DFT_resources.zip
 build/
+qcdark2.egg-info

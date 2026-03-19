@@ -1,4 +1,4 @@
-save_path = /gpfs/scratch/mhott/dielectric_pyscf_results
+save_path = .
 name = diamond_cc-pvtz_pbe_8k
 
 include_lfe = True

@@ -7,12 +7,12 @@ from functools import partial
 from numba import njit
 import h5py
 
-from dielectric_pyscf.routines import logger, time_wrapper, makedir, alpha, me
-from dielectric_pyscf.epsilon_utils import epsilon_r, interp_eps
-import dielectric_pyscf.input_parameters as parmt
-import dielectric_pyscf.epsilon_helper as eps
-import dielectric_pyscf.binning as binning
-import dielectric_pyscf.kramers_kronig as kk
+from qcdark2.dielectric_pyscf.routines import logger, time_wrapper, makedir, alpha, me
+from qcdark2.dielectric_pyscf.epsilon_utils import epsilon_r, interp_eps
+import qcdark2.dielectric_pyscf.input_parameters as parmt
+import qcdark2.dielectric_pyscf.epsilon_helper as eps
+import qcdark2.dielectric_pyscf.binning as binning
+import qcdark2.dielectric_pyscf.kramers_kronig as kk
 
 @time_wrapper
 def get_RPA_dielectric(dark_objects, rank=None, q_start=parmt.q_start, q_stop=parmt.q_stop):
