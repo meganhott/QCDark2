@@ -20,8 +20,8 @@ python3 -m qcdark2.dielectric_pyscf input_file.in
 Example input files can be found in [materials](qcdark2/materials/).
 
 Requirements:
- - python > 3.9.6
- - pyscf > 2.9.0
+ - python > 3.9.6  
+ - pyscf > 2.9.0  
 Optional:
 - mpi4py (recommended for large computing clusters but not required)
 
