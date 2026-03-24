@@ -1,0 +1,10 @@
+title: QCDark2
+description: A guide to computing dark matter-electron sccattering rates with QCDark2
+theme: just-the-docs
+
+url: https://meganhott.github.io/QCDark2
+
+plugins:
+  - jekyll-spaceship
+
+color_scheme: dark
