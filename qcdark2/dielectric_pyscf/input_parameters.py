@@ -2,7 +2,7 @@
 This script parses the given input file. Custom default options may be specified below.
 """
 
-defaults = {'mpi':False, 'save_3d':False, 'dir_1d':None, 'dir_1d_exact_angle': False, 'binning_1d':False, 'optical_limit':False, 'effective_core_potential':None, 'pseudo':None, 'orth':False, 'density_fitting':'MDF', 'precision':1e-12, 'precision_R':1e-9, 'q_shift_dir':[1,1,1], 'q_shift':0.01, 'dq':0.02, 'N_theta':9, 'N_phi':16, 'dE':0.1, 'E_max':50.0}
+defaults = {'mpi':False, 'save_3d':False, 'dir_1d':None, 'dir_1d_exact_angle': False, 'binning_1d':False, 'optical_limit':False, 'effective_core_potential':None, 'pseudo':None, 'orth':False, 'density_fitting':'MDF', 'precision':1e-12, 'precision_R':1e-9, 'dq':0.02, 'N_theta':9, 'N_phi':16, 'dE':0.1, 'E_max':50.0}
 
 import argparse
 import numpy as np
@@ -167,27 +167,17 @@ except KeyError:
     raise Exception(generic_error.format('k_grid'))
 
 try:
-    q_shift_dir = [float(q) for q in d['q_shift_dir'].replace(']', '').replace('[', '').split(',')]
+    q_shift = [float(q) for q in d['q_shift'].replace(']', '').replace('[', '').split(',')]
 
-    if q_shift_dir == [0., 0., 0.]:
-        raise Exception('q_shift_dir cannot be [0,0,0]')
+    if q_shift == [0., 0., 0.]: # same k-grid are used for initial and final states
+        optical_limit = True
+    else:
+        optical_limit = False
 except ValueError:
-    raise ValueError('The direction of the shift in the final state Monkhorst-Pack k-grid must be specified as a vector in reciprocal space. For example, to shift in the k_x direction, q_shift_dir = [1,0,0]. This does not need to be specified if q_shift_mag = 0.')
+    raise ValueError('The q-shift in the final state Monkhorst-Pack grid must be a vector in reciprocal space (in units of inverse bohr). If this shift is set too large, interpolation of small bins may be impossible. This can be set to [0,0,0] to use the same DFT calculation for the initial and final states. By default, the q-shift will be set to half the k-grid spacing.')
 except KeyError:
-    q_shift_dir = defaults['q_shift_dir']
-
-try:
-    q_shift = float(d['q_shift_mag'])
-except ValueError:
-    raise ValueError('The magnitude of the shift in the final state Monkhorst-Pack grid must be a float (in units of inverse bohr). If this is set too large, interpolation of small bins may be impossible. This can be set to 0.')
-except KeyError:
-    q_shift = defaults['q_shift']
-
-if q_shift == 0:
-    optical_limit = True
-    q_shift_dir = None
-else:
-    optical_limit = False
+    test_cell = gto.M(a=lattice_vectors, atom=atom)
+    q_shift = np.sum(test_cell.reciprocal_vectors()/k_grid/2, axis=1)
 
 try:
     dq = float(d['dq'])
