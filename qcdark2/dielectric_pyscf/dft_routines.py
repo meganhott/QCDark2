@@ -38,7 +38,7 @@ def save_dft(cell):
         'precision': parmt.precision,
         'xcfunc': format_xc_code(parmt.xcfunc),
         'k_grid': parmt.k_grid,
-        'q_shift': np.round(parmt.q_shift, 6),
+        'q_shift': parmt.q_shift,
         'formatted_basis': cell.format_basis(cell.basis),
         'formatted_ecp': cell.format_ecp(cell.ecp),
         #'formatted_pseudo': cell.format_pseudo(cell.pseudo)

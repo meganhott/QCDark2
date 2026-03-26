@@ -177,7 +177,8 @@ except ValueError:
     raise ValueError('The q-shift in the final state Monkhorst-Pack grid must be a vector in reciprocal space (in units of inverse bohr). If this shift is set too large, interpolation of small bins may be impossible. This can be set to [0,0,0] to use the same DFT calculation for the initial and final states. By default, the q-shift will be set to half the k-grid spacing.')
 except KeyError:
     test_cell = gto.M(a=lattice_vectors, atom=atom)
-    q_shift = np.sum(test_cell.reciprocal_vectors()/k_grid/2, axis=1)
+    q_shift = list(np.round(np.sum(test_cell.reciprocal_vectors()/k_grid/2, axis=1), 6))
+    optical_limit = False
 
 try:
     dq = float(d['dq'])
