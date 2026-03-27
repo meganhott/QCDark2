@@ -11,11 +11,11 @@ git clone https://github.com/meganhott/QCDark2.git
 cd QCDark2
 pip install .
 ```
-Dark matter-electron scattering rates can be calculated with existing dielectric functions (Si, Ge, GaAs, SiC, and diamond are available on [github](https://github.com/meganhott/QCDark2/blob/main/examples/DM_calculations.ipynb)) by importing the package in a python shell:
+Dark matter-electron scattering rates can be calculated with existing dielectric functions (Si, Ge, GaAs, SiC, and diamond are available on [github](https://github.com/meganhott/QCDark2/tree/main/dielectric_functions)) by importing the package in a python shell:
 ```
 import qcdark2.dark_matter_rates as dm
 ```
-See the [notebook](github.com/meganhott/QCDark2/blob/main/examples/DM_calculations.ipynb) for examples of DM scattering rate calculations.  
+See the [notebook](https://github.com/meganhott/QCDark2/blob/main/examples/DM_calculations.ipynb) for examples of DM scattering rate calculations.  
 
 A new dielectric function calculation can be performed with material parameters specified in an input file (see [materials](https://github.com/meganhott/QCDark2/tree/main/qcdark2/materials)):
 ```

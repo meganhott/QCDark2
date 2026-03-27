@@ -18,7 +18,7 @@ Currently the following are only implemented for spin-independent DM-electron in
 - Scattering rates $dR/d\omega$
 - Projected sensitivity in $(m_{\chi}, \bar{\sigma}_e)$  
 
-See the [notebook](github.com/meganhott/QCDark2/blob/main/examples/DM_calculations.ipynb) for examples of these calculations.
+See the [notebook](https://github.com/meganhott/QCDark2/blob/main/examples/DM_calculations.ipynb) for examples of these calculations.
 
 # Papers
 

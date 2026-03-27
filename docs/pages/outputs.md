@@ -38,4 +38,4 @@ epsilon.S()
 ```
 
 ## Post-processing
-The `plot_templates.py` module has many useful functions for quickly plotting the dielectric function, ELF, and dynamic structure factor. Dark matter-electron scattering rates, electron recoil spectra, and sensitivity projections can be calculated with the functions in `qcdark2.dark_matter_rates`. See the [notebook](github.com/meganhott/QCDark2/blob/main/examples/DM_calculations.ipynb) for examples.  
+The `plot_templates.py` module has many useful functions for quickly plotting the dielectric function, ELF, and dynamic structure factor. Dark matter-electron scattering rates, electron recoil spectra, and sensitivity projections can be calculated with the functions in `qcdark2.dark_matter_rates`. See the [notebook](https://github.com/meganhott/QCDark2/blob/main/examples/DM_calculations.ipynb) for examples.  
