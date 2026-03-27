@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qcdark2"
+description = "Computation of dark matter-electron scattering rates in crystals with finite momentum RPA dielectric function"
+readme = "README.md"
+license.text = "CC0-1.0"
+version = "2.0.0"
+authors = [
+    {name = "Megan Hott", email = "megan.hott@stonybrook.edu"},
+    {name = "Aman Singal", email = "aman.singal@stonybrook.edu"}
+]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "pyscf>=2.9.0",
+    "numba",
+    "h5py",
+    "scipy",
+    "psutil"
+]
+
+[project.optional-dependencies]
+mpi = ["mpi4py"]
+dft = ["basis_set_exchange", "ase"]

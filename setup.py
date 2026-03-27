@@ -13,6 +13,6 @@ setup(name='qcdark2',
       author='Megan Hott',
       author_email='megan.hott@stonybrook.edu',
       packages=find_packages('.'),
-      install_requires=['numpy', 'pyscf', 'h5py', 'scipy', 'psutil'],
+      install_requires=['numpy', ' numba', 'pyscf', 'h5py', 'scipy', 'psutil'],
       python_requires='>=3.9',
       )

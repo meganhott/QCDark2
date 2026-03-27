@@ -38,7 +38,6 @@ def save_dft(cell):
         'precision': parmt.precision,
         'xcfunc': format_xc_code(parmt.xcfunc),
         'k_grid': parmt.k_grid,
-        'q_shift_dir': parmt.q_shift_dir,
         'q_shift': parmt.q_shift,
         'formatted_basis': cell.format_basis(cell.basis),
         'formatted_ecp': cell.format_ecp(cell.ecp),
@@ -58,8 +57,8 @@ def save_dft(cell):
     for d in dft_instances:
         dft_dict = json.load(open(f'{dft_path}/{d}/dft_params.txt', 'r'))
 
-        if parmt.optical_limit: #only check initial DFT calculation - this is equivalent to q_shift = 0
-            if all(dft_dict[key] == dft_params[key] for key in dft_dict.keys() if key not in ['dft_instance', 'basis', 'ecp', 'pseudo', 'atom', 'q_shift_dir', 'q_shift']) and cell.format_atom(dft_dict['atom'], unit=1) == dft_params['atom']: # compare everything except dft_instance and unformatted atom
+        if parmt.optical_limit: #only check initial DFT calculation - this is equivalent to q_shift = [0,0,0]
+            if all(dft_dict[key] == dft_params[key] for key in dft_dict.keys() if key not in ['dft_instance', 'basis', 'ecp', 'pseudo', 'atom', 'q_shift']) and cell.format_atom(dft_dict['atom'], unit=1) == dft_params['atom']: # compare everything except dft_instance and unformatted atom
                 dft_params['dft_instance'] = d
                 dft_files = os.listdir(dft_path + '/' + d)
                 if len(dft_files) < 4: # something went wrong with previously calculated DFT, calculation should be started again
@@ -109,7 +108,7 @@ def list_saved_dft(df=False):
             dft_dict['lattice_vectors'] = str(dft_dict['lattice_vectors'])
             dft_dict['mybasis'] = str(dft_dict['mybasis'])
             dft_dict['k_grid'] = str(dft_dict['k_grid'])
-            dft_dict['q_shift_dir'] = str(dft_dict['q_shift_dir'])
+            dft_dict['q_shift'] = str(dft_dict['q_shift'])
 
             if i == 0:
                 df = pd.DataFrame(data=dft_dict)
@@ -128,8 +127,7 @@ def list_saved_dft(df=False):
             print(f'\tPrecision: {dft_dict["precision"]}')
             print(f'\tExchange Correlation Functional: {dft_dict["xcfunc"]}')
             print(f'\tk-grid: {dft_dict["k_grid"]}'.format(dft_dict["k_grid"]))
-            print(f'\tq Shift Direction: {dft_dict["q_shift_dir"]}')
-            print(f'\tq shift: {dft_dict["q_shift"]}')
+            print(f'\tq-shift: {dft_dict["q_shift"]}')
 
 def make_kpts(cell: pbcgto.cell.Cell, dft_params: dict) -> pyscf.pbc.lib.kpts.KPoints:
     """
@@ -157,10 +155,9 @@ def make_kpts(cell: pbcgto.cell.Cell, dft_params: dict) -> pyscf.pbc.lib.kpts.KP
     if parmt.optical_limit:
         kpts_f = kpts_i
     else:
-        q_shift_dir = np.array(dft_params['q_shift_dir'])
-        q_shift = dft_params['q_shift'] * q_shift_dir / np.linalg.norm(q_shift_dir)
+        q_shift = np.array( dft_params['q_shift'])
 
-        logger.info(f'Selected q shift = {np.array2string(q_shift, precision = 5)}')
+        logger.info(f'Selected q shift = {np.array2string(q_shift, precision = 6)}')
 
         scaled_center = cell.get_scaled_kpts(q_shift)
 

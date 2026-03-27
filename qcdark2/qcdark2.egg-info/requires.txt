@@ -1,5 +1,0 @@
-h5py
-numpy
-psutil
-pyscf
-scipy
