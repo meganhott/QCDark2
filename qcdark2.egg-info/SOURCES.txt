@@ -1,5 +1,6 @@
 LICENSE
 README.md
+pyproject.toml
 setup.py
 qcdark2/__init__.py
 qcdark2/dark_matter_rates.py

@@ -1,5 +1,13 @@
 numpy
-pyscf
+pyscf>=2.9.0
+numba
 h5py
 scipy
 psutil
+
+[dft]
+basis_set_exchange
+ase
+
+[mpi]
+mpi4py
