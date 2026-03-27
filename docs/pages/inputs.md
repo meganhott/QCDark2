@@ -67,8 +67,6 @@ N_theta = 9
 N_phi = 16
 
 save_3d = False
-dir_1d = False
-dir_1d_exact_angle = False
 ```
 
 ## Material Parameters  
