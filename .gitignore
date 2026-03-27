@@ -3,7 +3,7 @@
 *.sh
 *_resources
 /DFT_resources.zip
-buil*.egg-info/
+*.egg-info/
 dist/
 build/
 **/__pycache__
