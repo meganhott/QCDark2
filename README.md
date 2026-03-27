@@ -1,8 +1,11 @@
 # QCDark2
+
+[Documentation](https://meganhott.github.io/QCDark2)
+
 QCDark2 computes the RPA dielectric function $\epsilon(\omega, \mathbf{q})$ at finite momentum to use in dark matter-electron scattering calculations. DFT is performed with [PySCF](https://pyscf.org/) using Gaussian-type orbitals, then the RPA dielectric function is calculated analytically using the properties of Gaussian basis sets. Local field effects can be included in the RPA calculation. Standard DM calculations including scattering rates, electron recoil spectra, and sensitivity projections can be performed with the functions in `dark_matter_rates.py`.   
 - Pre-computed dielectric functions for Si, Ge, GaAs, SiC, and diamond are in [dielectric_functions](dielectric_functions/)  
 - We include a notebook showing examples of DM calculations: [DM_calculations](examples/DM_calculations.ipynb)  
-- To calculate the dielectric function for a new material, the material parameters can be specified in an input file (see [materials](qcdark2/materials)) 
+- To calculate the dielectric function for a new material, the material parameters can be specified in an input file. See the [documentation](https://meganhott.github.io/QCDark2)
 
 If you would like to download all results and example notebooks included in this repo as well as install the package, you can clone the repo and then install as a package with pip: 
 ```
