@@ -1,4 +1,4 @@
-These files come from external sources and are used to perform DM calculations with the QCDark2 dielectric functions. Their attributions are below:
+The following files come from external sources and are used to perform DM calculations with the QCDark2 dielectric functions. They can be found at the sources listed below and copied to this folder to use in `DM_calculations.ipynb`:
 
 Solar-reflected DM fluxes for a massless mediator:  
     Differential_SRDM_Flux_DPLM_10_8.txt   (m_X = 50 keV, sigma = 1e-38 cm^2)  
@@ -15,5 +15,5 @@ Ionization yield for Si at 100K:
     Source:  
         K. Ramanathan and N. Kurinsky,   
         Ionization yield in silicon for eV-scale electron-recoil processes,   
-        Phys. Rev. D 102 (2020) 063026   
+        Phys. Rev. D 102 (2020) 063026 (Supplemental material)   
         [2004.10709] (https://doi.org/10.1103/PhysRevD.102.063026)  
