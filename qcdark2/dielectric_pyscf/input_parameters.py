@@ -2,7 +2,7 @@
 This script parses the given input file. Custom default options may be specified below.
 """
 
-defaults = {'mpi':False, 'save_3d':False, 'dir_1d':None, 'dir_1d_exact_angle': False, 'binning_1d':False, 'optical_limit':False, 'effective_core_potential':None, 'pseudo':None, 'orth':False, 'density_fitting':'MDF', 'precision':1e-12, 'precision_R':1e-9, 'dq':0.02, 'N_theta':9, 'N_phi':16, 'dE':0.1, 'E_max':50.0}
+defaults = {'mpi':False, 'save_3d':False, 'dir_1d':None, 'dir_1d_exact_angle': False, 'binning_1d':False, 'optical_limit':False, 'effective_core_potential':None, 'pseudo':None, 'orth':False, 'density_fitting':'MDF', 'precision':1e-12, 'precision_R':1e-9, 'dq':0.02, 'N_theta':9, 'N_phi':16, 'dE':0.1, 'E_max':50.0, 'basis_file':None}
 
 import argparse
 import numpy as np
@@ -62,19 +62,39 @@ except Exception: #other errors from pyscf
     print('Error in pyscf parsing atom. A working example is: atom =  Si, 0., 0., 0.; Si, 1.3575, 1.3575, 1.3575')
     raise
 
-try:
-    basis_str = d['basis']
-    basis_elements = basis_str.split(',')
-    basis_dict = {}
-    for el in basis_elements:
-        key, value = el.split(':')
-        basis_dict[key] = value
-    mybasis = basis_dict
+try: # option to input file with custom GTO basis
+    basis_file = d['basis_file']
+    if basis_file == 'None':
+        basis_file = None
+    else: 
+        # read custom basis from file
+        basis_file_str = open(basis_file).read()
+        try:
+            # test that the string from input file works in pyscf cell
+            basis_parsed = gto.parse(basis_file_str)
+            test_cell = gto.M(a=lattice_vectors, atom=atom, basis=basis_parsed)
+        except:
+            raise Exception('Issue with formatting of custom basis input. Check above error raised by pyscf or specify "basis" instead of "basis_file" to use built-in pyscf basis.')
 
-    #test in pyscf
-
+        mybasis = gto.parse(basis_file_str) # this is given to pyscf cell object in line 28 of dark_object_routines.py
 except KeyError:
-    print(generic_error.format('basis'))
+    basis_file = defaults['basis_file']
+
+if basis_file is None: # no custom basis input
+    try:
+        basis_str = d['basis']
+        basis_elements = basis_str.split(',')
+        basis_dict = {}
+        for el in basis_elements:
+            key, value = el.split(':')
+            basis_dict[key] = value
+        mybasis = basis_dict
+
+        #test in pyscf
+        test_cell = gto.M(a=lattice_vectors, atom=atom, basis=mybasis)
+
+    except KeyError:
+        print(generic_error.format('basis'))
 
 try: #check that this is consistent with basis?
     effective_core_potential = d['effective_core_potential']
@@ -92,6 +112,11 @@ except KeyError:
 
 
 ### DFT parameters ###
+
+# Add option to input own mo_en, mo_coeff, and mo_occ files (initial and shifted final)
+# Up to the user to make sure custom basis matches DFT files
+# We can do basic checks like making sure the k-grid size and number of MO/AO are correct (match with size of DFT arrays)
+
 try:
     orth = d['orthogonalize_dft']
     if orth in true_list:
