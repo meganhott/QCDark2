@@ -14,12 +14,17 @@ import qcdark2.dielectric_pyscf.epsilon_routines as eps_routines
 import qcdark2.dielectric_pyscf.utils as utils
 import qcdark2.dielectric_pyscf.input_parameters as parmt
 
+import numpy as np
+
 def initialize_cell() -> tuple[do_routines.pbcgto.cell.Cell, dict]:
     cell = do_routines.build_cell_from_input()
     primgauss = do_routines.gen_all_1D_prim_gauss(cell)
     primindices = do_routines.gen_prim_gauss_indices(primgauss)
+    #np.save('test_Si_cc-pvtpdz_pbe_8k_2_resources/primindices.npy', primindices[0])
+    #np.save('test_Si_cc-pvtpdz_pbe_8k_2_resources/primgauss.npy', primgauss)
     aos = do_routines.gen_all_atomic_orbitals(cell, primgauss)
     primgauss_arr, AO_arr, coeff_arr = do_routines.get_ao_blocks(aos)
+    #np.save('test_Si_cc-pvtpdz_pbe_8k_2_resources/primgauss_arr_v3.npy', primgauss_arr)
     G_vectors = do_routines.gen_G_vectors(cell)
     R_vectors = do_routines.construct_R_vectors(cell)
     V_cell = do_routines.get_cell_volume(cell)
@@ -37,6 +42,14 @@ def initialize_cell() -> tuple[do_routines.pbcgto.cell.Cell, dict]:
         'V_cell': V_cell,
         'cell': cell
     }
+
+    if parmt.transverse_response:
+        primgauss_vv_gaussians, primgauss_vv_coeff = do_routines.gen_vv_coeff(primindices[0])
+        np.save('test_Si_cc-pvtpdz_pbe_8k_2_resources/primgauss_vv_gaussians.npy', primgauss_vv_gaussians)
+        np.save('test_Si_cc-pvtpdz_pbe_8k_2_resources/primgauss_vv_coeff.npy', primgauss_vv_coeff)
+        exit()
+        dark_objects['primgauss_vv_gaussians'] = primgauss_vv_gaussians
+        dark_objects['primgauss_vv_coeff'] = primgauss_vv_coeff
     return cell, dark_objects
 
 def electronic_structure(cell: do_routines.pbcgto.cell.Cell, dft_params: dict):

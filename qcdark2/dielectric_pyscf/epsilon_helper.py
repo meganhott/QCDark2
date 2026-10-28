@@ -77,12 +77,12 @@ def get_eps_im_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_ar
     N_E = int(parmt.E_max/parmt.dE + 1)
 
     #Calculating 3D overlaps
-    eta_qG = get_3D_overlaps_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path) #(a,b,G)
-    eta_qG = eta_qG / np.linalg.norm(qG, axis=1)[None,None,:] #(a,b,G)
+    eta_qG = get_3D_overlaps_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_arr, coeff_arr, unique_Ri, q_cuts, path) #(i,j,G)
+    eta_qG = eta_qG / np.linalg.norm(qG, axis=1)[None,None,:] #(i,j,G)
 
-    eps_im = np.real(delta_G(im_delE[i_k], eta_qG, eta_qG.conj(), N_E))
+    eps_im = np.real(delta_G(im_delE[i_k], eta_qG, eta_qG.conj(), N_E)) #(E,G)
 
-    np.save(working_dir + f'/eps_im/eps_im_k{i_k}.npy', np.transpose(eps_im, (1,0)).copy())
+    np.save(working_dir + f'/eps_im/eps_im_k{i_k}.npy', np.transpose(eps_im, (1,0)).copy()) #(G,E)
     #return eps_im
 
 def get_eps_im_k_head(i_k, ovlp, im_delE):
@@ -159,8 +159,8 @@ def get_3D_overlaps_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, 
         ints = []
         for d in range(3): 
             ints.append(np.load(parmt.store + '/primgauss_1d_integrals/dim_{}/{:.5f}.npy'.format(d, qG_i[d]))[:,:,:] * np.exp(-1.j*unique_Ri[d][:]*k_f[None,d])[:,None,None])
-            ints[-1] = np.copy(np.transpose(ints[-1], (1,2,0)), order='C')
-        ovlp = ovlp_sum(primgauss_arr, AO_arr, coeff_arr, ints[0], ints[1], ints[2], R_id) #numba optimized function
+            ints[-1] = np.copy(np.transpose(ints[-1], (1,2,0)), order='C') #(a,b,R)
+        ovlp = ovlp_sum(primgauss_arr, AO_arr, coeff_arr, ints[0], ints[1], ints[2], R_id) #numba optimized function #(b,a)
         eta_qG[i] = np.einsum('kbj,kba,kai->kij', mo_coeff_f_conj[None,:,:], ovlp[None,:,:], mo_coeff_i[None,:,:], optimize = path)[0]
         #eta_qG[i] = get_3D_overlaps_k_arrays2(qG_i, k_f[0], primgauss_arr, AO_arr, coeff_arr, mo_coeff_i[0], mo_coeff_f_conj[0], unique_Ri, q_cuts, einsum_path)
     eta_qG = np.transpose(eta_qG, axes=(1,2,0)) #(G,i,j) -> (i,j,G)
@@ -176,7 +176,7 @@ def ovlp_sum(primgauss_arr, AO_arr, coeff_arr, ints_x, ints_y, ints_z, R_id):
 
     ovlp = np.empty((N_AO, N_AO), dtype=np.complex128)
 
-    for block1 in range(N_blocks):
+    for block1 in range(N_blocks): #b
         pgauss1 = primgauss_arr[block1] #(pgauss,3) boolean
         N_pg1 = np.count_nonzero(pgauss1[:,0])
 
@@ -185,18 +185,18 @@ def ovlp_sum(primgauss_arr, AO_arr, coeff_arr, ints_x, ints_y, ints_z, R_id):
         ints_i_y = ints_y[:,pgauss1[:,1],:]
         ints_i_z = ints_z[:,pgauss1[:,2],:]
 
-        for block2 in range(N_blocks):
+        for block2 in range(N_blocks): #a
             pgauss2 = primgauss_arr[block2] #(pgauss,3) boolean
             N_pg2 = np.count_nonzero(pgauss2[:,0])
             AO2 = AO_arr[block2] #(N_AO) boolean
 
             tot = np.sum(ints_i_x[pgauss2[:,0]][:,:,R_id[:,0]] * ints_i_y[pgauss2[:,1]][:,:,R_id[:,1]] * ints_i_z[pgauss2[:,2]][:,:,R_id[:,2]], axis=2)
 
-            for i in np.nonzero(AO1)[0]: #AO for block1
-                for j in np.nonzero(AO2)[0]: #AO for block2
-                    coeff1 = coeff_arr[i,:N_pg1] #(pgauss1)
-                    coeff2 = coeff_arr[j,:N_pg2] #(pgauss2)
-                    ovlp[i,j] = (tot@coeff1)@coeff2
+            for b in np.nonzero(AO1)[0]: #AO for block1
+                for a in np.nonzero(AO2)[0]: #AO for block2
+                    coeff1 = coeff_arr[b,:N_pg1] #(pgauss1)
+                    coeff2 = coeff_arr[a,:N_pg2] #(pgauss2)
+                    ovlp[b,a] = (tot@coeff1)@coeff2
     return ovlp
 
 #General outer product for eta_qG_sq (kij, G, G') = eta_qG(kij, G)*eta_qG(kij, G').conj() to replace much slower np.einsum('ag,ah -> agh')
@@ -229,3 +229,125 @@ def block_inversion_diag(A, B, C, D_inv):
     G = np.einsum('eh,e,eg -> ehg', C, MD_schur_inv, B)
     M_inv_diag = 1/np.diagonal(D_inv + (D_inv @ G @ D_inv), axis1=1, axis2=2)
     return 1/MD_schur_inv, M_inv_diag
+
+
+## ----- Current-current overlaps ----- ##
+
+def get_Pi_vv_im_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_arr, coeff_arr, primgauss_vv_coeff, unique_Ri, q_cuts, path, im_delE, working_dir):
+    """
+    Returns imaginary part of current-current self-energy Pi_{v^i v_j} (up to a prefactor) for body of noLFE
+    """
+    N_E = int(parmt.E_max/parmt.dE + 1)
+
+    #Calculating 3D overlaps
+    eta_qG_v = get_3D_overlaps_vv_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_arr, coeff_arr, primgauss_vv_coeff, unique_Ri, q_cuts, path) #(4,i,j,G)
+    # Do I want to still divide by |q+G|?
+    #eta_qG = eta_qG / np.linalg.norm(qG, axis=1)[None,None,:] #(i,j,G)
+
+    # Pi_vv[0] = Pi_11 (normal overlaps)
+    # Pi_vv[1-7] = Pi_vx,vx, Pi_vy,vy, Pi_vz,vz, Pi_vx,vy, Pi_vx,vz, Pi_vy,vz 
+    # (Pi_vi,vj = Pi_vj,vi*) 
+    Pi_vv = np.zeros((7, N_E, eta_qG_v.shape[3]), dtype='complex')
+    Pi_vv[0] = delta_G(im_delE[i_k], eta_qG_v[0].conj(), eta_qG_v[0], N_E) #(E,G), no derivative (Pi_11)
+    for i in range(1, 4):
+        Pi_vv[i] = delta_G(im_delE[i_k], eta_qG_v[i].conj(), eta_qG_v[i], N_E) # Pi_vi,vi
+    Pi_vv[4] = delta_G(im_delE[i_k], eta_qG_v[1].conj(), eta_qG_v[2], N_E) # Pi_vx,vy
+    Pi_vv[5] = delta_G(im_delE[i_k], eta_qG_v[1].conj(), eta_qG_v[3], N_E) # Pi_vx,vz
+    Pi_vv[6] = delta_G(im_delE[i_k], eta_qG_v[2].conj(), eta_qG_v[3], N_E) # Pi_vy,vz
+
+    np.save(working_dir + f'/eps_im/Pi_vv_k{i_k}.npy', np.transpose(Pi_vv, (0,2,1)).copy()) #(7,G,E)
+    #return eps_im
+
+def get_3D_overlaps_vv_k(i_k, k_f, mo_coeff_i, mo_coeff_f_conj, qG, primgauss_arr, AO_arr, coeff_arr, primgauss_vv_coeff, primgauss_vv_gaussians, unique_Ri, q_cuts, path, working_dir=None):
+    """
+    Calculates all 3D overlaps eta = <jk'|exp(i(q+G)r)|ik> and eta_v_a = <jk'|exp(i(q+G)r) del_a |ik> for cartesian directions 'a', for a given 1BZ q-vector and given G-vector using stored 1D overlaps
+
+    Inputs:
+        i_k (int): k index
+        k_f ((3,) np.ndarray): 
+            a single k' corresponding to q
+        primgauss_arr (3(l), N_blocks, N_primgauss, 3(d)) boolean np.ndarray:
+            Primitive gaussians are included in each block
+        AO_arr ((N_blocks, N_AO) boolean np.ndarray):
+            Atomic orbitals are included in each block
+        coeff_arr ((N_AO, N_max_primgauss) complex np.ndarray):
+            Primgauss coefficients for each AO
+        primgauss_vv_coeff (3, N_primgauss)
+        primgauss_vv_gaussians (3, N_primgauss_full)
+        mo_coeff_i ((N_AO, N_valbands) np.ndarray)
+        mo_coeff_f_conj ((N_AO, N_conbands) np.ndarray)
+        unique_Ri (list): list of [R_unique_x, R_unique_y, R_unique_z]
+        q_cuts ((N_q,) np.ndarray): 
+            |q+G| at which R_cutoff changes
+    Outputs:
+        eta_qG ((N_val_bands (i), N_cond_bands (j)) np.ndarray): 
+            all 3D overlaps <jk'|exp(i(q+G)r)|ik>
+        eta_qG_v (3, N_val_bands (i), N_cond_bands (j))
+            all 3D overlaps <jk'|exp(i(q+G)r) del_a |ik>
+    """
+    eta_qG = np.empty((qG.shape[0], mo_coeff_i.shape[1], mo_coeff_f_conj.shape[1]), dtype='complex128') # (G,i,j)
+    eta_qG_v = np.empty((qG.shape[0], 4, mo_coeff_i.shape[1], mo_coeff_f_conj.shape[1]), dtype='complex128') # (G,deriv,i,j)
+    for i, qG_i in enumerate(qG):
+        R_id = np.load(parmt.store + '/R_ids/{}.npy'.format(np.sum(q_cuts < np.linalg.norm(qG_i)) - 1))
+        ints = []
+        for d in range(3): 
+            ints.append(np.load(parmt.store + '/primgauss_1d_integrals/dim_{}/{:.5f}.npy'.format(d, qG_i[d]))[:,:,:] * np.exp(-1.j*unique_Ri[d][:]*k_f[None,d])[:,None,None]) #(R,a,b)
+            ints[-1] = np.copy(np.transpose(np.array([ints[-1][:,primgauss_vv_gaussians[i]][:,:,primgauss_vv_gaussians[0]]*primgauss_vv_coeff[i][None,:,None] for i in range(3)]), (0,2,3,1)), order='C') # ints[d] = (3(l),a,b,R)
+        ovlp = ovlp_sum_v(primgauss_arr, AO_arr, coeff_arr, ints[0], ints[1], ints[2], R_id, qG_i.astype('complex')) # (4(deriv),b,a) # ints have already been multiplied by primgauss coeff
+
+        eta_qG_v[i] = np.einsum('dbj,dba,dai->dij', mo_coeff_f_conj[None,:,:], ovlp[:,:,:], mo_coeff_i[None,:,:], optimize = path)
+    eta_qG_v = np.transpose(eta_qG_v, axes=(0,2,3,1)) #(deriv,G,i,j) -> (deriv,i,j,G)
+    if working_dir is not None:
+        np.save(working_dir + f'/eta_qG/eta_qG_k{i_k}.npy', eta_qG_v)
+    return eta_qG_v # (4(normal+deriv),i,j,G)
+
+@nb.njit(nb.complex128[:,:,::1]( nb.boolean[:,:,:,::1], nb.boolean[:,::1], nb.complex128[:,::1], nb.complex128[:,:,::1], nb.complex128[:,:,:,::1], nb.complex128[:,:,:,::1], nb.int64[:,::1], nb.complex128[::1] ))
+def ovlp_sum_v(primgauss_arr, AO_arr, coeff_arr, ints_x, ints_y, ints_z, R_id, qG):
+
+    N_blocks = primgauss_arr.shape[1]
+    N_AO = coeff_arr.shape[0]
+
+    ovlp = np.empty((3, N_AO, N_AO), dtype=np.complex128)
+
+    for block1 in range(N_blocks): # block1: prim_b
+        pgauss1 = primgauss_arr[:,block1] #(3(l),pgauss,3(d)) boolean
+        N_pg1 = np.count_nonzero(pgauss1[:,:,0])
+
+        AO1 = AO_arr[block1] #(N_AO) boolean
+        ints_i_x = ints_x[:,:,pgauss1[0,:,0]] #(3(l),prim_a,prim_b,R)
+        ints_i_y = ints_y[:,:,pgauss1[0,:,1]] #(3(l),prim_a,prim_b,R)
+        ints_i_z = ints_z[:,:,pgauss1[0,:,2]] #(3(l),prim_a,prim_b,R)
+
+
+        #ints_i_x = np.array([ints_x[i,:,pgauss1[i,:,0],:]] for i in range(3)) #(3(l),prim_b,prim_a,R)
+        #ints_i_y = np.array([ints_y[i,:,pgauss1[i,:,1],:]] for i in range(3))
+        #ints_i_z = np.array([ints_z[i,:,pgauss1[i,:,2],:]] for i in range(3))
+
+        for block2 in range(N_blocks): # block2: prim_b
+            pgauss2 = primgauss_arr[0,block2] #(3(l),pgauss,3(d)) boolean # b always normal Gaussian
+            N_pg2 = np.count_nonzero(pgauss2[:,:,0])
+
+            AO2 = AO_arr[block2] #(N_AO) boolean
+            ints_i_x2 = np.array([ints_i_x[i,pgauss2[i,:,0]] for i in range(3)])[:,:,:,R_id[:,0]] #(l,a,b,R)
+            ints_i_y2 = np.array([ints_i_y[i,pgauss2[i,:,1]] for i in range(3)])[:,:,:,R_id[:,1]]
+            ints_i_z2 = np.array([ints_i_z[i,pgauss2[i,:,2]] for i in range(3)])[:,:,:,R_id[:,2]]
+
+
+            #ints_i_x2 = ints_i_x[:,pgauss2[:,0]][:,:,R_id[:,0]] #(3(l),prim_b,prim_a,R)
+            #ints_i_y2 = ints_i_y[:,pgauss2[:,1]][:,:,R_id[:,1]]
+            #ints_i_z2 = ints_i_z[:,pgauss2[:,1]][:,:,R_id[:,1]]
+
+            # first axis corresponds to derivative
+            tot = np.empty((4, ints_i_x2.shape[1], ints_i_x2.shape[2]), dtype=np.complex128) #first axis: no derivative, d_x, d_y, d_z
+            tot[0] = np.sum(ints_i_x2[0] * ints_i_y2[0] * ints_i_z2[0], axis=2) # no derivative, (prim_b,prim_a), summed over R
+            tot[1] = -1j/2/me * np.sum((1j*qG[0]*ints_i_x2[0] + 2*ints_i_x2[1] + 2*ints_i_x2[2]) * ints_i_y2[0] * ints_i_z2[0], axis=2) # d_x, (prim_a,prim_b)
+            tot[2] = -1j/2/me * np.sum((1j*qG[1]*ints_i_y2[0] + 2*ints_i_y2[1] + 2*ints_i_y2[2]) * ints_i_x2[0] * ints_i_z2[0], axis=2) # d_y, (prim_a,prim_b)
+            tot[3] = -1j/2/me * np.sum((1j*qG[2]*ints_i_z2[0] + 2*ints_i_z2[1] + 2*ints_i_z2[2]) * ints_i_x2[0] * ints_i_y2[0], axis=2) # d_z, (prim_a,prim_b)
+
+            for b in np.nonzero(AO1)[0]: #AO for block1 (b)
+                for a in np.nonzero(AO2)[0]: #AO for block2 (a)
+                    coeff1 = coeff_arr[b,:N_pg1] #(pgauss1)
+                    coeff2 = coeff_arr[a,:N_pg2] #(pgauss2)
+                    ovlp[:,b,a] = (tot@coeff1)@coeff2 # check (4(deriv),b,a)
+                    
+    return ovlp

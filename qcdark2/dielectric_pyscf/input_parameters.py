@@ -2,7 +2,7 @@
 This script parses the given input file. Custom default options may be specified below.
 """
 
-defaults = {'mpi':False, 'save_3d':False, 'dir_1d':None, 'dir_1d_exact_angle': False, 'binning_1d':False, 'optical_limit':False, 'effective_core_potential':None, 'pseudo':None, 'orth':False, 'density_fitting':'MDF', 'precision':1e-12, 'precision_R':1e-9, 'dq':0.02, 'N_theta':9, 'N_phi':16, 'dE':0.1, 'E_max':50.0}
+defaults = {'mpi':False, 'save_3d':False, 'dir_1d':None, 'dir_1d_exact_angle': False, 'binning_1d':False, 'optical_limit':False, 'effective_core_potential':None, 'pseudo':None, 'orth':False, 'density_fitting':'MDF', 'precision':1e-12, 'precision_R':1e-9, 'dq':0.02, 'N_theta':9, 'N_phi':16, 'dE':0.1, 'E_max':50.0, 'transverse_response':True}
 
 import argparse
 import numpy as np
@@ -246,6 +246,21 @@ try:
         raise Exception('Input Error: include_lfe must be either True or False.')
 except KeyError:
     include_lfe = False #default
+
+try:
+    transverse_response = d['transverse_response']
+    if transverse_response in true_list:
+        if include_lfe:
+            raise NotImplementedError('Transverse response is currently not implemented with LFEs.')
+        transverse_response = True
+    elif transverse_response in false_list:
+        transverse_response = False 
+    else:
+        raise Exception('Input Error: transverse_response must be either True or False.')
+except KeyError:
+    transverse_response = defaults['transverse_response']
+
+
 
 ### Binning parameters ###
 try:

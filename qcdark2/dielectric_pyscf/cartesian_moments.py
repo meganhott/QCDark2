@@ -125,7 +125,7 @@ class AO(object):
                         contains all exponents in the contracted gaussian
         coeffs:         np.ndarray of shape (N_prim, )
                         contains all coefficients in the contracted gaussian
-        primgauss:      np.ndarray of shape (tot_prim, 7)
+        primgauss:      np.ndarray of shape (tot_prim, 8)
                         contains details of all primgauss elements.
      
     Q: can it be sped up? Can we eliminate the need to read in primgauss object?

@@ -175,7 +175,7 @@ def gen_all_1D_prim_gauss(cell: pbcgto.cell.Cell) -> np.ndarray:
             return np.sqrt(np.power(2,2*(L)+1.5)*np.power(exp,L+1.5)/cartmoments.fact2(2*L-1)/cartmoments.fact2(-1)/cartmoments.fact2(-1)/np.power(np.pi,1.5))
         else:
             return np.sqrt(np.power(2, L + 2.5)*np.power(exp, L + 1.5)/cartmoments.gamma(1.5 + L))
-        
+
     primgauss = np.zeros((0, 8))
     for atom_id, atom in enumerate(cell._atom):
         species, loc = atom[0], atom[1]
@@ -185,17 +185,56 @@ def gen_all_1D_prim_gauss(cell: pbcgto.cell.Cell) -> np.ndarray:
             elements = basis_element[1:]
             for element in elements:
                 norm = normalize(element[0], l)
-                for i in range(l+1):
-                    primgauss = np.append(primgauss, [[atom_id, l, i, element[0], loc[0], loc[1], loc[2], norm]], axis = 0)
+                for i in range(l+1+parmt.transverse_response): # include l_max+1 for current-current overlaps
+                    primgauss = np.append(primgauss, [[atom_id, l+parmt.transverse_response, i, element[0], loc[0], loc[1], loc[2], norm]], axis = 0)
     logger.info(f'All 1D primitive gaussians found for the cell.\n\tNumber of unique primitive gaussians = {primgauss.shape[0]}.\n\tThis includes all possible angular momentum in one direction.')
     return primgauss
+
+def gen_vv_coeff(primindices):
+    """
+    primindices: (M, 4), [atom id, l_max, exponent, id of first index in primgauss]
+
+    primgauss_vv_gaussians [3, N_prim] picks out primgauss for 3D overlaps 
+    primgauss_vv_coeff [3, N_prim_red] primgauss coefficients for 3D overlaps. [:,0] corresponds to usual overlaps in density-density response
+    """
+    N_prim = int(round(primindices[-1,-1] + primindices[-1,1] + 1))
+
+    primgauss_vv_gaussians = np.zeros((3,N_prim), dtype='bool') #(N_prim, [0,-1,1]) 1D Gaussians for vv 3D overlaps
+
+    for p in primindices:
+        id1 = int(p[3]) # first index in primgauss
+        l_max = int(p[1]) # max angular momentum of primgauss + 1
+        for l in range(l_max): # for l up to l_max
+            primgauss_vv_gaussians[0, id1+l] = 1 #G_l
+            primgauss_vv_gaussians[1, id1+l-1] = 1 #G_(l-1)
+            primgauss_vv_gaussians[2, id1+l+1] = 1 #G_(l+1)
+    primgauss_vv_gaussians[1,0] = 1
+    primgauss_vv_gaussians[1,-1] = 0
+
+    N_prim_red = np.count_nonzero(primgauss_vv_gaussians[0,:]) # total number of primgauss before adding extra l_max+1 elements
+
+    primgauss_vv_coeff = np.zeros((3,N_prim_red), dtype='complex') #(N_prim, [0,-1,1]) coefficients for 1D Gaussians vv 3D overlaps. Coefficients are real but entries are complex for later numba optimization
+    primgauss_vv_coeff[0,:] = 1.0
+
+    i = 0
+    for p in primindices:
+        id1 = int(p[3]) # first index in primgauss
+        ex = p[2] # primgauss exponent
+        l_max = int(p[1]) # max angular momentum of primgauss
+        for l in range(l_max): # for l up to l_max
+            primgauss_vv_coeff[1, i+l] = l
+            primgauss_vv_coeff[2, i+l] = -2*ex
+        i += l_max
+
+    return primgauss_vv_gaussians, primgauss_vv_coeff
+
 
 @time_wrapper
 def gen_prim_gauss_indices(primgauss: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """
     Function returns index in array containing atom_id, l, exponent, and initial index (corresponding to i = 0) in primgauss object constructed from function gen_all_1D_primgauss.This function generates the objects to be passed into the primgauss_1D_overlaps for generating overlaps.
     Input:
-        primgauss:  np.ndarray object of shape (N, 7)
+        primgauss:  np.ndarray object of shape (N, 8)
     Output:
         indx_arr:   np.ndarray object of shape (M, 4)
                     each row contains the following information: 
@@ -222,7 +261,7 @@ def gen_all_atomic_orbitals(cell: pbcgto.cell.Cell, primgauss: np.ndarray) -> li
     Given a cell, generate all atomic orbitals in the cell. Note that we, as usual assume Cartesian Gaussians.
     Inputs:
         cell:       pyscf.pbc.gto.cell.Cell object, initialized in build_cell_from_input routine.
-        primgauss:  np.ndarray of shape (N,7), returned from function gen_all_1D_prim_gauss.
+        primgauss:  np.ndarray of shape (N,8), returned from function gen_all_1D_prim_gauss.
     Returns:
         all_ao:     list of all atomic orbitals
     """
@@ -268,7 +307,7 @@ def get_ao_blocks(aos: list[cartmoments.AO]):
     block_keys = list(blocks.keys()) # tuples of primgauss indices
     block_values = list(blocks.values()) #AOs and primgauss coefficients
     N_blocks = len(block_keys) # Number of basis blocks
-    N_primgauss = max([bij for bi in [aij for ai in block_keys for aij in ai] for bij in bi]) + 1 # Number of primitive gaussians
+    N_primgauss = max([bij for bi in [aij for ai in block_keys for aij in ai] for bij in bi]) + 1 + parmt.transverse_response # Number of primitive gaussians
     N_AO = max([aij for ai in (list(b.keys()) for b in block_values) for aij in ai]) + 1 # Number of atomic orbitals
     N_maxcoeff = max([aij.shape[0] for ai in (list(b.values()) for b in block_values) for aij in ai]) # Maximum number of primgauss in one atomic orbital
 
@@ -277,8 +316,9 @@ def get_ao_blocks(aos: list[cartmoments.AO]):
     for i, b in enumerate(block_keys):
         for d in range(3):
             primgauss_arr[i,np.array(b)[d],d] = 1
+            primgauss_arr[i,np.array(b)[d] + parmt.transverse_response, d] = 1 # also selects primgauss with higher angular momentum for current-current response
 
-    # Building AO_arr: for block i, AO_arr[i] enocodes which atomic orbitals are included in the block. AO_arr[i,j] = 1 if AO j is included in block i, AO_arr[i,j] = 0 if not.
+    # Building AO_arr: for block i, AO_arr[i] encodes which atomic orbitals are included in the block. AO_arr[i,j] = 1 if AO j is included in block i, AO_arr[i,j] = 0 if not.
     AO_arr = np.zeros((N_blocks, N_AO), dtype='bool')
     AOs = [list(b.keys()) for b in block_values]
     for i, a in enumerate(AOs):
